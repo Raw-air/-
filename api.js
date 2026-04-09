@@ -65,6 +65,10 @@ class ApiClient {
     return this.get('/api/roster', params);
   }
 
+  async updateRosterSchema(dateColumns) {
+    return this.post('/api/roster/schema', { dateColumns });
+  }
+
   async importRoster(students, semester) {
     return this.post('/api/roster/import', { students, semester });
   }

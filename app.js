@@ -800,18 +800,32 @@ async function uploadAndStartImport() {
   }
 
   uploadBtn.disabled = true;
-  uploadBtn.textContent = '⬆️ 上傳中…';
+  uploadBtn.textContent = '♻️ 清空舊有資料… (可能需時 30 秒)';
 
   try {
+    // 1. 先清空舊有資料
+    await api.clearRoster(CONFIG.SEMESTER);
+
+    uploadBtn.textContent = '🛠️ 更新日期欄位結構…';
+    
+    // 2. 更新資料庫結構建立所有的日期欄位
+    const dateLabels = parsedCsvData.dateColumns.map(c => c.label);
+    if (dateLabels.length > 0) {
+      await api.updateRosterSchema(dateLabels);
+    }
+
+    uploadBtn.textContent = '⬆️ 上傳到緩衝區…';
+    
+    // 3. 上傳至 Cloudflare Worker 準備分批匯入
     const result = await api.uploadImport(parsedCsvData.students, CONFIG.SEMESTER);
 
-    uploadBtn.textContent = '✅ 已上傳到伺服器';
+    uploadBtn.textContent = '✅ 已就緒';
 
     progressEl.innerHTML = `
       <div style="margin-top:12px;">
-        <p style="color:var(--green);margin-bottom:12px;">✅ 資料已安全儲存到伺服器（${result.preview.totalBeds} 筆）</p>
+        <p style="color:var(--green);margin-bottom:12px;">✅ 資料庫已備妥，將開始批次匯入（${result.preview.totalBeds} 筆）</p>
         <button id="start-import-btn" class="btn btn-success" style="width:100%;">
-          🚀 開始匯入花名冊
+          🚀 開始完整匯入 (預計需要 1-2 分鐘)
         </button>
       </div>
     `;
@@ -822,8 +836,8 @@ async function uploadAndStartImport() {
 
   } catch (e) {
     uploadBtn.disabled = false;
-    uploadBtn.textContent = '⬆️ 上傳到伺服器';
-    showToast('上傳失敗：' + e.message, 'error');
+    uploadBtn.textContent = '⬆️ 重新上傳';
+    showToast('準備失敗：' + e.message, 'error');
   }
 }
 
@@ -862,12 +876,7 @@ async function executeServerImport(progressEl) {
 
         showToast('花名冊匯入完成！', 'success');
 
-        // 匯入歷史紀錄
-        const importHistory = document.getElementById('import-history-check')?.checked;
-        if (importHistory && parsedCsvData && parsedCsvData.dateColumns.length > 0) {
-          await importHistoricalRecords(progressEl);
-        }
-
+        // 歷史紀錄已在新增花名冊時一併建立欄位，無需另外匯入
         break;
       }
     } catch (e) {

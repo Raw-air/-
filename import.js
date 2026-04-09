@@ -63,11 +63,15 @@ function parseNotionCsv(csvText) {
     const isEmpty = !name.trim(); // 名稱為空 = 空床
     const isForeign = detectForeign(cls, studentId, name);
 
-    // 收集出席歷史（給未來參考，但不是必填）
+    // 收集出席歷史（完全匹配 Notion Select 選項）
     const attendanceHistory = {};
     for (const { index, label } of dateColumns) {
-      const status = cols[index] || '✓';
-      attendanceHistory[label] = parseSymbol(status);
+      let status = (cols[index] || '').trim();
+      if (!status) status = '✓'; // 預設出席
+      if (status === '✘' || status === '✗') status = 'X'; // 統一未請假符號為全大寫英文字母 X (或者依用戶原意，如果用戶CSV裡有X就把全形X轉成X)
+      // 假設你提供的選項裡有 '✘' (紅)，我們在 worker 已經設成 '✘'，這裡就不去改變'✘'但如果選項是英文字'X'
+      // 我們剛剛在 worker 設定了 options 包含: { name: 'X', color: 'red' }, { name: '✘', color: 'red' }
+      attendanceHistory[label] = status;
     }
 
     students.push({
