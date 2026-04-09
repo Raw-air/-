@@ -443,6 +443,12 @@ async function syncAttendance(submit = false) {
     const summary = calcSummary();
     const records = Object.values(localChanges);
 
+    // 計算當日外籍生人數快照（從本地快取取，確保歷史資料不受日後設定變更影響）
+    const squadId = State.currentSquad.id;
+    const cachedRoster = localStorage.getItem(`roster_${squadId}_${CONFIG.SEMESTER}`);
+    const rosterArr = cachedRoster ? JSON.parse(cachedRoster) : (State.roster || []);
+    const foreignCount = rosterArr.filter(s => s.isForeign && !s.isEmpty).length;
+
     const payload = {
       id: State.attendance?.id,
       squad: State.currentSquad.id,
@@ -450,6 +456,7 @@ async function syncAttendance(submit = false) {
       submitted: submit,
       summary,
       records,
+      foreignCount,
     };
 
     const result = await api.upsertAttendance(payload);
@@ -568,17 +575,23 @@ function renderSummaryContent(summaryData) {
     totalEmpty += d.summary.empty || 0;
   }
 
-  // 外籍生從本地快取取
-  const allRoster = CONFIG.SQUADS.flatMap(sq => {
-    const cached = localStorage.getItem(`roster_${sq.id}_${CONFIG.SEMESTER}`);
-    return cached ? JSON.parse(cached) : [];
-  });
-  const totalForeign = allRoster.filter(s => s.isForeign && !s.isEmpty).length;
-  const occupancyRate = calcOccupancyRate(totalShould);
+  // 總床數 = 住宿人數 + 空床（從當日實際資料算，不受目前設定影響）
+  const totalBeds = totalShould + totalEmpty;
+  const actualTotalBeds = totalBeds || CONFIG.TOTAL_BEDS;
+
+  // 外籍生：從各中隊 foreignCount 欄位取（由匯入歷史時一併儲存）
+  // 若無則從本地快取取（僅今日有效）
+  const totalForeign = summaryData.reduce((sum, d) => sum + (d.foreignCount || 0), 0) ||
+    CONFIG.SQUADS.flatMap(sq => {
+      const cached = localStorage.getItem(`roster_${sq.id}_${CONFIG.SEMESTER}`);
+      return cached ? JSON.parse(cached) : [];
+    }).filter(s => s.isForeign && !s.isEmpty).length;
+
+  const occupancyRate = Math.round((totalShould / actualTotalBeds) * 100 * 10) / 10;
 
   // 填入總表數字
   const fields = {
-    'total-beds': CONFIG.TOTAL_BEDS,
+    'total-beds': actualTotalBeds,
     'total-empty': totalEmpty,
     'total-residents': totalShould,
     'total-foreign': totalForeign,
@@ -593,7 +606,7 @@ function renderSummaryContent(summaryData) {
   }
 
   // 更新複製按鈕的文字
-  document.getElementById('copy-summary-btn').dataset.text = exportDailySummaryText(summaryData, State.currentDate);
+  document.getElementById('copy-summary-btn').dataset.text = exportDailySummaryText(summaryData, State.currentDate, actualTotalBeds, totalForeign);
 }
 
 // ─── 歷史頁面 ──────────────────────────────────────────────────────────────────
@@ -656,14 +669,17 @@ async function loadHistoryDate(date) {
 }
 
 function renderHistoryDetail(date, summaryData, panel) {
-  let totalShould = 0, totalPresent = 0, totalLeave = 0, totalAbsent = 0;
+  let totalShould = 0, totalPresent = 0, totalLeave = 0, totalAbsent = 0, totalEmpty = 0;
   for (const d of summaryData) {
     totalShould += d.summary.should || 0;
     totalPresent += d.summary.present || 0;
     totalLeave += d.summary.leave || 0;
     totalAbsent += d.summary.absent || 0;
+    totalEmpty += d.summary.empty || 0;
   }
-  const occupancyRate = calcOccupancyRate(totalShould);
+  // 使用當日實際總床數（住宿+空床），不受目前設定影響
+  const actualTotalBeds = (totalShould + totalEmpty) || CONFIG.TOTAL_BEDS;
+  const occupancyRate = Math.round((totalShould / actualTotalBeds) * 100 * 10) / 10;
 
   panel.innerHTML = `
     <div class="hist-date-title">${formatDateChinese(date)}</div>
@@ -978,36 +994,44 @@ async function checkPendingImport() {
   }
 }
 
-// ─── 匯出 ─────────────────────────────────────────────────────────────────────
+// ─── 匯出（整學期一鍵匯出，不需選日期）────────────────────────────────────────
 
-async function handleExport(startDate, endDate) {
-  showToast('正在準備匯出資料…', 'info');
+async function handleExport() {
+  const exportBtn = document.getElementById('export-btn');
+  if (exportBtn) { exportBtn.disabled = true; exportBtn.textContent = '⏳ 準備中…'; }
+  showToast('正在準備匯出整學期資料…', 'info');
 
   try {
-    // 取得所有花名冊
+    // 取得整學期花名冊
     const allRoster = [];
     for (const sq of CONFIG.SQUADS) {
       const roster = await api.getRoster(sq.id, CONFIG.SEMESTER);
       allRoster.push(...roster);
     }
 
-    // 取得出席記錄
-    const attendanceRecords = await api.getSummaryRange(startDate, endDate, false);
+    if (exportBtn) exportBtn.textContent = '⏳ 載入點名記錄…';
 
-    // 對每個出席記錄補充個別學生記錄（需要額外的 API 呼叫）
+    // 取得整學期所有已提交的點名記錄（不限日期範圍）
+    const summaryRecords = await api.getSummaryRange('2024-01-01', formatDate(), false);
+
+    if (exportBtn) exportBtn.textContent = '⏳ 載入詳細記錄…';
+
+    // 補充每筆的個別學生狀態
     const detailedRecords = [];
-    for (const record of attendanceRecords) {
-      const detail = await api.getAttendance(record.squad, record.date);
-      if (detail) detailedRecords.push(detail);
+    for (const record of summaryRecords) {
+      try {
+        const detail = await api.getAttendance(record.squad, record.date);
+        if (detail) detailedRecords.push(detail);
+      } catch { /* 忽略無詳細記錄的日期 */ }
     }
 
-    await exportToExcel(allRoster, detailedRecords, {
-      startDate, endDate, semester: CONFIG.SEMESTER
-    });
+    await exportToExcel(allRoster, detailedRecords, { semester: CONFIG.SEMESTER });
 
     showToast('匯出完成！', 'success');
   } catch (e) {
     showToast('匯出失敗：' + e.message, 'error');
+  } finally {
+    if (exportBtn) { exportBtn.disabled = false; exportBtn.textContent = '⬇️ 下載 Excel（整學期）'; }
   }
 }
 
@@ -1035,19 +1059,44 @@ function bindEvents() {
     el.addEventListener('click', () => navigate(el.dataset.page));
   });
 
-  // 提交按鈕
+  // 提交 / 修改按鈕
   document.getElementById('submit-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('submit-btn');
+
+    // 已提交狀態 → 切換回可編輯（取消提交）
+    if (State.attendance?.submitted) {
+      if (!confirm('確定要修改已提交的點名記錄嗎？')) return;
+      btn.disabled = true;
+      btn.textContent = '解除提交中…';
+      try {
+        await syncAttendance(false); // submitted = false
+        State.attendance.submitted = false;
+        btn.textContent = '✅ 提交今日點名';
+        btn.classList.remove('btn-warning');
+        btn.classList.add('btn-success');
+        showToast('已解除提交，可繼續修改', 'info');
+      } catch (e) {
+        showToast('操作失敗：' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+
+    // 未提交 → 提交
     btn.disabled = true;
     btn.textContent = '提交中…';
-
     try {
       await syncAttendance(true);
+      // 提交成功後變為「修改」按鈕
+      btn.textContent = '✏️ 修改點名記錄';
+      btn.classList.remove('btn-success');
+      btn.classList.add('btn-warning');
     } catch (e) {
       showToast('提交失敗：' + e.message, 'error');
+      btn.textContent = '✅ 提交今日點名';
     } finally {
       btn.disabled = false;
-      btn.textContent = '提交今日點名';
     }
   });
 
@@ -1093,15 +1142,9 @@ function bindEvents() {
 
   dropZone?.addEventListener('click', () => csvInput?.click());
 
-  // 匯出
+  // 匯出（整學期，不需選日期）
   document.getElementById('export-btn')?.addEventListener('click', () => {
-    const start = document.getElementById('export-start')?.value;
-    const end = document.getElementById('export-end')?.value;
-    if (!start || !end) {
-      showToast('請選擇匯出日期範圍', 'error');
-      return;
-    }
-    handleExport(start, end);
+    handleExport();
   });
 
   // 日期切換（總表頁面）

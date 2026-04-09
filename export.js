@@ -87,7 +87,10 @@ async function exportToExcel(roster, attendanceRecords, options = {}) {
     // 找出這一天各中隊的彙整
     for (const record of attendanceRecords) {
       if (record.date === date) {
-        squadSummaries[record.squad] = record.summary;
+        squadSummaries[record.squad] = {
+          summary: record.summary,
+          foreignCount: record.foreignCount || 0,
+        };
       }
     }
 
@@ -96,22 +99,22 @@ async function exportToExcel(roster, attendanceRecords, options = {}) {
     let totalForeign = 0;
 
     for (const squadId of squads) {
-      const s = squadSummaries[squadId] || { should: 0, present: 0, leave: 0, absent: 0, empty: 0 };
+      const s = squadSummaries[squadId]?.summary || { should: 0, present: 0, leave: 0, absent: 0, empty: 0 };
       totalShould += s.should;
       totalPresent += s.present;
       totalLeave += s.leave;
       totalAbsent += s.absent;
       totalEmpty += s.empty;
+      totalForeign += squadSummaries[squadId]?.foreignCount || 0;
     }
 
-    // 外籍生從花名冊計算
-    totalForeign = roster.filter(s => s.isForeign && !s.isEmpty).length;
-
-    const occupancyRate = Math.round((totalShould / CONFIG.TOTAL_BEDS) * 100 * 10) / 10;
+    // 當日實際總床數（住宿 + 空床），不受目前設定影響
+    const actualTotalBeds = (totalShould + totalEmpty) || CONFIG.TOTAL_BEDS;
+    const occupancyRate = Math.round((totalShould / actualTotalBeds) * 100 * 10) / 10;
 
     const row = [
       date,
-      CONFIG.TOTAL_BEDS,
+      actualTotalBeds,
       totalEmpty,
       totalShould,
       totalForeign,
@@ -122,7 +125,7 @@ async function exportToExcel(roster, attendanceRecords, options = {}) {
     ];
 
     for (const squadId of squads) {
-      const s = squadSummaries[squadId] || { should: 0, present: 0, leave: 0, absent: 0 };
+      const s = squadSummaries[squadId]?.summary || { should: 0, present: 0, leave: 0, absent: 0 };
       row.push(s.should, s.present, s.leave, s.absent);
     }
 
@@ -150,32 +153,40 @@ async function exportToExcel(roster, attendanceRecords, options = {}) {
 
 /**
  * 快速匯出今日總表文字（複製用）
+ * @param {Array} summaryData
+ * @param {string} date
+ * @param {number} [totalBeds] - 當日實際總床數（可選，預設從 summaryData 計算）
+ * @param {number} [totalForeignOverride] - 當日外籍生人數（可選）
  */
-function exportDailySummaryText(summaryData, date) {
+function exportDailySummaryText(summaryData, date, totalBeds, totalForeignOverride) {
   const dateChinese = formatDateChinese(date);
 
   let totalShould = 0, totalPresent = 0, totalLeave = 0, totalAbsent = 0, totalEmpty = 0;
 
-  const squadLines = [];
   for (const squad of CONFIG.SQUADS) {
     const data = summaryData.find(s => s.squad === squad.id);
     if (!data) continue;
 
     const s = data.summary;
-    totalShould += s.should;
-    totalPresent += s.present;
-    totalLeave += s.leave;
-    totalAbsent += s.absent;
-    totalEmpty += s.empty;
+    totalShould += s.should || 0;
+    totalPresent += s.present || 0;
+    totalLeave += s.leave || 0;
+    totalAbsent += s.absent || 0;
+    totalEmpty += s.empty || 0;
   }
 
-  const totalForeign = summaryData.reduce((sum, s) => sum + (s.foreignCount || 0), 0);
-  const occupancyRate = Math.round((totalShould / CONFIG.TOTAL_BEDS) * 100 * 10) / 10;
+  // 外籍生：優先使用傳入的值（當日快照），否則從 summaryData 中的 foreignCount 取
+  const totalForeign = totalForeignOverride ??
+    summaryData.reduce((sum, s) => sum + (s.foreignCount || 0), 0);
+
+  // 總床數：優先使用傳入的當日快照值
+  const actualBeds = totalBeds || (totalShould + totalEmpty) || CONFIG.TOTAL_BEDS;
+  const occupancyRate = Math.round((totalShould / actualBeds) * 100 * 10) / 10;
 
   const text = [
     `【${CONFIG.DORM_NAME} ${dateChinese} 點名總表】`,
     ``,
-    `總床數：${CONFIG.TOTAL_BEDS}　空床：${totalEmpty}`,
+    `總床數：${actualBeds}　空床：${totalEmpty}`,
     `住宿人數：${totalShould}　外籍生：${totalForeign}`,
     `住宿率：${occupancyRate}%`,
     ``,
@@ -192,9 +203,10 @@ function statusToSymbol(status) {
     present: '✓',
     leave: '◎',
     absent: '✘',
-    empty: '',
+    empty: '',   // 空床留空白
   };
-  return map[status] || '✓';
+  // 未知狀態預設出席（✓），但 empty 已對應空字串
+  return status in map ? map[status] : '✓';
 }
 
 function buildAttendanceMap(records) {
