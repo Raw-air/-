@@ -119,6 +119,24 @@ class ApiClient {
   async setConfig(configData) {
     return this.post('/api/config', configData);
   }
+
+  // ── 匯入任務 (Import Job) ──────────────────────────────────────────────────────
+
+  async uploadImport(students, semester) {
+    return this.post('/api/import/upload', { students, semester });
+  }
+
+  async executeImportBatch() {
+    return this.post('/api/import/execute', {});
+  }
+
+  async getImportStatus() {
+    return this.get('/api/import/status');
+  }
+
+  async importAttendanceHistory(date, squads) {
+    return this.post('/api/import/history', { date, squads });
+  }
 }
 
 // 單例模式

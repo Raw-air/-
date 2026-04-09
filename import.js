@@ -233,10 +233,42 @@ function extractHistoricalAttendance(parsed) {
   return byDate;
 }
 
+/**
+ * 將 CSV 的日期標籤（如「2月20日」）轉換為 ISO 格式 YYYY-MM-DD
+ * 根據學期推算年份：
+ *   114-2 → 民國114學年度第2學期（~2026年2月～7月）
+ *   114-1 → 民國114學年度第1學期（~2025年9月～2026年1月）
+ */
+function convertDateLabel(label, semester = '114-2') {
+  const match = label.match(/^(\d+)月(\d+)日$/);
+  if (!match) return null;
+
+  const month = parseInt(match[1]);
+  const day = parseInt(match[2]);
+
+  // 解析學期：ROC年-學期號
+  const parts = semester.split('-');
+  const rocYear = parseInt(parts[0]);
+  const semNum = parseInt(parts[1]);
+  const ceYear = rocYear + 1911;
+
+  // 第2學期（約2月-7月）→ 民國年 + 1912
+  // 第1學期（約9月-隔1月）→ 9-12月用 ceYear，1月用 ceYear+1
+  let year;
+  if (semNum === 2) {
+    year = ceYear + 1;
+  } else {
+    year = month >= 8 ? ceYear : ceYear + 1;
+  }
+
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
 export {
   parseNotionCsv,
   parseSymbol,
   validateImport,
   extractHistoricalAttendance,
+  convertDateLabel,
   groupBySquad,
 };

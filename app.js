@@ -5,7 +5,7 @@
 
 import { CONFIG, formatDate, formatDateChinese, calcOccupancyRate } from './config.js';
 import api from './api.js';
-import { parseNotionCsv, validateImport } from './import.js';
+import { parseNotionCsv, validateImport, extractHistoricalAttendance, convertDateLabel } from './import.js';
 import { exportToExcel, exportDailySummaryText } from './export.js';
 
 // ─── 全域狀態 ──────────────────────────────────────────────────────────────────
@@ -27,6 +27,9 @@ const State = {
 
 // 修改出席記錄的快取（未提交的本地變更）
 let localChanges = {};
+
+// 暫存完整的 CSV 解析結果（包含出席歷史，供歷史匯入用）
+let parsedCsvData = null;
 
 // ─── 初始化 ────────────────────────────────────────────────────────────────────
 
@@ -712,25 +715,29 @@ async function renderSettingsPage() {
     const el = document.getElementById(`foreign-${squad.id}`);
     if (el) el.value = State.notionConfig[`foreign_${squad.id}`] || '0';
   }
+
+  // 檢查未完成的匯入任務
+  checkPendingImport();
 }
 
-// ─── 匯入花名冊 ───────────────────────────────────────────────────────────────
+// ─── 匯入花名冊（伺服器端匯入，支援中斷恢復）──────────────────────────────────
 
 async function handleCsvImport(file) {
-  const btn = document.getElementById('import-btn');
-  const progressEl = document.getElementById('import-progress');
-
   try {
     const text = await file.text();
     const parsed = parseNotionCsv(text);
     const { warnings, info } = validateImport(parsed);
 
-    // 顯示預覽
+    // 暫存完整解析資料（包含出席歷史）
+    parsedCsvData = parsed;
+
+    const dateCount = parsed.dateColumns.length;
     const preview = document.getElementById('import-preview');
     preview.innerHTML = `
       <div class="import-info">
         <h3>🗂️ 匯入預覽</h3>
         <p>總床位：${info.totalBeds} | 有效學生：${info.totalStudents} | 空床：${info.emptyBeds}</p>
+        ${dateCount > 0 ? `<p>📅 歷史點名日期：${dateCount} 天</p>` : ''}
         ${warnings.map(w => `<div class="import-warning">${w}</div>`).join('')}
         <div class="squad-breakdown">
           ${Object.entries(info.bySquad).map(([sq, data]) =>
@@ -740,12 +747,26 @@ async function handleCsvImport(file) {
             </div>`
           ).join('')}
         </div>
-        <button id="confirm-import-btn" class="btn btn-primary">確認匯入 ${info.totalBeds} 位記錄</button>
+        ${dateCount > 0 ? `
+          <div style="margin:12px 0;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+              <input type="checkbox" id="import-history-check" checked
+                     style="width:18px;height:18px;accent-color:var(--primary);">
+              同步歷史點名紀錄（${dateCount} 天）
+            </label>
+          </div>
+        ` : ''}
+        <button id="upload-import-btn" class="btn btn-primary" style="width:100%;">
+          ⬆️ 上傳到伺服器（${info.totalBeds} 筆）
+        </button>
+        <p style="font-size:12px;color:var(--text-muted);text-align:center;margin-top:8px;">
+          上傳後即使關閉頁面，資料也不會遺失
+        </p>
       </div>
     `;
 
-    document.getElementById('confirm-import-btn').addEventListener('click', async () => {
-      await executeImport(parsed.students, progressEl);
+    document.getElementById('upload-import-btn').addEventListener('click', () => {
+      uploadAndStartImport();
     });
 
   } catch (e) {
@@ -753,40 +774,208 @@ async function handleCsvImport(file) {
   }
 }
 
-async function executeImport(students, progressEl) {
-  progressEl.innerHTML = `<div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div><p id="progress-text">準備中…</p>`;
+async function uploadAndStartImport() {
+  const uploadBtn = document.getElementById('upload-import-btn');
+  const progressEl = document.getElementById('import-progress');
 
-  const total = students.length;
-  let done = 0;
-
-  // 分批上傳（由 Worker 處理，但我們顯示進度）
-  const batchSize = 50;
-  const batches = [];
-  for (let i = 0; i < students.length; i += batchSize) {
-    batches.push(students.slice(i, i + batchSize));
+  if (!parsedCsvData) {
+    showToast('沒有可上傳的資料，請重新選擇 CSV', 'error');
+    return;
   }
 
-  for (const batch of batches) {
+  uploadBtn.disabled = true;
+  uploadBtn.textContent = '⬆️ 上傳中…';
+
+  try {
+    const result = await api.uploadImport(parsedCsvData.students, CONFIG.SEMESTER);
+
+    uploadBtn.textContent = '✅ 已上傳到伺服器';
+
+    progressEl.innerHTML = `
+      <div style="margin-top:12px;">
+        <p style="color:var(--green);margin-bottom:12px;">✅ 資料已安全儲存到伺服器（${result.preview.totalBeds} 筆）</p>
+        <button id="start-import-btn" class="btn btn-success" style="width:100%;">
+          🚀 開始匯入花名冊
+        </button>
+      </div>
+    `;
+
+    document.getElementById('start-import-btn').addEventListener('click', () => {
+      executeServerImport(progressEl);
+    });
+
+  } catch (e) {
+    uploadBtn.disabled = false;
+    uploadBtn.textContent = '⬆️ 上傳到伺服器';
+    showToast('上傳失敗：' + e.message, 'error');
+  }
+}
+
+async function executeServerImport(progressEl) {
+  progressEl.innerHTML = `
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+    <p id="progress-text">匯入中…</p>
+  `;
+
+  let retries = 0;
+  const MAX_RETRIES = 3;
+
+  while (true) {
     try {
-      await api.importRoster(batch, CONFIG.SEMESTER);
-      done += batch.length;
-      const pct = Math.round((done / total) * 100);
+      const result = await api.executeImportBatch();
+
+      const pct = Math.round((result.done / result.total) * 100);
       document.getElementById('progress-fill').style.width = `${pct}%`;
-      document.getElementById('progress-text').textContent = `上傳中 ${done}/${total}`;
+      document.getElementById('progress-text').textContent =
+        `匯入中 ${result.done}/${result.total}（新增 ${result.totalCreated || 0} / 更新 ${result.totalUpdated || 0}）`;
+
+      retries = 0; // 成功就重置重試計數
+
+      if (result.phase === 'done') {
+        progressEl.innerHTML = `
+          <div class="import-success">
+            ✅ 花名冊匯入完成！共 ${result.total} 筆
+            （新增 ${result.totalCreated || 0} / 更新 ${result.totalUpdated || 0}）
+          </div>
+        `;
+
+        // 清除本地快取
+        CONFIG.SQUADS.forEach(sq => {
+          localStorage.removeItem(`roster_${sq.id}_${CONFIG.SEMESTER}`);
+        });
+
+        showToast('花名冊匯入完成！', 'success');
+
+        // 匯入歷史紀錄
+        const importHistory = document.getElementById('import-history-check')?.checked;
+        if (importHistory && parsedCsvData && parsedCsvData.dateColumns.length > 0) {
+          await importHistoricalRecords(progressEl);
+        }
+
+        break;
+      }
     } catch (e) {
-      showToast('匯入失敗：' + e.message, 'error');
-      return;
+      retries++;
+      if (retries >= MAX_RETRIES) {
+        document.getElementById('progress-text').textContent = `⚠️ 匯入暫停：${e.message}`;
+        progressEl.innerHTML += `
+          <div style="margin-top:12px;">
+            <p style="color:var(--amber);margin-bottom:8px;">匯入已暫停，可稍後繼續</p>
+            <button class="btn btn-primary" style="width:100%;" onclick="location.reload()">
+              重新整理頁面以繼續
+            </button>
+          </div>
+        `;
+        showToast('匯入暫停，可稍後在設定頁面繼續', 'warning');
+        break;
+      }
+      await new Promise(r => setTimeout(r, 2000));
     }
   }
+}
 
-  progressEl.innerHTML = `<div class="import-success">✅ 成功匯入 ${total} 筆學生資料！</div>`;
+async function importHistoricalRecords(progressEl) {
+  if (!parsedCsvData) return;
 
-  // 清除本地快取，強制重新載入
-  CONFIG.SQUADS.forEach(sq => {
-    localStorage.removeItem(`roster_${sq.id}_${CONFIG.SEMESTER}`);
-  });
+  const { students, dateColumns } = parsedCsvData;
+  const totalDates = dateColumns.length;
+  if (totalDates === 0) return;
 
-  showToast('花名冊匯入完成！', 'success');
+  const historicalData = extractHistoricalAttendance(parsedCsvData);
+
+  progressEl.innerHTML += `
+    <div style="margin-top:16px;">
+      <h4 style="margin-bottom:8px;">📅 匯入歷史點名紀錄</h4>
+      <div class="progress-bar"><div class="progress-fill" id="hist-progress-fill"></div></div>
+      <p id="hist-progress-text">準備中…</p>
+    </div>
+  `;
+
+  let done = 0;
+
+  for (const dateCol of dateColumns) {
+    const isoDate = convertDateLabel(dateCol.label, CONFIG.SEMESTER);
+    if (!isoDate) { done++; continue; }
+
+    const squadRecords = historicalData[dateCol.label];
+    if (!squadRecords) { done++; continue; }
+
+    // 計算每個中隊的統計
+    const squads = {};
+    for (const [squadId, records] of Object.entries(squadRecords)) {
+      const summary = { should: records.length, present: 0, leave: 0, absent: 0, empty: 0 };
+      for (const r of records) {
+        if (r.status === 'present') summary.present++;
+        else if (r.status === 'leave') summary.leave++;
+        else if (r.status === 'absent') summary.absent++;
+      }
+      squads[squadId] = { summary, records };
+    }
+
+    // 空床統計
+    for (const student of students) {
+      if (!student.isEmpty) continue;
+      if (squads[student.squad]) {
+        squads[student.squad].summary.empty++;
+      }
+    }
+
+    try {
+      await api.importAttendanceHistory(isoDate, squads);
+    } catch (e) {
+      console.warn(`歷史紀錄匯入失敗 (${dateCol.label}):`, e.message);
+    }
+
+    done++;
+    const pct = Math.round((done / totalDates) * 100);
+    document.getElementById('hist-progress-fill').style.width = `${pct}%`;
+    document.getElementById('hist-progress-text').textContent =
+      `匯入歷史紀錄 ${done}/${totalDates}（${dateCol.label}）`;
+  }
+
+  document.getElementById('hist-progress-text').textContent =
+    `✅ 歷史紀錄匯入完成！共 ${totalDates} 天`;
+  showToast('歷史點名紀錄匯入完成！', 'success');
+}
+
+async function checkPendingImport() {
+  try {
+    const status = await api.getImportStatus();
+    const container = document.getElementById('pending-import');
+    if (!container) return;
+
+    if (status.hasJob && status.phase !== 'done') {
+      const pct = Math.round((status.done / status.total) * 100);
+      container.innerHTML = `
+        <div style="margin-top:16px;padding:16px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:12px;">
+          <h4 style="margin-bottom:8px;">⏸️ 有未完成的匯入任務</h4>
+          <p style="font-size:14px;">學期：${status.semester} · 進度：${status.done}/${status.total}（${pct}%）</p>
+          <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+            上傳時間：${new Date(status.createdAt).toLocaleString('zh-TW')}
+          </p>
+          <div style="display:flex;gap:8px;margin-top:12px;">
+            <button id="resume-import-btn" class="btn btn-success" style="flex:1;">▶️ 繼續匯入</button>
+            <button id="cancel-import-btn" class="btn btn-outline">取消</button>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('resume-import-btn').addEventListener('click', () => {
+        container.innerHTML = '';
+        const progressEl = document.getElementById('import-progress');
+        executeServerImport(progressEl);
+      });
+
+      document.getElementById('cancel-import-btn').addEventListener('click', () => {
+        container.innerHTML = '';
+        showToast('已取消，可重新上傳 CSV', 'info');
+      });
+    } else {
+      container.innerHTML = '';
+    }
+  } catch (e) {
+    console.warn('檢查匯入狀態失敗:', e.message);
+  }
 }
 
 // ─── 匯出 ─────────────────────────────────────────────────────────────────────

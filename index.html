@@ -10,9 +10,18 @@
 
   <title>碧苑宿舍點名系統</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
 
   <!-- SheetJS (Excel 匯出) -->
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+
+  <!-- 註冊 Service Worker（PWA 全螢幕支援）-->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    }
+  </script>
 </head>
 <body>
 
@@ -215,6 +224,7 @@
           <input type="file" id="csv-file-input" accept=".csv" style="display:none;">
           <div id="import-preview"></div>
           <div id="import-progress"></div>
+          <div id="pending-import"></div>
         </div>
 
         <!-- 外籍生人數設定 -->
