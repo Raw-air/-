@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0a0a14">
+  <meta name="description" content="碧苑宿舍人性化點名管理系統">
+
+  <title>碧苑宿舍點名系統</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+
+  <!-- SheetJS (Excel 匯出) -->
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+
+  <!-- 註冊 Service Worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    }
+  </script>
+</head>
+<body>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <p>載入資料中...</p>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- 返回按鈕 -->
+  <button id="back-btn" class="back-btn" style="display:none" onclick="navigateTo('home')">← 返回</button>
+
+  <!-- ═══════════════ 首頁 ═══════════════ -->
+  <div id="page-home" class="page active">
+    <header class="page-header">
+      <h1>🏠 碧苑宿舍</h1>
+      <div id="home-date" class="header-date"></div>
+    </header>
+    <div id="squad-grid" class="squad-grid"></div>
+  </div>
+
+  <!-- ═══════════════ 點名頁面 ═══════════════ -->
+  <div id="page-rollcall" class="page">
+    <header class="rc-header">
+      <div class="rc-header-top">
+        <span id="rc-squad-name" class="rc-squad-name"></span>
+        <span id="rc-date" class="rc-date"></span>
+      </div>
+      <div class="rc-stats">
+        <div class="rc-stat"><span>應到</span><b id="rc-stat-should">0</b></div>
+        <div class="rc-stat"><span>實到</span><b id="rc-stat-present" style="color:#22c55e">0</b></div>
+        <div class="rc-stat"><span>請假</span><b id="rc-stat-leave" style="color:#f59e0b">0</b></div>
+        <div class="rc-stat"><span>未到</span><b id="rc-stat-absent" style="color:#ef4444">0</b></div>
+      </div>
+    </header>
+
+    <div id="rc-student-list" class="student-list"></div>
+
+    <button id="submit-btn" class="submit-btn">✅ 提交今日點名</button>
+  </div>
+
+  <!-- 提交成功彈窗 -->
+  <div id="submit-success-modal" class="modal-overlay">
+    <div class="modal-card success-modal">
+      <div class="modal-icon">🎉</div>
+      <h3>點名提交成功！</h3>
+      <div class="submit-stats">
+        <div>應到 <b id="submit-should">0</b></div>
+        <div style="color:#22c55e">實到 <b id="submit-present">0</b></div>
+        <div style="color:#f59e0b">請假 <b id="submit-leave">0</b></div>
+        <div style="color:#ef4444">未到 <b id="submit-absent">0</b></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ 總表頁面 ═══════════════ -->
+  <div id="page-summary" class="page">
+    <header class="page-header">
+      <h1>📊 每日總表</h1>
+      <div class="date-nav">
+        <button id="summary-prev-date" class="nav-arrow">◄</button>
+        <span id="summary-date"></span>
+        <button id="summary-next-date" class="nav-arrow">►</button>
+      </div>
+    </header>
+
+    <div class="summary-totals">
+      <div class="summary-stat"><span>總床數</span><b id="total-beds">0</b></div>
+      <div class="summary-stat"><span>空床</span><b id="total-empty">0</b></div>
+      <div class="summary-stat"><span>住宿</span><b id="total-residents">0</b></div>
+      <div class="summary-stat"><span>外籍</span><b id="total-foreign">0</b></div>
+      <div class="summary-stat highlight"><span>住宿率</span><b id="total-rate">0%</b></div>
+      <div class="summary-stat good"><span>實到</span><b id="total-present">0</b></div>
+      <div class="summary-stat warn"><span>請假</span><b id="total-leave">0</b></div>
+      <div class="summary-stat bad"><span>未請假</span><b id="total-absent">0</b></div>
+    </div>
+
+    <div id="summary-squad-grid" class="summary-squad-grid"></div>
+
+    <div class="summary-actions">
+      <button id="copy-summary-btn" class="action-btn">📋 複製總表</button>
+      <button id="refresh-summary-btn" class="action-btn">🔄 重新整理</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════ 歷史頁面 ═══════════════ -->
+  <div id="page-history" class="page">
+    <header class="page-header">
+      <h1>📅 歷史資料</h1>
+      <div class="cal-nav">
+        <button id="cal-prev-month" class="nav-arrow">◄</button>
+        <span id="hist-month"></span>
+        <button id="cal-next-month" class="nav-arrow">►</button>
+      </div>
+    </header>
+
+    <div id="hist-calendar" class="calendar-grid"></div>
+    <div id="hist-detail" class="hist-detail"></div>
+  </div>
+
+  <!-- ═══════════════ 設定頁面 ═══════════════ -->
+  <div id="page-settings" class="page">
+    <header class="page-header">
+      <h1>⚙️ 系統設定</h1>
+    </header>
+
+    <div class="settings-section">
+      <h3>📡 連線狀態</h3>
+      <div id="conn-status" class="conn-status">檢查中...</div>
+      <div id="settings-info" class="settings-info"></div>
+    </div>
+
+    <div class="settings-section">
+      <h3>📤 匯出 Excel</h3>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <input type="text" id="export-start-col" class="settings-input" placeholder="起始日期" readonly>
+        <span style="color:#888;line-height:40px">~</span>
+        <input type="text" id="export-end-col" class="settings-input" placeholder="結束日期" readonly>
+      </div>
+      <button id="export-btn" class="action-btn wide">📥 匯出 Excel</button>
+    </div>
+
+    <div class="settings-section">
+      <h3>🔄 重新載入</h3>
+      <button class="action-btn wide" onclick="loadData()">🔄 重新從 Notion 載入</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════ PIN 對話框 ═══════════════ -->
+  <div id="pin-dialog" class="modal-overlay">
+    <div class="modal-card">
+      <h3 id="pin-dialog-title">輸入 PIN 碼</h3>
+      <input type="password" id="pin-input" class="pin-input" maxlength="6" placeholder="請輸入 PIN 碼" inputmode="numeric">
+      <div class="modal-actions">
+        <button id="pin-cancel" class="modal-btn cancel">取消</button>
+        <button id="pin-confirm" class="modal-btn confirm">確認</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ 底部導航 ═══════════════ -->
+  <nav class="bottom-nav">
+    <div class="nav-item active" data-page="home">
+      <span class="nav-icon">🏠</span>
+      <span class="nav-label">點名</span>
+    </div>
+    <div class="nav-item" data-page="summary">
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">總表</span>
+    </div>
+    <div class="nav-item" data-page="history">
+      <span class="nav-icon">📅</span>
+      <span class="nav-label">歷史</span>
+    </div>
+    <div class="nav-item" data-page="settings">
+      <span class="nav-icon">⚙️</span>
+      <span class="nav-label">設定</span>
+    </div>
+  </nav>
+
+  <!-- Scripts -->
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
