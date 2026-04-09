@@ -1,92 +1,76 @@
 /**
- * 壁苑宿舍點名系統 - 設定檔
- *
- * ⚠️ 部署前請修改以下設定：
- * 1. WORKER_URL：填入你的 Cloudflare Worker 網址
- * 2. SEMESTER：填入當前學期（格式：114-2）
+ * 碧苑宿舍點名系統 - 設定檔
  */
-
 const CONFIG = {
-  // ── 必填設定 ────────────────────────────────────────────────────────────────
-  // Cloudflare Worker 網址（部署後會得到，格式如下）
+  // Cloudflare Worker 網址
   WORKER_URL: 'https://biyuan-proxy.s010828.workers.dev',
 
-  // 當前學期（學年-學期，如：114-2 表示民國114學年度第2學期）
+  // 當前學期
   SEMESTER: '114-2',
 
-  // 宿舍名稱（顯示用）
-  DORM_NAME: '碧苑宿舍',
-
-  // 總床數（固定數值）
-  TOTAL_BEDS: 226,
-
-  // ── 六個中隊設定 ─────────────────────────────────────────────────────────────
+  // 中隊定義
   SQUADS: [
-    { id: '一單', label: '一單', floor: 1, parity: 'odd',  emoji: '1️⃣', color: '#6366f1' },
-    { id: '一雙', label: '一雙', floor: 1, parity: 'even', emoji: '1️⃣', color: '#8b5cf6' },
-    { id: '二單', label: '二單', floor: 2, parity: 'odd',  emoji: '2️⃣', color: '#3b82f6' },
-    { id: '二雙', label: '二雙', floor: 2, parity: 'even', emoji: '2️⃣', color: '#06b6d4' },
-    { id: '三單', label: '三單', floor: 3, parity: 'odd',  emoji: '3️⃣', color: '#10b981' },
-    { id: '三雙', label: '三雙', floor: 3, parity: 'even', emoji: '3️⃣', color: '#22c55e' },
+    { id: '一單', label: '一單（1F 奇數房）', color: '#6366f1', floor: 1, odd: true },
+    { id: '一雙', label: '一雙（1F 偶數房）', color: '#8b5cf6', floor: 1, odd: false },
+    { id: '二單', label: '二單（2F 奇數房）', color: '#3b82f6', floor: 2, odd: true },
+    { id: '二雙', label: '二雙（2F 偶數房）', color: '#06b6d4', floor: 2, odd: false },
+    { id: '三單', label: '三單（3F 奇數房）', color: '#10b981', floor: 3, odd: true },
+    { id: '三雙', label: '三雙（3F 偶數房）', color: '#22c55e', floor: 3, odd: false },
   ],
 
-  // ── 自動同步 ─────────────────────────────────────────────────────────────────
-  // 自動備份間隔（毫秒），預設 60 秒
-  AUTO_SYNC_INTERVAL: 60000,
-
-  // ── 點名狀態定義 ──────────────────────────────────────────────────────────────
-  STATUSES: {
-    present: { label: '在場', symbol: '✓', color: '#10b981', bg: 'rgba(16,185,129,0.15)' },
-    leave:   { label: '請假', symbol: 'O', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' },
-    absent:  { label: '未請假', symbol: '✘', color: '#ef4444', bg: 'rgba(239,68,68,0.15)' },
-    empty:   { label: '空床', symbol: '—', color: '#6b7280', bg: 'rgba(107,114,128,0.08)' },
+  // 出席狀態
+  STATUS: {
+    '✓': { label: '在場', color: '#22c55e', icon: '✓' },
+    '◎': { label: '請假', color: '#f59e0b', icon: '◎' },
+    '✘': { label: '未請假', color: '#ef4444', icon: '✘' },
+    '△': { label: '特殊', color: '#8b5cf6', icon: '△' },
   },
 
-  // ── 管理員 PIN（預設 0000，請在設定頁面修改）──────────────────────────────────
-  // 實際 PIN 儲存在 Notion Config 資料庫，這只是本地預設
-  DEFAULT_ADMIN_PIN: '0000',
+  // 自動備份間隔（毫秒）
+  AUTO_SAVE_INTERVAL: 60000,
 };
 
-// 房號 → 中隊 對應邏輯
-function getRoomSquad(roomCode) {
-  const match = roomCode.match(/^B(\d)(\d{2})$/);
-  if (!match) return null;
-
-  const floor = parseInt(match[1]);
+/** 從寢床號判斷中隊 */
+function getSquadFromRoom(room) {
+  if (!room) return '一單';
+  const match = room.match(/B?(\d)(\d{2})/);
+  if (!match) return '一單';
+  const floor = match[1];
   const roomNum = parseInt(match[2]);
-  const parity = roomNum % 2 === 1 ? 'odd' : 'even';
-  const parityLabel = parity === 'odd' ? '單' : '雙';
-
-  const floorLabels = { 1: '一', 2: '二', 3: '三' };
-  const floorLabel = floorLabels[floor];
-
-  if (!floorLabel) return null;
-  return `${floorLabel}${parityLabel}`;
+  const isOdd = roomNum % 2 === 1;
+  if (floor === '1') return isOdd ? '一單' : '一雙';
+  if (floor === '2') return isOdd ? '二單' : '二雙';
+  if (floor === '3') return isOdd ? '三單' : '三雙';
+  return '一單';
 }
 
-// 取得中隊設定物件
-function getSquadConfig(squadId) {
-  return CONFIG.SQUADS.find(s => s.id === squadId) || null;
+/** 取得中隊顏色 */
+function getSquadColor(squadId) {
+  const sq = CONFIG.SQUADS.find(s => s.id === squadId);
+  return sq ? sq.color : '#666';
 }
 
-// 格式化日期為 YYYY-MM-DD
-function formatDate(date = new Date()) {
-  const d = new Date(date);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+/** 取得今天的日期欄位名稱（如 "4月10日"）*/
+function getTodayColumnName() {
+  const now = new Date();
+  return `${now.getMonth() + 1}月${now.getDate()}日`;
 }
 
-// 格式化日期為中文顯示
-function formatDateChinese(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00');
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+/** 解析日期欄位名稱為 Date 物件（使用今年）*/
+function parseDateColumnToDate(name) {
+  const m = name.match(/(\d+)月(\d+)日/);
+  if (!m) return null;
+  const d = new Date();
+  d.setMonth(parseInt(m[1]) - 1, parseInt(m[2]));
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
-// 計算住宿率
-function calcOccupancyRate(residents, totalBeds = CONFIG.TOTAL_BEDS) {
-  return Math.round((residents / totalBeds) * 100 * 10) / 10;
+// 匯出為全域
+if (typeof window !== 'undefined') {
+  window.CONFIG = CONFIG;
+  window.getSquadFromRoom = getSquadFromRoom;
+  window.getSquadColor = getSquadColor;
+  window.getTodayColumnName = getTodayColumnName;
+  window.parseDateColumnToDate = parseDateColumnToDate;
 }
-
-export { CONFIG, getRoomSquad, getSquadConfig, formatDate, formatDateChinese, calcOccupancyRate };

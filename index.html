@@ -2,11 +2,12 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#080810">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="碧苑宿舍人性化點名管理系統 - 六中隊每日點名、總表彙整">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0a0a14">
+  <meta name="description" content="碧苑宿舍人性化點名管理系統">
 
   <title>碧苑宿舍點名系統</title>
   <link rel="stylesheet" href="style.css">
@@ -16,7 +17,7 @@
   <!-- SheetJS (Excel 匯出) -->
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 
-  <!-- 註冊 Service Worker（PWA 全螢幕支援）-->
+  <!-- 註冊 Service Worker -->
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(() => {});
@@ -25,247 +26,147 @@
 </head>
 <body>
 
-<div id="app">
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <p>載入資料中...</p>
+  </div>
 
-  <!-- ─── 頁頭 ─────────────────────────────────── -->
-  <header class="app-header" id="app-header">
-    <button class="header-back-btn" id="back-btn" onclick="history.back()">←</button>
-    <div class="header-title-group">
-      <div class="header-title" id="header-title">
-        <span id="dorm-name">碧苑宿舍</span>點名系統
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- 返回按鈕 -->
+  <button id="back-btn" class="back-btn" style="display:none" onclick="navigateTo('home')">← 返回</button>
+
+  <!-- ═══════════════ 首頁 ═══════════════ -->
+  <div id="page-home" class="page active">
+    <header class="page-header">
+      <h1>🏠 碧苑宿舍</h1>
+      <div id="home-date" class="header-date"></div>
+    </header>
+    <div id="squad-grid" class="squad-grid"></div>
+  </div>
+
+  <!-- ═══════════════ 點名頁面 ═══════════════ -->
+  <div id="page-rollcall" class="page">
+    <header class="rc-header">
+      <div class="rc-header-top">
+        <span id="rc-squad-name" class="rc-squad-name"></span>
+        <span id="rc-date" class="rc-date"></span>
+      </div>
+      <div class="rc-stats">
+        <div class="rc-stat"><span>應到</span><b id="rc-stat-should">0</b></div>
+        <div class="rc-stat"><span>實到</span><b id="rc-stat-present" style="color:#22c55e">0</b></div>
+        <div class="rc-stat"><span>請假</span><b id="rc-stat-leave" style="color:#f59e0b">0</b></div>
+        <div class="rc-stat"><span>未到</span><b id="rc-stat-absent" style="color:#ef4444">0</b></div>
+      </div>
+    </header>
+
+    <div id="rc-student-list" class="student-list"></div>
+
+    <button id="submit-btn" class="submit-btn">✅ 提交今日點名</button>
+  </div>
+
+  <!-- 提交成功彈窗 -->
+  <div id="submit-success-modal" class="modal-overlay">
+    <div class="modal-card success-modal">
+      <div class="modal-icon">🎉</div>
+      <h3>點名提交成功！</h3>
+      <div class="submit-stats">
+        <div>應到 <b id="submit-should">0</b></div>
+        <div style="color:#22c55e">實到 <b id="submit-present">0</b></div>
+        <div style="color:#f59e0b">請假 <b id="submit-leave">0</b></div>
+        <div style="color:#ef4444">未到 <b id="submit-absent">0</b></div>
       </div>
     </div>
-    <div id="sync-indicator"></div>
-  </header>
+  </div>
 
-  <!-- ─── 頁面容器 ──────────────────────────────── -->
-  <div class="page-content" id="page-container">
-
-    <!-- ══ 首頁：選擇中隊 ══════════════════════════ -->
-    <div class="page active" id="page-home">
-      <div class="home-hero">
-        <div class="home-hero-icon">🏠</div>
-        <h1 class="home-title" id="dorm-name-hero">碧苑宿舍</h1>
-        <p class="home-subtitle">點名管理系統</p>
-        <div id="home-date"></div>
+  <!-- ═══════════════ 總表頁面 ═══════════════ -->
+  <div id="page-summary" class="page">
+    <header class="page-header">
+      <h1>📊 每日總表</h1>
+      <div class="date-nav">
+        <button id="summary-prev-date" class="nav-arrow">◄</button>
+        <span id="summary-date"></span>
+        <button id="summary-next-date" class="nav-arrow">►</button>
       </div>
+    </header>
 
-      <div style="padding: 0 16px;">
-        <p class="section-label">選擇你的中隊</p>
-        <div class="squad-grid" id="squad-grid"></div>
-      </div>
+    <div class="summary-totals">
+      <div class="summary-stat"><span>總床數</span><b id="total-beds">0</b></div>
+      <div class="summary-stat"><span>空床</span><b id="total-empty">0</b></div>
+      <div class="summary-stat"><span>住宿</span><b id="total-residents">0</b></div>
+      <div class="summary-stat"><span>外籍</span><b id="total-foreign">0</b></div>
+      <div class="summary-stat highlight"><span>住宿率</span><b id="total-rate">0%</b></div>
+      <div class="summary-stat good"><span>實到</span><b id="total-present">0</b></div>
+      <div class="summary-stat warn"><span>請假</span><b id="total-leave">0</b></div>
+      <div class="summary-stat bad"><span>未請假</span><b id="total-absent">0</b></div>
     </div>
 
-    <!-- ══ 點名頁面 ═══════════════════════════════ -->
-    <div class="page" id="page-rollcall">
-      <div class="rc-header">
-        <div class="rc-header-row">
-          <div class="rc-squad-badge">
-            <span class="rc-squad-name" id="rc-squad-name">—</span>
-            <span class="rc-date-text" id="rc-date"></span>
-          </div>
-          <button class="btn btn-outline" style="padding:8px 14px;font-size:13px;"
-                  onclick="history.back()">← 返回</button>
-        </div>
+    <div id="summary-squad-grid" class="summary-squad-grid"></div>
 
-        <!-- 統計列 -->
-        <div class="rc-stats-bar">
-          <div class="rc-stat-item">
-            <span class="rc-stat-value" id="rc-stat-should">0</span>
-            <div class="rc-stat-label">應到</div>
-          </div>
-          <div class="rc-stat-item present">
-            <span class="rc-stat-value" id="rc-stat-present">0</span>
-            <div class="rc-stat-label">在場</div>
-          </div>
-          <div class="rc-stat-item leave">
-            <span class="rc-stat-value" id="rc-stat-leave">0</span>
-            <div class="rc-stat-label">請假</div>
-          </div>
-          <div class="rc-stat-item absent">
-            <span class="rc-stat-value" id="rc-stat-absent">0</span>
-            <div class="rc-stat-label">未請假</div>
-          </div>
-        </div>
+    <div class="summary-actions">
+      <button id="copy-summary-btn" class="action-btn">📋 複製總表</button>
+      <button id="refresh-summary-btn" class="action-btn">🔄 重新整理</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════ 歷史頁面 ═══════════════ -->
+  <div id="page-history" class="page">
+    <header class="page-header">
+      <h1>📅 歷史資料</h1>
+      <div class="cal-nav">
+        <button id="cal-prev-month" class="nav-arrow">◄</button>
+        <span id="hist-month"></span>
+        <button id="cal-next-month" class="nav-arrow">►</button>
       </div>
+    </header>
 
-      <!-- 學生清單 -->
-      <div class="student-list" id="rc-student-list"></div>
+    <div id="hist-calendar" class="calendar-grid"></div>
+    <div id="hist-detail" class="hist-detail"></div>
+  </div>
 
-      <!-- 提交區 -->
-      <div class="rc-footer">
-        <button class="btn btn-success btn-full" id="submit-btn">✅ 提交今日點名</button>
-      </div>
+  <!-- ═══════════════ 設定頁面 ═══════════════ -->
+  <div id="page-settings" class="page">
+    <header class="page-header">
+      <h1>⚙️ 系統設定</h1>
+    </header>
+
+    <div class="settings-section">
+      <h3>📡 連線狀態</h3>
+      <div id="conn-status" class="conn-status">檢查中...</div>
+      <div id="settings-info" class="settings-info"></div>
     </div>
 
-    <!-- ══ 總表頁面 ═══════════════════════════════ -->
-    <div class="page" id="page-summary">
-      <div style="padding: 20px 16px 0;">
-
-        <!-- 日期導航 -->
-        <div class="summary-date-nav">
-          <button class="date-nav-btn" id="summary-prev-date">‹</button>
-          <span id="summary-date"></span>
-          <button class="date-nav-btn" id="summary-next-date">›</button>
-        </div>
-
-        <!-- 主要數字卡片 -->
-        <div class="summary-main-card">
-          <div class="summary-grid">
-            <div class="summary-stat">
-              <span class="summary-stat-value" id="total-beds">226</span>
-              <div class="summary-stat-label">總床數</div>
-            </div>
-            <div class="summary-stat">
-              <span class="summary-stat-value" id="total-empty">—</span>
-              <div class="summary-stat-label">空床</div>
-            </div>
-            <div class="summary-stat highlight">
-              <span class="summary-stat-value" id="total-residents">—</span>
-              <div class="summary-stat-label">住宿人數</div>
-            </div>
-            <div class="summary-stat">
-              <span class="summary-stat-value" id="total-foreign">—</span>
-              <div class="summary-stat-label">外籍生</div>
-            </div>
-          </div>
-
-          <div class="summary-divider"></div>
-
-          <div class="summary-grid">
-            <div class="summary-stat highlight">
-              <span class="summary-stat-value" id="total-rate">—%</span>
-              <div class="summary-stat-label">住宿率</div>
-            </div>
-            <div class="summary-stat green">
-              <span class="summary-stat-value" id="total-present">—</span>
-              <div class="summary-stat-label">實到</div>
-            </div>
-            <div class="summary-stat amber">
-              <span class="summary-stat-value" id="total-leave">—</span>
-              <div class="summary-stat-label">請假</div>
-            </div>
-            <div class="summary-stat red">
-              <span class="summary-stat-value" id="total-absent">—</span>
-              <div class="summary-stat-label">未請假</div>
-            </div>
-          </div>
-
-          <div class="summary-action-bar" style="margin-top:16px;">
-            <button class="btn btn-primary" id="copy-summary-btn" style="flex:1;">
-              📋 一鍵複製
-            </button>
-            <button class="btn btn-outline" id="refresh-summary-btn" style="padding:14px;">
-              🔄
-            </button>
-          </div>
-        </div>
-
-        <!-- 各中隊狀態 -->
-        <p class="section-label">各中隊填報狀態</p>
-        <div class="squad-status-grid" id="summary-squad-grid"></div>
-
+    <div class="settings-section">
+      <h3>📤 匯出 Excel</h3>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <input type="text" id="export-start-col" class="settings-input" placeholder="起始日期" readonly>
+        <span style="color:#888;line-height:40px">~</span>
+        <input type="text" id="export-end-col" class="settings-input" placeholder="結束日期" readonly>
       </div>
+      <button id="export-btn" class="action-btn wide">📥 匯出 Excel</button>
     </div>
 
-    <!-- ══ 歷史頁面 ═══════════════════════════════ -->
-    <div class="page" id="page-history">
-      <div style="padding: 20px 16px;">
+    <div class="settings-section">
+      <h3>🔄 重新載入</h3>
+      <button class="action-btn wide" onclick="loadData()">🔄 重新從 Notion 載入</button>
+    </div>
+  </div>
 
-        <!-- 月份導航 -->
-        <div class="cal-month-nav">
-          <button class="date-nav-btn" id="cal-prev-month">‹</button>
-          <h2 id="hist-month"></h2>
-          <button class="date-nav-btn" id="cal-next-month">›</button>
-        </div>
-
-        <!-- 日曆 -->
-        <div class="calendar-grid" id="hist-calendar"></div>
-
-        <!-- 選取日期的詳情 -->
-        <div id="hist-detail"></div>
-
+  <!-- ═══════════════ PIN 對話框 ═══════════════ -->
+  <div id="pin-dialog" class="modal-overlay">
+    <div class="modal-card">
+      <h3 id="pin-dialog-title">輸入 PIN 碼</h3>
+      <input type="password" id="pin-input" class="pin-input" maxlength="6" placeholder="請輸入 PIN 碼" inputmode="numeric">
+      <div class="modal-actions">
+        <button id="pin-cancel" class="modal-btn cancel">取消</button>
+        <button id="pin-confirm" class="modal-btn confirm">確認</button>
       </div>
     </div>
+  </div>
 
-    <!-- ══ 設定頁面 ═══════════════════════════════ -->
-    <div class="page" id="page-settings">
-      <div style="padding: 20px 16px;">
-
-        <!-- Worker 連線狀態 -->
-        <div class="settings-section">
-          <p class="settings-section-title">💡 系統狀態</p>
-          <div class="settings-item">
-            <div>
-              <div class="settings-item-label">Cloudflare Worker</div>
-              <div class="settings-item-desc" id="worker-status">檢查中…</div>
-            </div>
-            <button class="btn btn-outline" style="padding:8px 14px;font-size:12px;"
-                    onclick="testWorkerConnection()">測試連線</button>
-          </div>
-          <div class="settings-item">
-            <div>
-              <div class="settings-item-label">當前學期</div>
-              <div class="settings-item-desc" id="settings-semester"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 匯入花名冊 -->
-        <div class="settings-section">
-          <p class="settings-section-title">📥 匯入花名冊（新學期）</p>
-          <div class="drop-zone" id="csv-drop-zone">
-            <div class="drop-zone-icon">📄</div>
-            <p class="drop-zone-text">拖曳 Notion 匯出的 CSV 到此處</p>
-            <p class="drop-zone-sub">或點擊選擇檔案</p>
-          </div>
-          <input type="file" id="csv-file-input" accept=".csv" style="display:none;">
-          <div id="import-preview"></div>
-          <div id="import-progress"></div>
-          <div id="pending-import"></div>
-        </div>
-
-        <!-- 外籍生人數設定 -->
-        <div class="settings-section">
-          <p class="settings-section-title">🌏 各中隊外籍生人數</p>
-          <div id="foreign-settings-list">
-            <!-- 由 JS 渲染 -->
-          </div>
-          <button class="btn btn-primary btn-full" style="margin-top:12px;"
-                  onclick="saveForeignSettings()">儲存外籍生設定</button>
-        </div>
-
-        <!-- PIN 管理 -->
-        <div class="settings-section">
-          <p class="settings-section-title">🔐 點名密碼管理</p>
-          <div id="pin-settings-list">
-            <!-- 由 JS 渲染 -->
-          </div>
-          <button class="btn btn-primary btn-full" style="margin-top:12px;"
-                  onclick="savePinSettings()">儲存密碼設定</button>
-        </div>
-
-        <!-- 匯出 -->
-        <div class="settings-section">
-          <p class="settings-section-title">📊 匯出 Excel 記錄</p>
-          <p class="settings-item-desc" style="margin-bottom:12px;">包含整學期所有已提交的點名記錄，空床格留空。</p>
-          <button class="btn btn-primary btn-full" id="export-btn">
-            ⬇️ 下載 Excel（整學期）
-          </button>
-        </div>
-
-        <!-- 版本資訊 -->
-        <div style="text-align:center; padding:24px; color:var(--text-muted); font-size:12px;">
-          碧苑宿舍點名系統 v1.0<br>
-          GitHub Pages + Cloudflare Worker + Notion
-        </div>
-
-      </div>
-    </div>
-
-  </div><!-- /.page-content -->
-
-  <!-- ─── 底部導航 ────────────────────────────────── -->
+  <!-- ═══════════════ 底部導航 ═══════════════ -->
   <nav class="bottom-nav">
     <div class="nav-item active" data-page="home">
       <span class="nav-icon">🏠</span>
@@ -277,7 +178,7 @@
     </div>
     <div class="nav-item" data-page="history">
       <span class="nav-icon">📅</span>
-      <span class="nav-label">紀錄</span>
+      <span class="nav-label">歷史</span>
     </div>
     <div class="nav-item" data-page="settings">
       <span class="nav-icon">⚙️</span>
@@ -285,161 +186,9 @@
     </div>
   </nav>
 
-</div><!-- /#app -->
-
-<!-- ─── 全域 UI 元件 ─────────────────────────────── -->
-
-<!-- Toast 通知容器 -->
-<div id="toast-container"></div>
-
-<!-- PIN 對話框 -->
-<div class="dialog-overlay" id="pin-dialog">
-  <div class="dialog-box">
-    <h2 class="dialog-title" id="pin-dialog-title">中隊點名</h2>
-    <p class="dialog-subtitle">請輸入 4 位數 PIN 碼</p>
-    <div class="pin-input-wrapper">
-      <input type="password"
-             inputmode="numeric"
-             maxlength="4"
-             pattern="[0-9]*"
-             class="pin-input"
-             id="pin-input"
-             placeholder="●●●●">
-    </div>
-    <div class="dialog-actions">
-      <button class="btn btn-outline" id="pin-cancel">取消</button>
-      <button class="btn btn-primary" id="pin-confirm">確認進入</button>
-    </div>
-  </div>
-</div>
-
-<!-- 提交成功 Modal -->
-<div class="success-modal" id="submit-success-modal">
-  <div class="success-modal-box">
-    <div class="success-icon">✅</div>
-    <h2 class="success-title">點名提交成功！</h2>
-    <div class="success-stats">
-      <div>
-        <div class="success-stat-value" id="submit-should" style="color:var(--text-primary)">0</div>
-        <div class="success-stat-label">應到</div>
-      </div>
-      <div>
-        <div class="success-stat-value" id="submit-present" style="color:var(--green)">0</div>
-        <div class="success-stat-label">實到</div>
-      </div>
-      <div>
-        <div class="success-stat-value" id="submit-leave" style="color:var(--amber)">0</div>
-        <div class="success-stat-label">請假</div>
-      </div>
-      <div>
-        <div class="success-stat-value" id="submit-absent" style="color:var(--red)">0</div>
-        <div class="success-stat-label">未請假</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ─── Script ─────────────────────────────────────── -->
-<script>
-  // 設定頁面的動態渲染（settings-specific functions）
-  function renderForeignSettings() {
-    const container = document.getElementById('foreign-settings-list');
-    if (!container) return;
-    const squads = [
-      { id: '一單', color: '#6366f1' }, { id: '一雙', color: '#8b5cf6' },
-      { id: '二單', color: '#3b82f6' }, { id: '二雙', color: '#06b6d4' },
-      { id: '三單', color: '#10b981' }, { id: '三雙', color: '#22c55e' },
-    ];
-    container.innerHTML = squads.map(sq => `
-      <div class="settings-item">
-        <div style="border-left:3px solid ${sq.color};padding-left:12px;">
-          <div class="settings-item-label">${sq.id} 中隊</div>
-          <div class="settings-item-desc">外籍生人數</div>
-        </div>
-        <input type="number" min="0" max="99"
-               class="settings-input" id="foreign-${sq.id}" value="0">
-      </div>
-    `).join('');
-  }
-
-  function renderPinSettings() {
-    const container = document.getElementById('pin-settings-list');
-    if (!container) return;
-    const squads = ['一單', '一雙', '二單', '二雙', '三單', '三雙'];
-    const pins = [
-      ...squads.map(id => ({ id, label: `${id} 中隊 PIN`, key: `pin_${id}` })),
-      { id: 'admin', label: '管理員 PIN', key: 'pin_admin' },
-    ];
-    container.innerHTML = pins.map(p => `
-      <div class="settings-item">
-        <div class="settings-item-label">${p.label}</div>
-        <input type="password" inputmode="numeric" maxlength="4" pattern="[0-9]*"
-               class="settings-input" id="pin-setting-${p.id}" placeholder="****"
-               autocomplete="off">
-      </div>
-    `).join('');
-  }
-
-  async function saveForeignSettings() {
-    const squads = ['一單', '一雙', '二單', '二雙', '三單', '三雙'];
-    const updates = {};
-    for (const id of squads) {
-      const el = document.getElementById(`foreign-${id}`);
-      if (el) updates[`foreign_${id}`] = el.value;
-    }
-    try {
-      await window._api?.setConfig(updates);
-      showToast('外籍生設定已儲存', 'success');
-    } catch (e) {
-      showToast('儲存失敗：' + e.message, 'error');
-    }
-  }
-
-  async function savePinSettings() {
-    const ids = ['一單', '一雙', '二單', '二雙', '三單', '三雙', 'admin'];
-    const updates = {};
-    for (const id of ids) {
-      const el = document.getElementById(`pin-setting-${id}`);
-      if (el && el.value) updates[`pin_${id}`] = el.value;
-    }
-    try {
-      await window._api?.setConfig(updates);
-      showToast('密碼設定已儲存', 'success');
-    } catch (e) {
-      showToast('儲存失敗：' + e.message, 'error');
-    }
-  }
-
-  async function testWorkerConnection() {
-    const el = document.getElementById('worker-status');
-    el.textContent = '測試中…';
-    try {
-      const result = await window._api?.ping();
-      el.textContent = `✅ 連線正常 · ${result?.time?.slice(11,16)} UTC`;
-    } catch (e) {
-      el.textContent = '❌ 連線失敗：' + e.message;
-    }
-  }
-
-  // 簡單的 toast（給非模組環境使用）
-  function showToast(msg, type = 'info') {
-    const container = document.getElementById('toast-container');
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.textContent = msg;
-    container.appendChild(toast);
-    setTimeout(() => toast.classList.add('visible'), 10);
-    setTimeout(() => { toast.classList.remove('visible'); setTimeout(() => toast.remove(), 300); }, 3000);
-  }
-
-  // 初始化設定頁面靜態元件
-  document.addEventListener('DOMContentLoaded', () => {
-    renderForeignSettings();
-    renderPinSettings();
-  });
-</script>
-
-<script type="module" src="app.js"></script>
-
+  <!-- Scripts -->
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
