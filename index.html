@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#0a0a14">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=41">
+  <link rel="stylesheet" href="style.css?v=42">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -33,9 +33,9 @@
 
   <!-- Loading -->
   <div id="loading-overlay" class="loading-overlay">
-    <!-- 駭客/指令碼背景特效區 -->
-    <div id="hacking-bg"></div>
-    
+    <!-- Minecraft 伺服器啟動日誌背景特效 -->
+    <pre id="hacking-bg"></pre>
+
     <div class="terminal-loader">
       <div class="terminal-header">
         <div class="terminal-title">Status</div>
@@ -45,45 +45,61 @@
           <div class="control maximize"></div>
         </div>
       </div>
-      <div class="text">資料庫同步資料中...</div>
+      <div class="text">資料庫同步中...</div>
     </div>
   </div>
   <script>
     (function(){
       const logs = [
-        "[INFO] [Server thread/INFO]: Starting minecraft server version 1.20.4",
-        "[INFO] [Server thread/INFO]: Loading properties",
-        "[INFO] [Server thread/INFO]: Default game type: SURVIVAL",
-        "[INFO] [Server thread/INFO]: Generating keypair",
-        "[INFO] [Server thread/INFO]: Starting Minecraft server on *:25565",
-        "[INFO] [Server thread/INFO]: Using default channel type",
-        "[INFO] [Server thread/INFO]: Preparing level \"world\"",
-        "[INFO] [Server thread/INFO]: Preparing start region for dimension minecraft:overworld",
-        "[INFO] [Server thread/INFO]: Time elapsed: 1459 ms",
-        "[INFO] [Server thread/INFO]: Done (2.531s)! For help, type \"help\"",
-        "[API] Fetching Database ID... OK",
+        "[Server thread/INFO]: Starting minecraft server version 1.20.4",
+        "[Server thread/INFO]: Loading properties",
+        "[Server thread/INFO]: Default game type: SURVIVAL",
+        "[Server thread/INFO]: Generating keypair",
+        "[Server thread/INFO]: Starting Minecraft server on *:25565",
+        "[Server thread/INFO]: Using default channel type",
+        "[Server thread/INFO]: Preparing level \"world\"",
+        "[Server thread/INFO]: Preparing start region for dimension minecraft:overworld",
+        "[Server thread/INFO]: Preparing spawn area: 83%",
+        "[Server thread/INFO]: Time elapsed: 1459 ms",
+        "[Server thread/INFO]: Done (2.531s)! For help, type \"help\"",
+        "[Server thread/INFO]: Starting remote control listener",
+        "[Server thread/INFO]: RCON running on 0.0.0.0:25575",
+        "[Server thread/INFO]: Checking for auth services...",
+        "[Server thread/INFO]: Loading dimension minecraft:the_nether",
+        "[Server thread/INFO]: Loading dimension minecraft:the_end",
+        "[Server thread/INFO]: Player count: 0/20",
+        "[Server thread/WARN]: Ambiguity between arguments on line 4",
+        "[API] Connecting to WORKER_URL endpoint...",
+        "[API] GET /api/config → 200 OK (143ms)",
         "[AUTH] Validating Bearer Token... 200 OK",
+        "[AUTH] Integration scope: read_content, update_content",
+        "[DB] Fetching MASTER_DB_ID schema...",
+        "[DB] Found 124 records",
         "[SYNC] Downloaded 4.2 MB of bed state records",
-        "[SYNC] Mapping user ID to Notion internal page tree",
-        "[WARN] Skipped bed 128 (marked as storage)",
+        "[SYNC] Mapping student IDs to Notion internal page tree",
+        "[SYNC] Building attendance matrix for current semester",
+        "[WARN] Bed 128 skipped — marked as 儲藏室",
+        "[WARN] Rate limit approaching: 3 req/s",
+        "[INFO] Applying room rules for double rooms 118/120/122/124/126",
+        "[INFO] changelog_db handshake OK",
         "[INFO] Data sync complete. Ready for connections."
       ];
+
       const bg = document.getElementById('hacking-bg');
-      if(bg) {
-        let content = '';
-        /* Initialize with some random logs */
-        for(let i=0; i<40; i++){
-          content += logs[Math.floor(Math.random()*logs.length)] + "\\n";
+      if (bg) {
+        const lines = [];
+        for (let i = 0; i < 60; i++) {
+          lines.push('[' + new Date().toTimeString().slice(0,8) + '] ' + logs[Math.floor(Math.random() * logs.length)]);
         }
-        bg.textContent = content;
-        /* Rapidly append lines */
+        bg.textContent = lines.join('\n');
+
         setInterval(() => {
-          let lines = bg.textContent.split('\\n');
-          if(lines.length > 80) lines.splice(0, lines.length - 80);
-          lines.push(logs[Math.floor(Math.random()*logs.length)]);
-          bg.textContent = lines.join('\\n');
+          const allLines = bg.textContent.split('\n');
+          if (allLines.length > 120) allLines.splice(0, allLines.length - 120);
+          allLines.push('[' + new Date().toTimeString().slice(0,8) + '] ' + logs[Math.floor(Math.random() * logs.length)]);
+          bg.textContent = allLines.join('\n');
           bg.scrollTop = bg.scrollHeight;
-        }, 80);
+        }, 90);
       }
     })();
   </script>
@@ -452,8 +468,8 @@
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=41"></script>
-  <script src="api.js?v=41"></script>
-  <script src="app.js?v=41"></script>
+  <script src="config.js?v=42"></script>
+  <script src="api.js?v=42"></script>
+  <script src="app.js?v=42"></script>
 </body>
 </html>
