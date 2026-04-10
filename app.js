@@ -1,21 +1,21 @@
 /**
- * 碧苑宿舍點名系統 - 主應用邏輯 v2
- * 以 CSV 總表為核心，所有資料來自 Notion
+ * 碧苑宿舍點名系統 - 主應用邏輯 v2.1
+ * 新增: 總床數設定 / 儲藏室扣除 / 住宿率公式 / 空床回報
  */
 
-// ─── 全域狀態 ──────────────────────────────────────────────────────────────────
+// ─── 全域狀態 ───────────────────────────────────────────────────────────────
 const state = {
-  students: [],         // 全部學生（含出席資料）
-  dateColumns: [],      // 日期欄位列表（已排序）
-  config: {},           // 系統設定（PIN、外籍生等）
-  currentSquad: null,   // 當前選中的中隊
-  currentDate: null,    // 當前選中的日期欄位名稱
-  changes: [],          // 尚未提交的變更
+  students: [],
+  dateColumns: [],
+  config: {},
+  currentSquad: null,
+  currentDate: null,
+  changes: [],
   loading: true,
-  calMonth: new Date(), // 歷史頁面的當前月份
+  calMonth: new Date(),
 };
 
-// ─── 初始化 ────────────────────────────────────────────────────────────────────
+// ─── 初始化 ─────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   state.currentDate = getTodayColumnName();
   setupNav();
@@ -43,33 +43,30 @@ async function loadData() {
   }
 }
 
-// ─── 導航 ──────────────────────────────────────────────────────────────────────
+// ─── 導航 ───────────────────────────────────────────────────────────────────
 let currentPage = 'home';
 
 function setupNav() {
   document.querySelectorAll('.nav-item').forEach(item => {
-    item.addEventListener('click', () => {
-      const page = item.dataset.page;
-      navigateTo(page);
-    });
+    item.addEventListener('click', () => navigateTo(item.dataset.page));
   });
 }
 
 function navigateTo(page) {
   currentPage = page;
-  // 切換頁面可見性
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const el = document.getElementById(`page-${page}`);
   if (el) el.classList.add('active');
-
-  // 導航高亮
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
   if (navItem) navItem.classList.add('active');
 
-  // 返回按鈕
   const backBtn = document.getElementById('back-btn');
-  backBtn.style.display = (page === 'rollcall') ? 'block' : 'none';
+  backBtn.style.display = (page === 'rollcall') ? 'flex' : 'none';
+
+  // 隱藏 FAB
+  const fab = document.querySelector('.fab-empty-bed');
+  if (fab) fab.style.display = (page === 'rollcall') ? 'flex' : 'none';
 
   renderCurrentPage();
 }
@@ -84,23 +81,29 @@ function renderCurrentPage() {
   }
 }
 
-// ─── 首頁：中隊選擇 ────────────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════════════
+// 首頁
+// ═════════════════════════════════════════════════════════════════════════════
 function renderHome() {
-  const grid = document.getElementById('squad-grid');
-  if (!grid) return;
-
-  // 顯示日期
+  // 日期
   const dateEl = document.getElementById('home-date');
   const now = new Date();
-  dateEl.textContent = `${now.getMonth() + 1}/${now.getDate()} ${['日','一','二','三','四','五','六'][now.getDay()]}`;
+  const weekDay = ['日','一','二','三','四','五','六'][now.getDay()];
+  dateEl.textContent = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 星期${weekDay}`;
+
+  // 中隊卡片 (3列)
+  const grid = document.getElementById('squad-grid');
+  const floorLabels = { 1: '1樓', 2: '2樓', 3: '3樓' };
 
   grid.innerHTML = CONFIG.SQUADS.map(sq => {
     const count = state.students.filter(s => s.squad === sq.id && !s.isEmpty).length;
+    const floor = sq.floor;
+    const type = sq.odd ? '單數房' : '雙數房';
     return `
-      <div class="squad-card" style="--sq-color:${sq.color}" onclick="enterSquad('${sq.id}')">
-        <div class="squad-card-title">${sq.id}</div>
-        <div class="squad-card-sub">${sq.label.split('（')[1]?.replace('）','') || ''}</div>
-        <div class="squad-card-count">${count} 人</div>
+      <div class="sq-card" style="--sq-c:${sq.color}" onclick="enterSquad('${sq.id}')">
+        <div class="sq-badge" style="background:${sq.color}">${floor}</div>
+        <div class="sq-name">${sq.id}</div>
+        <div class="sq-desc">${floorLabels[floor]}・${type}</div>
       </div>
     `;
   }).join('');
@@ -123,535 +126,564 @@ function enterSquad(squadId) {
   }
 }
 
-// ─── 點名頁面 ──────────────────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════════════
+// 點名
+// ═════════════════════════════════════════════════════════════════════════════
 function renderRollCall() {
   if (!state.currentSquad) return;
 
-  const squadName = document.getElementById('rc-squad-name');
-  const dateEl = document.getElementById('rc-date');
-  const list = document.getElementById('rc-student-list');
+  document.getElementById('rc-squad-name').textContent = state.currentSquad;
+  document.getElementById('rc-date').textContent = state.currentDate;
 
-  squadName.textContent = state.currentSquad;
-  dateEl.textContent = state.currentDate;
-
-  // 篩選此中隊的學生
   const students = state.students.filter(s => s.squad === state.currentSquad);
-
-  // 按房號+床號排序
   students.sort((a, b) => a.room.localeCompare(b.room) || a.bed.localeCompare(b.bed));
 
   let html = '';
-  let currentRoom = '';
-
+  let curRoom = '';
   for (const s of students) {
-    // 房號分組標題
-    if (s.room !== currentRoom) {
-      currentRoom = s.room;
-      html += `<div class="room-divider">${s.room}</div>`;
-    }
-
+    if (s.room !== curRoom) { curRoom = s.room; html += `<div class="room-divider">${s.room}</div>`; }
     const status = s.attendance[state.currentDate] || '✓';
-    const statusInfo = CONFIG.STATUS[status] || CONFIG.STATUS['✓'];
-    const isAbsent = status !== '✓';
-
+    const si = CONFIG.STATUS[status] || CONFIG.STATUS['✓'];
+    const absent = status !== '✓';
     html += `
-      <div class="student-row ${s.isEmpty ? 'empty-bed' : ''} ${isAbsent ? 'absent' : ''}"
-           data-id="${s.id}" onclick="${s.isEmpty ? '' : `toggleStatus('${s.id}')`}">
+      <div class="student-row ${s.isEmpty?'empty-bed':''} ${absent?'absent':''}"
+           onclick="${s.isEmpty?'':`toggleStatus('${s.id}')`}">
         <div class="student-info">
           <div class="student-bed" style="background:${getSquadColor(state.currentSquad)}">${s.bed}</div>
           <div>
-            <div class="student-name">${s.isEmpty ? '（空床）' : s.name}${s.isForeign ? ' 🌏' : ''}</div>
-            <div class="student-meta">${s.class || ''} ${s.studentId || ''}</div>
+            <div class="student-name">${s.isEmpty?'（空床）':s.name}${s.isForeign?' 🌏':''}</div>
+            <div class="student-meta">${s.class||''} ${s.studentId||''}</div>
           </div>
         </div>
-        ${s.isEmpty ? '<span class="empty-tag">空床</span>' : `
-          <div class="status-badge" style="background:${statusInfo.color}20;color:${statusInfo.color};border:1px solid ${statusInfo.color}40">
-            ${statusInfo.icon} ${statusInfo.label}
-          </div>
-        `}
-      </div>
-    `;
+        ${s.isEmpty?'<span class="empty-tag">空床</span>':
+          `<div class="status-badge" style="background:${si.color}20;color:${si.color};border:1px solid ${si.color}40">${si.icon} ${si.label}</div>`}
+      </div>`;
   }
-
-  list.innerHTML = html;
+  document.getElementById('rc-student-list').innerHTML = html;
   updateRollCallStats();
   setupSubmitButton();
 }
 
 function toggleStatus(pageId) {
-  const student = state.students.find(s => s.id === pageId);
-  if (!student || student.isEmpty) return;
-
-  const current = student.attendance[state.currentDate] || '✓';
-  // 切換順序：✓ → ◎ → ✘ → ✓
-  const cycle = { '✓': '◎', '◎': '✘', '✘': '✓', '△': '✓' };
-  const next = cycle[current] || '✓';
-
-  student.attendance[state.currentDate] = next;
-
-  // 記錄變更
-  const existing = state.changes.findIndex(c => c.pageId === pageId);
-  if (existing >= 0) {
-    state.changes[existing] = { pageId, date: state.currentDate, value: next };
-  } else {
-    state.changes.push({ pageId, date: state.currentDate, value: next });
-  }
-
+  const s = state.students.find(x => x.id === pageId);
+  if (!s || s.isEmpty) return;
+  const cur = s.attendance[state.currentDate] || '✓';
+  const next = { '✓':'◎', '◎':'✘', '✘':'✓', '△':'✓' }[cur] || '✓';
+  s.attendance[state.currentDate] = next;
+  const idx = state.changes.findIndex(c => c.pageId === pageId);
+  if (idx >= 0) state.changes[idx] = { pageId, date: state.currentDate, value: next };
+  else state.changes.push({ pageId, date: state.currentDate, value: next });
   renderRollCall();
 }
 
 function updateRollCallStats() {
-  const students = state.students.filter(s => s.squad === state.currentSquad);
-  const nonEmpty = students.filter(s => !s.isEmpty);
-
-  let present = 0, leave = 0, absent = 0;
-  for (const s of nonEmpty) {
-    const v = s.attendance[state.currentDate] || '✓';
-    if (v === '✓') present++;
-    else if (v === '◎' || v === '△') leave++;
-    else if (v === '✘') absent++;
-  }
-
-  document.getElementById('rc-stat-should').textContent = nonEmpty.length;
-  document.getElementById('rc-stat-present').textContent = present;
-  document.getElementById('rc-stat-leave').textContent = leave;
-  document.getElementById('rc-stat-absent').textContent = absent;
+  const ss = state.students.filter(s => s.squad === state.currentSquad && !s.isEmpty);
+  let p=0, l=0, a=0;
+  for (const s of ss) { const v = s.attendance[state.currentDate]||'✓'; if(v==='✓')p++; else if(v==='◎'||v==='△')l++; else a++; }
+  document.getElementById('rc-stat-should').textContent = ss.length;
+  document.getElementById('rc-stat-present').textContent = p;
+  document.getElementById('rc-stat-leave').textContent = l;
+  document.getElementById('rc-stat-absent').textContent = a;
 }
 
 function setupSubmitButton() {
   const btn = document.getElementById('submit-btn');
   btn.onclick = async () => {
-    if (!state.changes.length) {
-      showToast('沒有需要提交的變更', 'info');
-      return;
-    }
-
-    btn.disabled = true;
-    btn.textContent = '⏳ 提交中...';
-
+    if (!state.changes.length) { showToast('沒有需要提交的變更','info'); return; }
+    btn.disabled = true; btn.textContent = '⏳ 提交中...';
     try {
-      // 分批提交（每批 45 筆）
-      for (let i = 0; i < state.changes.length; i += 45) {
-        const batch = state.changes.slice(i, i + 45);
-        await window._api.updateAttendance(batch);
-      }
-
-      showToast(`已提交 ${state.changes.length} 筆變更`, 'success');
+      for (let i=0; i<state.changes.length; i+=45)
+        await window._api.updateAttendance(state.changes.slice(i,i+45));
+      showToast(`已提交 ${state.changes.length} 筆變更`,'success');
       showSubmitSuccess();
       state.changes = [];
-    } catch (err) {
-      showToast('提交失敗：' + err.message, 'error');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = '✅ 提交今日點名';
-    }
+    } catch (err) { showToast('提交失敗：'+err.message,'error'); }
+    finally { btn.disabled = false; btn.textContent = '✅ 提交今日點名'; }
   };
 }
 
 function showSubmitSuccess() {
-  const modal = document.getElementById('submit-success-modal');
-  const students = state.students.filter(s => s.squad === state.currentSquad && !s.isEmpty);
-
-  let present = 0, leave = 0, absent = 0;
-  for (const s of students) {
-    const v = s.attendance[state.currentDate] || '✓';
-    if (v === '✓') present++;
-    else if (v === '◎' || v === '△') leave++;
-    else absent++;
-  }
-
-  document.getElementById('submit-should').textContent = students.length;
-  document.getElementById('submit-present').textContent = present;
-  document.getElementById('submit-leave').textContent = leave;
-  document.getElementById('submit-absent').textContent = absent;
-
-  modal.classList.add('visible');
-  setTimeout(() => modal.classList.remove('visible'), 3000);
+  const ss = state.students.filter(s => s.squad === state.currentSquad && !s.isEmpty);
+  let p=0,l=0,a=0;
+  for (const s of ss) { const v=s.attendance[state.currentDate]||'✓'; if(v==='✓')p++; else if(v==='◎'||v==='△')l++; else a++;}
+  document.getElementById('submit-should').textContent = ss.length;
+  document.getElementById('submit-present').textContent = p;
+  document.getElementById('submit-leave').textContent = l;
+  document.getElementById('submit-absent').textContent = a;
+  const m = document.getElementById('submit-success-modal');
+  m.classList.add('visible'); setTimeout(()=>m.classList.remove('visible'),3000);
 }
 
-// ─── 總表頁面 ──────────────────────────────────────────────────────────────────
-function renderSummary() {
-  const summaryDate = state.currentDate || getTodayColumnName();
-  document.getElementById('summary-date').textContent = summaryDate;
+// ═════════════════════════════════════════════════════════════════════════════
+// 空床回報
+// ═════════════════════════════════════════════════════════════════════════════
+function openEmptyBedModal() {
+  // 若在點名頁只顯示當前中隊的房間，否則顯示全部房間
+  const filtered = state.currentSquad && currentPage === 'rollcall'
+    ? state.students.filter(s => s.squad === state.currentSquad)
+    : state.students;
+  const rooms = [...new Set(filtered.map(s => s.room))].sort();
+  const sel = document.getElementById('eb-room');
+  sel.innerHTML = rooms.map(r => `<option value="${r}">${r}</option>`).join('');
+  updateBedOptions();
+  document.getElementById('empty-bed-modal').classList.add('visible');
+}
 
-  // 計算全校統計
-  const allStudents = state.students;
-  const nonEmpty = allStudents.filter(s => !s.isEmpty);
-  const emptyCount = allStudents.filter(s => s.isEmpty).length;
-  const foreignCount = nonEmpty.filter(s => s.isForeign).length;
-  const totalBeds = allStudents.length;
-  const residents = nonEmpty.length;
+function updateBedOptions() {
+  const room = document.getElementById('eb-room').value;
+  const beds = state.students.filter(s => s.room === room).map(s => s.bed);
+  const sel = document.getElementById('eb-bed');
+  sel.innerHTML = ['A','B','C','D'].map(b => {
+    const s = state.students.find(x => x.room === room && x.bed === b);
+    const label = s ? (s.isEmpty ? `${b} 床（已空床）` : `${b} 床 - ${s.name}`) : `${b} 床`;
+    return `<option value="${b}">${label}</option>`;
+  }).join('');
+}
 
-  let present = 0, leave = 0, absent = 0;
-  for (const s of nonEmpty) {
-    const v = s.attendance[summaryDate] || '✓';
-    if (v === '✓') present++;
-    else if (v === '◎' || v === '△') leave++;
-    else if (v === '✘') absent++;
+async function submitEmptyBed() {
+  const room = document.getElementById('eb-room').value;
+  const bed = document.getElementById('eb-bed').value;
+  const student = state.students.find(s => s.room === room && s.bed === bed);
+
+  if (!student) { showToast('找不到此床位','error'); return; }
+  if (student.isEmpty) { showToast('此床位已是空床','info'); closeModal('empty-bed-modal'); return; }
+
+  try {
+    // 在 Notion 中將「空床」checkbox 設為 true
+    await window._api.updateAttendance([{
+      pageId: student.id,
+      markEmpty: true,
+    }]);
+
+    // 本地更新
+    student.isEmpty = true;
+
+    showToast(`${room} ${bed} 床已標記為空床`,'success');
+    closeModal('empty-bed-modal');
+    renderRollCall();
+    renderSummary();
+  } catch (err) {
+    showToast('更新失敗：'+err.message,'error');
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 換床位
+// ═════════════════════════════════════════════════════════════════════════════
+function openSwapBedModal() {
+  const rooms = [...new Set(state.students.map(s => s.room))].sort();
+  document.getElementById('sw-from-room').innerHTML = rooms.map(r => `<option value="${r}">${r}</option>`).join('');
+  document.getElementById('sw-to-room').innerHTML = rooms.map(r => `<option value="${r}">${r}</option>`).join('');
+  updateSwapFromBeds();
+  updateSwapToBeds();
+  document.getElementById('swap-bed-modal').classList.add('visible');
+}
+
+function updateSwapFromBeds() {
+  const room = document.getElementById('sw-from-room').value;
+  const beds = state.students.filter(s => s.room === room && !s.isEmpty);
+  const sel = document.getElementById('sw-from-bed');
+  sel.innerHTML = beds.map(s =>
+    `<option value="${s.bed}">${s.bed} 床 - ${s.name || '(無名)'}</option>`
+  ).join('');
+  if (!beds.length) sel.innerHTML = '<option disabled>此房間無住宿生</option>';
+}
+
+function updateSwapToBeds() {
+  const room = document.getElementById('sw-to-room').value;
+  const allBeds = state.students.filter(s => s.room === room);
+  const sel = document.getElementById('sw-to-bed');
+  sel.innerHTML = allBeds.map(s => {
+    const label = s.isEmpty ? `${s.bed} 床（空床）` : `${s.bed} 床 - ${s.name || '(無名)'}`;
+    return `<option value="${s.bed}">${label}</option>`;
+  }).join('');
+  if (!allBeds.length) sel.innerHTML = '<option disabled>此房間無床位</option>';
+}
+
+async function submitSwapBed() {
+  const fromRoom = document.getElementById('sw-from-room').value;
+  const fromBed = document.getElementById('sw-from-bed').value;
+  const toRoom = document.getElementById('sw-to-room').value;
+  const toBed = document.getElementById('sw-to-bed').value;
+
+  if (fromRoom === toRoom && fromBed === toBed) {
+    showToast('來源和目標是同一個床位', 'info'); return;
   }
 
-  const rate = residents > 0 ? Math.round((residents / totalBeds) * 100) : 0;
+  const studentA = state.students.find(s => s.room === fromRoom && s.bed === fromBed);
+  const studentB = state.students.find(s => s.room === toRoom && s.bed === toBed);
 
-  document.getElementById('total-beds').textContent = totalBeds;
-  document.getElementById('total-empty').textContent = emptyCount;
-  document.getElementById('total-residents').textContent = residents;
-  document.getElementById('total-foreign').textContent = foreignCount;
-  document.getElementById('total-rate').textContent = rate + '%';
-  document.getElementById('total-present').textContent = present;
-  document.getElementById('total-leave').textContent = leave;
-  document.getElementById('total-absent').textContent = absent;
+  if (!studentA) { showToast('找不到來源學生', 'error'); return; }
 
-  // 各中隊狀態
-  const squadGrid = document.getElementById('summary-squad-grid');
-  squadGrid.innerHTML = CONFIG.SQUADS.map(sq => {
-    const sqStudents = nonEmpty.filter(s => s.squad === sq.id);
-    let sqPresent = 0, sqLeave = 0, sqAbsent = 0;
-    for (const s of sqStudents) {
-      const v = s.attendance[summaryDate] || '✓';
-      if (v === '✓') sqPresent++;
-      else if (v === '◎' || v === '△') sqLeave++;
-      else sqAbsent++;
+  try {
+    const updates = [];
+
+    // 學生 A 搬到目標位置
+    updates.push({
+      pageId: studentA.id,
+      swapBed: { room: toRoom, bed: toBed },
+    });
+
+    // 如果目標有人，對調回來源位置
+    if (studentB && !studentB.isEmpty) {
+      updates.push({
+        pageId: studentB.id,
+        swapBed: { room: fromRoom, bed: fromBed },
+      });
     }
-    return `
-      <div class="squad-status-card" style="border-left:3px solid ${sq.color}">
-        <div class="squad-status-title">${sq.id}</div>
-        <div class="squad-status-row">
-          <span>應到 <b>${sqStudents.length}</b></span>
-          <span style="color:#22c55e">到 <b>${sqPresent}</b></span>
-          <span style="color:#f59e0b">假 <b>${sqLeave}</b></span>
-          <span style="color:#ef4444">缺 <b>${sqAbsent}</b></span>
-        </div>
-      </div>
-    `;
-  }).join('');
 
-  // 日期導航
+    await window._api.updateAttendance(updates);
+
+    // 本地更新
+    studentA.room = toRoom;
+    studentA.bed = toBed;
+    if (studentB && !studentB.isEmpty) {
+      studentB.room = fromRoom;
+      studentB.bed = fromBed;
+    }
+
+    const msg = studentB && !studentB.isEmpty
+      ? `${studentA.name} ↔ ${studentB.name} 床位已對調`
+      : `${studentA.name} 已搬到 ${toRoom} ${toBed} 床`;
+    showToast(msg, 'success');
+    closeModal('swap-bed-modal');
+    renderSummary();
+  } catch (err) {
+    showToast('換床位失敗：' + err.message, 'error');
+  }
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('visible');
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 總表
+// 計算順序：
+//   1. 總床數（設定值）
+//   2. 空床數 = 各樓層空床(isEmpty)總和 + 空床修正值
+//   3. 住宿人數 = 總床數 - 空床數
+//   4. 住宿率 = round((住宿人數 / 總床數) * 100 * 10) / 10 + "%"
+//   5. 實到 = 各樓層 (應到 - 請假 - 未請假) 的總合
+//   6. 請假 = 各樓層當日請假總和
+//   7. 未請假 = 各樓層當日未請假總和
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * 計算某日的全域統計資料（一個函數，renderSummary 和 copySummary 共用）
+ */
+function computeDailyStats(date) {
+  const totalBeds = parseInt(state.config['total_beds']) || state.students.length;
+  const bedOffset = parseInt(state.config['bed_offset']) || 0;
+  const bedOffset1s = parseInt(state.config['bed_offset_1s']) || 0;
+
+  // --- 各中隊明細 ---
+  const squads = [];
+  let gShouldAttend = 0, gLeave = 0, gAbsent = 0, gPresent = 0;
+  let gEmptyCount = 0, gForeignCount = 0;
+
+  for (const sq of CONFIG.SQUADS) {
+    const members = state.students.filter(s => s.squad === sq.id);
+    // 空床 = isEmpty 的學生（靜態屬性，來自 Notion 的「空床」checkbox）
+    let emptyInSquad = members.filter(s => s.isEmpty).length;
+
+    // 若為一雙，加上獨立修正值
+    if (sq.id === '一雙') {
+      emptyInSquad += bedOffset1s;
+    }
+
+    // 應到 = 非空床的住宿生
+    const residents = members.filter(s => !s.isEmpty);
+    const shouldAttend = residents.length;
+
+    let sqLeave = 0, sqAbsent = 0;
+    for (const s of residents) {
+      const v = s.attendance[date] || '✓';
+      if (v === '◎' || v === '△') sqLeave++;
+      else if (v === '✘') sqAbsent++;
+    }
+    // 實到 = 應到 - 請假 - 未請假
+    const sqPresent = shouldAttend - sqLeave - sqAbsent;
+    // 外籍
+    const sqForeign = residents.filter(s => s.isForeign).length;
+
+    squads.push({
+      id: sq.id, color: sq.color,
+      shouldAttend, present: sqPresent, leave: sqLeave, absent: sqAbsent,
+      empty: emptyInSquad, foreign: sqForeign,
+    });
+
+    gShouldAttend += shouldAttend;
+    gLeave += sqLeave;
+    gAbsent += sqAbsent;
+    gPresent += sqPresent;
+    gEmptyCount += emptyInSquad;
+    gForeignCount += sqForeign;
+  }
+
+  // --- 全域計算 ---
+  // 2. 空床數 = 各樓層空床總和（含一雙修正）+ 全域空床修正值
+  const totalEmpty = gEmptyCount + bedOffset;
+  // 3. 住宿人數 = 總床數 - 空床數
+  const residents = totalBeds - totalEmpty;
+  // 4. 住宿率公式: round((住宿人數/總床數)*100*10)/10
+  const rate = totalBeds > 0 ? Math.round((residents / totalBeds) * 100 * 10) / 10 : 0;
+
+  return {
+    totalBeds, totalEmpty, residents, rate, bedOffset, bedOffset1s,
+    present: gPresent, leave: gLeave, absent: gAbsent,
+    shouldAttend: gShouldAttend, foreign: gForeignCount,
+    squads,
+  };
+}
+
+function renderSummary() {
+  const date = state.currentDate || getTodayColumnName();
+  document.getElementById('summary-date').textContent = date;
+
+  const st = computeDailyStats(date);
+
+  // 1-3: 上排大數字
+  document.getElementById('total-beds').textContent = st.totalBeds;
+  document.getElementById('total-empty').textContent = st.totalEmpty;
+  document.getElementById('total-residents').textContent = st.residents;
+
+  // 4-5: 外籍 / 住宿率
+  document.getElementById('total-foreign').textContent = st.foreign;
+  document.getElementById('total-rate').textContent = st.rate + '%';
+
+  // 6-8: 實到 / 請假 / 未請假
+  document.getElementById('total-present').textContent = st.present;
+  document.getElementById('total-leave').textContent = st.leave;
+  document.getElementById('total-absent').textContent = st.absent;
+
+  // 各中隊
+  const grid = document.getElementById('summary-squad-grid');
+  grid.innerHTML = st.squads.map(sq => `
+    <div class="sqd-card" style="--sq-c:${sq.color}">
+      <div class="sqd-title">${sq.id}</div>
+      <div class="sqd-row">
+        <span>應到 <b>${sq.shouldAttend}</b></span>
+        <span style="color:var(--green)">到 <b>${sq.present}</b></span>
+        <span style="color:var(--yellow)">假 <b>${sq.leave}</b></span>
+        <span style="color:var(--red)">缺 <b>${sq.absent}</b></span>
+      </div>
+      <div class="sqd-foreign">🌏 外籍 ${sq.foreign} ・ 🛏️ 空床 ${sq.empty}</div>
+    </div>`).join('');
+
   document.getElementById('summary-prev-date').onclick = () => changeSummaryDate(-1);
   document.getElementById('summary-next-date').onclick = () => changeSummaryDate(1);
-
-  // 複製總表
-  document.getElementById('copy-summary-btn').onclick = () => copySummary(summaryDate);
-
-  // 刷新
+  document.getElementById('copy-summary-btn').onclick = () => copySummary(date);
   document.getElementById('refresh-summary-btn').onclick = () => loadData();
 }
 
 function changeSummaryDate(delta) {
   const idx = state.dateColumns.indexOf(state.currentDate);
-  const newIdx = idx + delta;
-  if (newIdx >= 0 && newIdx < state.dateColumns.length) {
-    state.currentDate = state.dateColumns[newIdx];
+  const ni = idx + delta;
+  if (ni >= 0 && ni < state.dateColumns.length) {
+    state.currentDate = state.dateColumns[ni];
     renderSummary();
   }
 }
 
 function copySummary(date) {
-  const nonEmpty = state.students.filter(s => !s.isEmpty);
-  const emptyCount = state.students.filter(s => s.isEmpty).length;
-  const totalBeds = state.students.length;
-  const residents = nonEmpty.length;
-  const foreignCount = nonEmpty.filter(s => s.isForeign).length;
-
-  let present = 0, leave = 0, absent = 0;
-  for (const s of nonEmpty) {
-    const v = s.attendance[date] || '✓';
-    if (v === '✓') present++;
-    else if (v === '◎' || v === '△') leave++;
-    else absent++;
-  }
-
-  const rate = residents > 0 ? Math.round((residents / totalBeds) * 100) : 0;
-
-  const text = `碧苑宿舍 ${date} 點名報告
-總床數：${totalBeds}
-空床數：${emptyCount}
-住宿人數：${residents}
-外籍生：${foreignCount}
-住宿率：${rate}%
-實到：${present}
-請假：${leave}
-未請假：${absent}`;
-
-  navigator.clipboard.writeText(text).then(() => {
-    showToast('已複製到剪貼簿', 'success');
-  });
+  const st = computeDailyStats(date);
+  const text = `碧苑宿舍 ${date} 點名報告\n` +
+    `1. 總床數：${st.totalBeds}\n` +
+    `2. 空床數：${st.totalEmpty}（修正值: ${st.bedOffset}）\n` +
+    `3. 住宿人數：${st.residents}\n` +
+    `4. 住宿率：${st.rate}%\n` +
+    `5. 實到：${st.present}\n` +
+    `6. 請假：${st.leave}\n` +
+    `7. 未請假：${st.absent}\n` +
+    `外籍生：${st.foreign}`;
+  navigator.clipboard.writeText(text).then(() => showToast('已複製', 'success'));
 }
 
-// ─── 歷史頁面 ──────────────────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════════════
+// 歷史
+// ═════════════════════════════════════════════════════════════════════════════
 function renderHistory() {
-  const monthNav = document.getElementById('hist-month');
-  const cal = document.getElementById('hist-calendar');
-  const detail = document.getElementById('hist-detail');
-
   const year = state.calMonth.getFullYear();
   const month = state.calMonth.getMonth();
-  monthNav.textContent = `${year} 年 ${month + 1} 月`;
+  document.getElementById('hist-month').textContent = `${year} 年 ${month+1} 月`;
 
-  // 生成日曆格子
   const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
+  const days = new Date(year, month+1, 0).getDate();
   let html = '<div class="cal-header">日</div><div class="cal-header">一</div><div class="cal-header">二</div><div class="cal-header">三</div><div class="cal-header">四</div><div class="cal-header">五</div><div class="cal-header">六</div>';
-
-  // 空白
-  for (let i = 0; i < firstDay; i++) html += '<div class="cal-cell empty"></div>';
-
-  for (let d = 1; d <= daysInMonth; d++) {
-    const colName = `${month + 1}月${d}日`;
-    const hasData = state.dateColumns.includes(colName);
-    const isToday = colName === getTodayColumnName();
-
-    // 計算該日概略數據
-    let leaveCount = 0;
-    if (hasData) {
-      for (const s of state.students) {
-        if (!s.isEmpty) {
-          const v = s.attendance[colName];
-          if (v === '◎' || v === '✘' || v === '△') leaveCount++;
-        }
-      }
-    }
-
-    html += `
-      <div class="cal-cell ${hasData ? 'has-data' : ''} ${isToday ? 'today' : ''}"
-           ${hasData ? `onclick="showDateDetail('${colName}')"` : ''}>
-        <div class="cal-day">${d}</div>
-        ${hasData && leaveCount > 0 ? `<div class="cal-badge">${leaveCount}</div>` : ''}
-      </div>
-    `;
+  for (let i=0; i<firstDay; i++) html += '<div class="cal-cell empty"></div>';
+  for (let d=1; d<=days; d++) {
+    const col = `${month+1}月${d}日`;
+    const has = state.dateColumns.includes(col);
+    const today = col === getTodayColumnName();
+    let badge = 0;
+    if (has) for (const s of state.students) if (!s.isEmpty && s.attendance[col] && s.attendance[col]!=='✓') badge++;
+    html += `<div class="cal-cell ${has?'has-data':''} ${today?'today':''}" ${has?`onclick="showDateDetail('${col}')"`:''}><div class="cal-day">${d}</div>${has&&badge?`<div class="cal-badge">${badge}</div>`:''}</div>`;
   }
-
-  cal.innerHTML = html;
-
-  // 月份導航
-  document.getElementById('cal-prev-month').onclick = () => {
-    state.calMonth.setMonth(state.calMonth.getMonth() - 1);
-    renderHistory();
-  };
-  document.getElementById('cal-next-month').onclick = () => {
-    state.calMonth.setMonth(state.calMonth.getMonth() + 1);
-    renderHistory();
-  };
+  document.getElementById('hist-calendar').innerHTML = html;
+  document.getElementById('cal-prev-month').onclick = () => { state.calMonth.setMonth(state.calMonth.getMonth()-1); renderHistory(); };
+  document.getElementById('cal-next-month').onclick = () => { state.calMonth.setMonth(state.calMonth.getMonth()+1); renderHistory(); };
 }
 
-function showDateDetail(colName) {
-  const detail = document.getElementById('hist-detail');
+function showDateDetail(col) {
   const nonEmpty = state.students.filter(s => !s.isEmpty);
-
-  let present = 0, leave = 0, absent = 0;
-  const absentList = [];
-
+  let p=0, l=0, a=0; const list=[];
   for (const s of nonEmpty) {
-    const v = s.attendance[colName] || '✓';
-    if (v === '✓') present++;
-    else if (v === '◎' || v === '△') { leave++; absentList.push({ ...s, status: v }); }
-    else if (v === '✘') { absent++; absentList.push({ ...s, status: v }); }
+    const v = s.attendance[col] || '✓';
+    if (v === '✓' || v === '△') p++;
+    else if (v === '◎') { l++; list.push({...s, status: v}); }
+    else if (v === '✘') { a++; list.push({...s, status: v}); }
   }
-
-  let html = `
-    <div class="detail-header">
-      <h3>${colName}</h3>
-      <div class="detail-stats">
-        <span style="color:#22c55e">到 ${present}</span>
-        <span style="color:#f59e0b">假 ${leave}</span>
-        <span style="color:#ef4444">缺 ${absent}</span>
-      </div>
-    </div>
-  `;
-
-  if (absentList.length) {
+  let html = `<div class="detail-header"><h3>${col}</h3><div class="detail-stats"><span style="color:var(--green)">到 ${p}</span><span style="color:var(--yellow)">假 ${l}</span><span style="color:var(--red)">缺 ${a}</span></div></div>`;
+  if (list.length) {
     html += '<div class="detail-list">';
-    for (const s of absentList) {
-      const statusInfo = CONFIG.STATUS[s.status] || CONFIG.STATUS['◎'];
-      html += `
-        <div class="detail-row">
-          <span>${s.room} ${s.bed} ${s.name}</span>
-          <span style="color:${statusInfo.color}">${statusInfo.icon} ${statusInfo.label}</span>
-        </div>
-      `;
-    }
+    for (const s of list) { const si = CONFIG.STATUS[s.status]||CONFIG.STATUS['◎']; html += `<div class="detail-row"><span>${s.room} ${s.bed} ${s.name}</span><span style="color:${si.color}">${si.icon} ${si.label}</span></div>`; }
     html += '</div>';
-  } else {
-    html += '<p style="color:#888;text-align:center;padding:16px;">全員到齊 🎉</p>';
-  }
-
-  detail.innerHTML = html;
+  } else html += '<p style="color:var(--dim);text-align:center;padding:20px">全員到齊 🎉</p>';
+  document.getElementById('hist-detail').innerHTML = html;
 }
 
-// ─── 設定頁面 ──────────────────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════════════
+// 設定
+// ═════════════════════════════════════════════════════════════════════════════
 function renderSettings() {
-  // 學期
-  const semEl = document.getElementById('settings-semester');
-  if (semEl) semEl.textContent = CONFIG.SEMESTER;
-
-  // Worker 連線
   testWorkerConnection();
 
-  // 載入外籍生設定
-  renderForeignSettings();
+  const sc = state.students.length;
+  const dc = state.dateColumns.length;
+  const el = document.getElementById('settings-info');
+  if (el) el.textContent = `${sc} 位學生 · ${dc} 個日期欄位`;
 
-  // 載入 PIN 設定
-  renderPinSettings();
+  // 宿舍參數
+  const totalBeds = parseInt(state.config['total_beds']) || state.students.length;
+  const bedOffset = parseInt(state.config['bed_offset']) || 0;
+  const bedOffset1s = parseInt(state.config['bed_offset_1s']) || 0;
+  document.getElementById('cfg-total-beds').value = totalBeds;
+  document.getElementById('cfg-bed-offset').value = bedOffset;
+  document.getElementById('cfg-bed-offset-1s').value = bedOffset1s;
+}
 
-  // 載入學生統計
-  const studentCount = state.students.length;
-  const dateCount = state.dateColumns.length;
-  const infoEl = document.getElementById('settings-info');
-  if (infoEl) infoEl.textContent = `${studentCount} 位學生 · ${dateCount} 個日期欄位`;
+function adjustSetting(key, delta) {
+  const map = {
+    'total_beds': 'cfg-total-beds',
+    'bed_offset': 'cfg-bed-offset',
+    'bed_offset_1s': 'cfg-bed-offset-1s',
+  };
+  const input = document.getElementById(map[key]);
+  if (!input) return;
+  let val = parseInt(input.value) || 0;
+  if (key === 'total_beds') val = Math.max(0, val + delta);
+  else val = val + delta;
+  input.value = val;
+}
 
-  // 匯出日期範圍預設
-  if (state.dateColumns.length) {
-    const startDate = state.dateColumns[0];
-    const endDate = state.dateColumns[state.dateColumns.length - 1];
-    const startInput = document.getElementById('export-start-col');
-    const endInput = document.getElementById('export-end-col');
-    if (startInput) startInput.value = startDate;
-    if (endInput) endInput.value = endDate;
-  }
-
-  // 匯出按鈕
-  const exportBtn = document.getElementById('export-btn');
-  if (exportBtn) {
-    exportBtn.onclick = () => exportExcel();
+async function saveDormSettings() {
+  const totalBeds = parseInt(document.getElementById('cfg-total-beds').value) || 0;
+  const bedOffset = parseInt(document.getElementById('cfg-bed-offset').value) || 0;
+  const bedOffset1s = parseInt(document.getElementById('cfg-bed-offset-1s').value) || 0;
+  try {
+    await window._api.setConfig({
+      total_beds: String(totalBeds),
+      bed_offset: String(bedOffset),
+      bed_offset_1s: String(bedOffset1s),
+    });
+    state.config['total_beds'] = String(totalBeds);
+    state.config['bed_offset'] = String(bedOffset);
+    state.config['bed_offset_1s'] = String(bedOffset1s);
+    showToast('宿舍參數已儲存','success');
+  } catch (err) {
+    showToast('儲存失敗：'+err.message, 'error');
   }
 }
 
-// ─── 設定輔助函式 ──────────────────────────────────────────────────────────────
 async function testWorkerConnection() {
   const el = document.getElementById('conn-status');
   if (!el) return;
   el.textContent = '⏳ 測試連線中...';
-  el.style.background = 'rgba(255,255,255,0.05)';
+  el.style.background = 'rgba(255,255,255,.05)'; el.style.color = 'var(--dim)';
   try {
-    const res = await window._api.ping();
+    await window._api.ping();
     el.textContent = '✅ Worker 連線正常';
-    el.style.background = 'rgba(34,197,94,0.1)';
-    el.style.color = '#22c55e';
+    el.style.background = 'rgba(34,197,94,.1)'; el.style.color = 'var(--green)';
   } catch (err) {
-    el.textContent = '❌ 連線失敗：' + err.message;
-    el.style.background = 'rgba(239,68,68,0.1)';
-    el.style.color = '#ef4444';
+    el.textContent = '❌ 連線失敗';
+    el.style.background = 'rgba(239,68,68,.1)'; el.style.color = 'var(--red)';
   }
 }
 
-function renderForeignSettings() {
-  // 設定頁面若有外籍生設定區塊，在此渲染
-  // 目前外籍生是從班別自動判斷，無需手動設定
-}
-
-function renderPinSettings() {
-  // PIN 設定若有 UI 區塊，在此渲染
-  // 目前 PIN 從 Notion config 讀取
-}
-
-// ─── PIN 對話框 ─────────────────────────────────────────────────────────────────
-let pinCallback = null;
-let pinSquadId = null;
+// ─── PIN ────────────────────────────────────────────────────────────────────
+let pinCallback = null, pinSquadId = null;
 
 function setupPinDialog() {
-  document.getElementById('pin-cancel').onclick = () => {
-    document.getElementById('pin-dialog').classList.remove('visible');
-    pinCallback = null;
-  };
+  document.getElementById('pin-cancel').onclick = () => { document.getElementById('pin-dialog').classList.remove('visible'); pinCallback=null; };
   document.getElementById('pin-confirm').onclick = () => {
     const input = document.getElementById('pin-input');
     const pin = input.value;
     const expected = state.config[`pin_${pinSquadId}`];
-
     if (pin === expected || pin === state.config['pin_admin']) {
       document.getElementById('pin-dialog').classList.remove('visible');
-      input.value = '';
-      if (pinCallback) pinCallback();
-    } else {
-      input.classList.add('shake');
-      setTimeout(() => input.classList.remove('shake'), 500);
-      showToast('PIN 碼錯誤', 'error');
-    }
+      input.value = ''; if (pinCallback) pinCallback();
+    } else { input.classList.add('shake'); setTimeout(()=>input.classList.remove('shake'),500); showToast('PIN 碼錯誤','error'); }
   };
-
-  // Enter 提交
-  document.getElementById('pin-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('pin-confirm').click();
-  });
+  document.getElementById('pin-input').addEventListener('keydown', e => { if (e.key==='Enter') document.getElementById('pin-confirm').click(); });
 }
 
 function showPinDialog(squadId, callback) {
-  pinSquadId = squadId;
-  pinCallback = callback;
+  pinSquadId = squadId; pinCallback = callback;
   document.getElementById('pin-dialog-title').textContent = `${squadId} 中隊點名`;
   document.getElementById('pin-input').value = '';
   document.getElementById('pin-dialog').classList.add('visible');
-  setTimeout(() => document.getElementById('pin-input').focus(), 100);
+  setTimeout(()=>document.getElementById('pin-input').focus(), 100);
 }
 
-// ─── 自動備份 ──────────────────────────────────────────────────────────────────
+// ─── 自動備份 ───────────────────────────────────────────────────────────────
 setInterval(async () => {
   if (state.changes.length > 0) {
     try {
-      for (let i = 0; i < state.changes.length; i += 45) {
-        await window._api.updateAttendance(state.changes.slice(i, i + 45));
-      }
-      showToast(`自動備份 ${state.changes.length} 筆`, 'info');
+      for (let i=0; i<state.changes.length; i+=45) await window._api.updateAttendance(state.changes.slice(i,i+45));
+      showToast(`自動備份 ${state.changes.length} 筆`,'info');
       state.changes = [];
-    } catch (e) {
-      console.error('自動備份失敗', e);
-    }
+    } catch (e) { console.error('自動備份失敗', e); }
   }
 }, CONFIG.AUTO_SAVE_INTERVAL);
 
-// ─── UI 工具 ───────────────────────────────────────────────────────────────────
-function showLoading(show) {
-  state.loading = show;
-  const el = document.getElementById('loading-overlay');
-  if (el) el.style.display = show ? 'flex' : 'none';
+// ─── UI 工具 ────────────────────────────────────────────────────────────────
+function showLoading(show) { state.loading=show; const el=document.getElementById('loading-overlay'); if(el) el.style.display=show?'flex':'none'; }
+
+function showToast(msg, type='info') {
+  const c = document.getElementById('toast-container'); if(!c) return;
+  const t = document.createElement('div'); t.className=`toast toast-${type}`; t.textContent=msg;
+  c.appendChild(t); setTimeout(()=>t.classList.add('visible'),10);
+  setTimeout(()=>{ t.classList.remove('visible'); setTimeout(()=>t.remove(),300); },3000);
 }
 
-function showToast(msg, type = 'info') {
-  const container = document.getElementById('toast-container');
-  if (!container) return;
-  const toast = document.createElement('div');
-  toast.className = `toast toast-${type}`;
-  toast.textContent = msg;
-  container.appendChild(toast);
-  setTimeout(() => toast.classList.add('visible'), 10);
-  setTimeout(() => {
-    toast.classList.remove('visible');
-    setTimeout(() => toast.remove(), 300);
-  }, 3000);
-}
-
-// ─── 匯出 ──────────────────────────────────────────────────────────────────────
+// ─── 匯出 ───────────────────────────────────────────────────────────────────
 function exportExcel() {
-  if (!state.students.length || !state.dateColumns.length) {
-    showToast('沒有資料可匯出', 'error');
-    return;
-  }
-
+  if (!state.students.length) { showToast('沒有資料','error'); return; }
   try {
-    // 建立工作表資料
-    const headers = ['名稱', '寢床號', '床號', '班別', '學號', ...state.dateColumns];
+    const headers = ['名稱','寢床號','床號','班別','學號', ...state.dateColumns];
     const rows = state.students.map(s => {
-      const row = [s.name, s.room, s.bed, s.class, s.studentId];
-      for (const date of state.dateColumns) {
-        row.push(s.attendance[date] || '✓');
-      }
-      return row;
+      const r = [s.name, s.room, s.bed, s.class, s.studentId];
+      for (const d of state.dateColumns) r.push(s.attendance[d]||'✓');
+      return r;
     });
-
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, '點名總表');
+    const ws = XLSX.utils.aoa_to_sheet([headers,...rows]);
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '點名總表');
     XLSX.writeFile(wb, `碧苑點名_${CONFIG.SEMESTER}_${getTodayColumnName()}.xlsx`);
-    showToast('Excel 已下載', 'success');
-  } catch (err) {
-    showToast('匯出失敗：' + err.message, 'error');
-  }
+    showToast('Excel 已下載','success');
+  } catch (err) { showToast('匯出失敗：'+err.message,'error'); }
 }
 
-// 暴露全域函式
+// ─── 全域暴露 ───────────────────────────────────────────────────────────────
 window.enterSquad = enterSquad;
 window.toggleStatus = toggleStatus;
 window.showDateDetail = showDateDetail;
 window.exportExcel = exportExcel;
 window.navigateTo = navigateTo;
 window.loadData = loadData;
+window.openEmptyBedModal = openEmptyBedModal;
+window.updateBedOptions = updateBedOptions;
+window.submitEmptyBed = submitEmptyBed;
+window.closeModal = closeModal;
+window.adjustSetting = adjustSetting;
+window.saveDormSettings = saveDormSettings;

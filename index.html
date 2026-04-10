@@ -8,102 +8,180 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#0a0a14">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
-
   <title>碧苑宿舍點名系統</title>
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
-
-  <!-- SheetJS (Excel 匯出) -->
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-
-  <!-- 註冊 Service Worker -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(() => {});
-    }
-  </script>
+  <script>if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});</script>
 </head>
 <body>
 
-  <!-- Loading Overlay -->
+  <!-- Loading -->
   <div id="loading-overlay" class="loading-overlay">
     <div class="loading-spinner"></div>
     <p>載入資料中...</p>
   </div>
-
-  <!-- Toast Container -->
   <div id="toast-container" class="toast-container"></div>
 
-  <!-- 返回按鈕 -->
-  <button id="back-btn" class="back-btn" style="display:none" onclick="navigateTo('home')">← 返回</button>
+  <!-- 返回 -->
+  <button id="back-btn" class="back-btn" style="display:none" onclick="navigateTo('home')">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    返回
+  </button>
 
-  <!-- ═══════════════ 首頁 ═══════════════ -->
+  <!-- ═══════════ 首頁 ═══════════ -->
   <div id="page-home" class="page active">
-    <header class="page-header">
-      <h1>🏠 碧苑宿舍</h1>
-      <div id="home-date" class="header-date"></div>
-    </header>
-    <div id="squad-grid" class="squad-grid"></div>
+    <div class="home-hero">
+      <img src="icon-192.png" class="home-icon" alt="icon">
+      <h1 class="home-title">碧苑宿舍</h1>
+      <p class="home-sub">點名管理系統</p>
+      <div class="home-date" id="home-date"></div>
+    </div>
+    <p class="section-label">選擇你的中隊</p>
+    <div id="squad-grid" class="squad-grid-3col"></div>
   </div>
 
-  <!-- ═══════════════ 點名頁面 ═══════════════ -->
+  <!-- ═══════════ 點名 ═══════════ -->
   <div id="page-rollcall" class="page">
     <header class="rc-header">
       <div class="rc-header-top">
         <span id="rc-squad-name" class="rc-squad-name"></span>
-        <span id="rc-date" class="rc-date"></span>
+        <span id="rc-date" class="rc-date-pill"></span>
       </div>
       <div class="rc-stats">
         <div class="rc-stat"><span>應到</span><b id="rc-stat-should">0</b></div>
-        <div class="rc-stat"><span>實到</span><b id="rc-stat-present" style="color:#22c55e">0</b></div>
-        <div class="rc-stat"><span>請假</span><b id="rc-stat-leave" style="color:#f59e0b">0</b></div>
-        <div class="rc-stat"><span>未到</span><b id="rc-stat-absent" style="color:#ef4444">0</b></div>
+        <div class="rc-stat green"><span>實到</span><b id="rc-stat-present">0</b></div>
+        <div class="rc-stat yellow"><span>請假</span><b id="rc-stat-leave">0</b></div>
+        <div class="rc-stat red"><span>未到</span><b id="rc-stat-absent">0</b></div>
       </div>
     </header>
-
     <div id="rc-student-list" class="student-list"></div>
+
+    <!-- 空床回報 FAB -->
+    <button class="fab-empty-bed" onclick="openEmptyBedModal()">
+      <span class="fab-icon">🛏️</span>
+      <span class="fab-text">我這邊多了個空床!</span>
+    </button>
 
     <button id="submit-btn" class="submit-btn">✅ 提交今日點名</button>
   </div>
 
-  <!-- 提交成功彈窗 -->
+  <!-- 提交成功 -->
   <div id="submit-success-modal" class="modal-overlay">
     <div class="modal-card success-modal">
       <div class="modal-icon">🎉</div>
       <h3>點名提交成功！</h3>
       <div class="submit-stats">
         <div>應到 <b id="submit-should">0</b></div>
-        <div style="color:#22c55e">實到 <b id="submit-present">0</b></div>
-        <div style="color:#f59e0b">請假 <b id="submit-leave">0</b></div>
-        <div style="color:#ef4444">未到 <b id="submit-absent">0</b></div>
+        <div class="green-text">實到 <b id="submit-present">0</b></div>
+        <div class="yellow-text">請假 <b id="submit-leave">0</b></div>
+        <div class="red-text">未到 <b id="submit-absent">0</b></div>
       </div>
     </div>
   </div>
 
-  <!-- ═══════════════ 總表頁面 ═══════════════ -->
+  <!-- 空床回報 Modal -->
+  <div id="empty-bed-modal" class="modal-overlay">
+    <div class="modal-card">
+      <h3>🛏️ 回報空床</h3>
+      <p class="modal-desc">選擇新增空床的房間與床位</p>
+      <div class="bed-selector">
+        <label>房間號</label>
+        <select id="eb-room" class="styled-select" onchange="updateBedOptions()"></select>
+        <label>床位</label>
+        <select id="eb-bed" class="styled-select"></select>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn cancel" onclick="closeModal('empty-bed-modal')">取消</button>
+        <button class="modal-btn confirm" onclick="submitEmptyBed()">確認標記空床</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 換床位 Modal -->
+  <div id="swap-bed-modal" class="modal-overlay">
+    <div class="modal-card">
+      <h3>🔄 換床位</h3>
+      <p class="modal-desc">選擇要搬的學生和目標床位</p>
+      <div class="bed-selector">
+        <label>📤 來源學生</label>
+        <select id="sw-from-room" class="styled-select" onchange="updateSwapFromBeds()"></select>
+        <select id="sw-from-bed" class="styled-select"></select>
+        <div class="swap-arrow-divider">⬇️ 搬到</div>
+        <label>📥 目標床位</label>
+        <select id="sw-to-room" class="styled-select" onchange="updateSwapToBeds()"></select>
+        <select id="sw-to-bed" class="styled-select"></select>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn cancel" onclick="closeModal('swap-bed-modal')">取消</button>
+        <button class="modal-btn confirm" onclick="submitSwapBed()">確認換床位</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ 總表 ═══════════ -->
   <div id="page-summary" class="page">
-    <header class="page-header">
+    <div class="summary-header">
       <h1>📊 每日總表</h1>
       <div class="date-nav">
-        <button id="summary-prev-date" class="nav-arrow">◄</button>
-        <span id="summary-date"></span>
-        <button id="summary-next-date" class="nav-arrow">►</button>
+        <button id="summary-prev-date" class="nav-arrow">‹</button>
+        <span id="summary-date" class="date-pill"></span>
+        <button id="summary-next-date" class="nav-arrow">›</button>
       </div>
-    </header>
-
-    <div class="summary-totals">
-      <div class="summary-stat"><span>總床數</span><b id="total-beds">0</b></div>
-      <div class="summary-stat"><span>空床</span><b id="total-empty">0</b></div>
-      <div class="summary-stat"><span>住宿</span><b id="total-residents">0</b></div>
-      <div class="summary-stat"><span>外籍</span><b id="total-foreign">0</b></div>
-      <div class="summary-stat highlight"><span>住宿率</span><b id="total-rate">0%</b></div>
-      <div class="summary-stat good"><span>實到</span><b id="total-present">0</b></div>
-      <div class="summary-stat warn"><span>請假</span><b id="total-leave">0</b></div>
-      <div class="summary-stat bad"><span>未請假</span><b id="total-absent">0</b></div>
     </div>
 
-    <div id="summary-squad-grid" class="summary-squad-grid"></div>
+    <!-- 1-3: 總床數 / 空床數 / 住宿人數 -->
+    <div class="big-stats">
+      <div class="big-stat">
+        <div class="big-stat-value" id="total-beds">0</div>
+        <div class="big-stat-label">總床數</div>
+      </div>
+      <div class="big-stat">
+        <div class="big-stat-value" id="total-empty">0</div>
+        <div class="big-stat-label">空床數</div>
+      </div>
+      <div class="big-stat">
+        <div class="big-stat-value" id="total-residents">0</div>
+        <div class="big-stat-label">住宿人數</div>
+      </div>
+    </div>
+
+    <!-- 4-5: 外籍生 / 住宿率 -->
+    <div class="summary-row-2">
+      <div class="sm-stat"><span>🌏 外籍生</span><b id="total-foreign">0</b></div>
+      <div class="sm-stat accent"><span>📈 住宿率</span><b id="total-rate">0%</b></div>
+    </div>
+
+    <!-- 6-8: 實到 / 請假 / 未請假 -->
+    <div class="summary-row-3">
+      <div class="sm-stat green"><span>實到</span><b id="total-present">0</b></div>
+      <div class="sm-stat yellow"><span>請假</span><b id="total-leave">0</b></div>
+      <div class="sm-stat red"><span>未請假</span><b id="total-absent">0</b></div>
+    </div>
+
+    <!-- 各中隊 -->
+    <div id="summary-squad-grid" class="squad-detail-grid"></div>
+
+    <!-- 空床回報按鈕 -->
+    <button class="empty-bed-action" onclick="openEmptyBedModal()">
+      <span class="eb-icon">🛏️</span>
+      <div class="eb-content">
+        <span class="eb-title">我這邊多了個空床!</span>
+        <span class="eb-desc">選擇房間與床位，直接更新總表</span>
+      </div>
+      <span class="eb-arrow">›</span>
+    </button>
+
+    <!-- 換床位按鈕 -->
+    <button class="empty-bed-action swap-action" onclick="openSwapBedModal()">
+      <span class="eb-icon">🔄</span>
+      <div class="eb-content">
+        <span class="eb-title" style="color:#a78bfa">住宿生換床位</span>
+        <span class="eb-desc">調整學生的房間與床位配置</span>
+      </div>
+      <span class="eb-arrow">›</span>
+    </button>
 
     <div class="summary-actions">
       <button id="copy-summary-btn" class="action-btn">📋 複製總表</button>
@@ -111,54 +189,76 @@
     </div>
   </div>
 
-  <!-- ═══════════════ 歷史頁面 ═══════════════ -->
+  <!-- ═══════════ 歷史 ═══════════ -->
   <div id="page-history" class="page">
-    <header class="page-header">
-      <h1>📅 歷史資料</h1>
-      <div class="cal-nav">
-        <button id="cal-prev-month" class="nav-arrow">◄</button>
-        <span id="hist-month"></span>
-        <button id="cal-next-month" class="nav-arrow">►</button>
-      </div>
-    </header>
-
+    <h1 class="page-title">📅 歷史資料</h1>
+    <div class="cal-nav">
+      <button id="cal-prev-month" class="nav-arrow">‹</button>
+      <span id="hist-month" class="date-pill"></span>
+      <button id="cal-next-month" class="nav-arrow">›</button>
+    </div>
     <div id="hist-calendar" class="calendar-grid"></div>
     <div id="hist-detail" class="hist-detail"></div>
   </div>
 
-  <!-- ═══════════════ 設定頁面 ═══════════════ -->
+  <!-- ═══════════ 設定 ═══════════ -->
   <div id="page-settings" class="page">
-    <header class="page-header">
-      <h1>⚙️ 系統設定</h1>
-    </header>
+    <h1 class="page-title">⚙️ 系統設定</h1>
 
-    <div class="settings-section">
-      <h3>📡 連線狀態</h3>
-      <div id="conn-status" class="conn-status">檢查中...</div>
-      <div id="settings-info" class="settings-info"></div>
+    <div class="settings-card">
+      <div class="settings-card-header">📡 連線狀態</div>
+      <div id="conn-status" class="conn-badge">檢查中...</div>
+      <div id="settings-info" class="settings-dim"></div>
     </div>
 
-    <div class="settings-section">
-      <h3>📤 匯出 Excel</h3>
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <input type="text" id="export-start-col" class="settings-input" placeholder="起始日期" readonly>
-        <span style="color:#888;line-height:40px">~</span>
-        <input type="text" id="export-end-col" class="settings-input" placeholder="結束日期" readonly>
+    <div class="settings-card">
+      <div class="settings-card-header">🏠 宿舍參數</div>
+      <div class="setting-row">
+        <span>總床數</span>
+        <div class="stepper">
+          <button class="stepper-btn" onclick="adjustSetting('total_beds',-1)">−</button>
+          <input type="text" inputmode="numeric" id="cfg-total-beds" class="stepper-input" value="0">
+          <button class="stepper-btn" onclick="adjustSetting('total_beds',1)">+</button>
+        </div>
       </div>
-      <button id="export-btn" class="action-btn wide">📥 匯出 Excel</button>
+      <div class="setting-row">
+        <span>空床修正值</span>
+        <div class="stepper">
+          <button class="stepper-btn" onclick="adjustSetting('bed_offset',-1)">−</button>
+          <input type="text" inputmode="numeric" id="cfg-bed-offset" class="stepper-input" value="0">
+          <button class="stepper-btn" onclick="adjustSetting('bed_offset',1)">+</button>
+        </div>
+      </div>
+      <p class="settings-hint">💡 空床修正值用於微調全部空床數量</p>
+      <div class="setting-divider"></div>
+      <div class="setting-row">
+        <span>一雙空床修正</span>
+        <div class="stepper">
+          <button class="stepper-btn" onclick="adjustSetting('bed_offset_1s',-1)">−</button>
+          <input type="text" inputmode="numeric" id="cfg-bed-offset-1s" class="stepper-input" value="0">
+          <button class="stepper-btn" onclick="adjustSetting('bed_offset_1s',1)">+</button>
+        </div>
+      </div>
+      <p class="settings-hint">💡 一雙殘障房為雙人房，空床數可能變動，此處獨立微調</p>
+      <button class="action-btn wide save-btn" onclick="saveDormSettings()">💾 儲存宿舍參數</button>
     </div>
 
-    <div class="settings-section">
-      <h3>🔄 重新載入</h3>
+    <div class="settings-card">
+      <div class="settings-card-header">📤 匯出 Excel</div>
+      <button id="export-btn" class="action-btn wide" onclick="exportExcel()">📥 匯出完整 Excel</button>
+    </div>
+
+    <div class="settings-card">
+      <div class="settings-card-header">🔄 資料操作</div>
       <button class="action-btn wide" onclick="loadData()">🔄 重新從 Notion 載入</button>
     </div>
   </div>
 
-  <!-- ═══════════════ PIN 對話框 ═══════════════ -->
+  <!-- PIN 對話框 -->
   <div id="pin-dialog" class="modal-overlay">
     <div class="modal-card">
       <h3 id="pin-dialog-title">輸入 PIN 碼</h3>
-      <input type="password" id="pin-input" class="pin-input" maxlength="6" placeholder="請輸入 PIN 碼" inputmode="numeric">
+      <input type="password" id="pin-input" class="pin-input" maxlength="6" placeholder="PIN" inputmode="numeric">
       <div class="modal-actions">
         <button id="pin-cancel" class="modal-btn cancel">取消</button>
         <button id="pin-confirm" class="modal-btn confirm">確認</button>
@@ -166,27 +266,14 @@
     </div>
   </div>
 
-  <!-- ═══════════════ 底部導航 ═══════════════ -->
+  <!-- 底部導航 -->
   <nav class="bottom-nav">
-    <div class="nav-item active" data-page="home">
-      <span class="nav-icon">🏠</span>
-      <span class="nav-label">點名</span>
-    </div>
-    <div class="nav-item" data-page="summary">
-      <span class="nav-icon">📊</span>
-      <span class="nav-label">總表</span>
-    </div>
-    <div class="nav-item" data-page="history">
-      <span class="nav-icon">📅</span>
-      <span class="nav-label">歷史</span>
-    </div>
-    <div class="nav-item" data-page="settings">
-      <span class="nav-icon">⚙️</span>
-      <span class="nav-label">設定</span>
-    </div>
+    <div class="nav-item active" data-page="home"><span class="nav-icon">🏠</span><span class="nav-label">點名</span></div>
+    <div class="nav-item" data-page="summary"><span class="nav-icon">📊</span><span class="nav-label">總表</span></div>
+    <div class="nav-item" data-page="history"><span class="nav-icon">📅</span><span class="nav-label">歷史</span></div>
+    <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
   </nav>
 
-  <!-- Scripts -->
   <script src="config.js"></script>
   <script src="api.js"></script>
   <script src="app.js"></script>
