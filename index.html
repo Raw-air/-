@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#0a0a14">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=34">
+  <link rel="stylesheet" href="style.css?v=35">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -312,9 +312,9 @@
       <!-- 更新日誌發布區 -->
       <div class="dev-card" style="margin-top:16px;">
         <div class="dev-card-header">📢 系統更新日誌發布</div>
-        <p class="dev-card-hint">使用 Markdown 語法撰寫，使用者可在首頁點擊按鈕查看最新公告。</p>
+        <p class="dev-card-hint">新發布的內容會自動累加在歷史公告的「最上方」，不會覆寫舊資料。請使用 Markdown 語法撰寫即將新增的更新內容。</p>
         <textarea id="dev-changelog-input" class="dev-input" style="width:100%; height:150px; padding:12px; border-radius:8px; background:rgba(0,0,0,0.3); color:#fff; border:1px solid rgba(255,255,255,0.2); margin-bottom:8px; font-family:monospace; resize:vertical; font-size:13px" placeholder="### 🚀 版本 22.0 更新&#10;- 新增過場動畫&#10;- 修復版面問題"></textarea>
-        <button class="action-btn wide" onclick="saveChangelog()">💾 儲存並發布更新日誌</button>
+        <button class="action-btn wide" onclick="saveChangelog()">💾 儲存並新增公告</button>
       </div>
     </div>
   </div>
@@ -354,8 +354,8 @@
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=34"></script>
-  <script src="api.js?v=34"></script>
-  <script src="app.js?v=34"></script>
+  <script src="config.js?v=35"></script>
+  <script src="api.js?v=35"></script>
+  <script src="app.js?v=35"></script>
 </body>
 </html>

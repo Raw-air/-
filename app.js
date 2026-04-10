@@ -122,7 +122,19 @@ async function loadData() {
 
 // ── 最新公告與日誌 (Changelog) ──
 function openChangelogModal() {
-  const mdContent = state.config['changelog_md'] || '目前沒有最新公告。';
+  // 找出所有 changelog 項目並按時間反序排列 (最新的在最上面)
+  const entries = Object.keys(state.config)
+    .filter(k => k.startsWith('changelog_entry_'))
+    .sort()
+    .reverse()
+    .map(k => state.config[k]);
+  
+  // 兼容舊版單一欄位
+  if (state.config['changelog_md']) {
+    entries.push(state.config['changelog_md']);
+  }
+
+  const mdContent = entries.join('\n\n') || '目前沒有最新公告。';
   const htmlContent = typeof marked !== 'undefined' ? marked.parse(mdContent) : `<pre style="white-space:pre-wrap;font-family:inherit;">${mdContent}</pre>`;
   
   const contentEl = document.getElementById('changelog-content');
@@ -188,13 +200,16 @@ window.saveChangelog = saveChangelog;
 
 async function saveChangelog() {
   const content = document.getElementById('dev-changelog-input').value.trim();
-  if (!content) return showToast('請輸入日誌內容', 'error');
+  if (!content) return showToast('請輸入新增的日誌內容', 'error');
 
   showLoading(true);
   try {
-    await window._api.setConfig({ changelog_md: content });
-    state.config['changelog_md'] = content;
-    showToast('發布成功！', 'success');
+    const key = `changelog_entry_${Date.now()}`;
+    await window._api.setConfig({ [key]: content });
+    state.config[key] = content;
+    
+    document.getElementById('dev-changelog-input').value = ''; // 清空讓下次好輸入
+    showToast('發布成功！已新增至歷史頂端', 'success');
   } catch(e) {
     showToast('發布失敗：' + e.message, 'error');
   } finally {
@@ -202,12 +217,10 @@ async function saveChangelog() {
   }
 }
 
-// 供 dev 區載入時同步資料
+// 供 dev 區載入時清除舊資料避免誤會
 function initDevChangelog() {
   const el = document.getElementById('dev-changelog-input');
-  if (el && state.config['changelog_md']) {
-    el.value = state.config['changelog_md'];
-  }
+  if (el) el.value = '';
 }
 
 // ─── 導航 ───────────────────────────────────────────────────────────────────
