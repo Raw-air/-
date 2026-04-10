@@ -47,7 +47,15 @@
     <header class="rc-header">
       <div class="rc-header-top">
         <span id="rc-squad-name" class="rc-squad-name"></span>
-        <span id="rc-date" class="rc-date-pill"></span>
+        <button id="rc-date-btn" class="rc-date-pill rc-date-clickable" onclick="toggleDatePicker()">
+          <span id="rc-date"></span>
+          <span class="rc-date-chevron">▾</span>
+        </button>
+      </div>
+      <!-- 日期選擇器面板 -->
+      <div id="date-picker-panel" class="date-picker-panel">
+        <div class="date-picker-header">📅 選擇點名日期</div>
+        <div id="date-picker-list" class="date-picker-list"></div>
       </div>
       <div class="rc-stats">
         <div class="rc-stat"><span>應到</span><b id="rc-stat-should">0</b></div>
@@ -64,7 +72,7 @@
       <span class="fab-text">我這邊多了個空床!</span>
     </button>
 
-    <button id="submit-btn" class="submit-btn">✅ 提交今日點名</button>
+    <button id="submit-btn" class="submit-btn">✅ 提交點名</button>
   </div>
 
   <!-- 提交成功 -->
@@ -267,6 +275,7 @@
   </div>
 
   <!-- 底部導航 -->
+  <div class="bottom-nav-glow"></div>
   <nav class="bottom-nav">
     <div class="nav-item active" data-page="home"><span class="nav-icon">🏠</span><span class="nav-label">點名</span></div>
     <div class="nav-item" data-page="summary"><span class="nav-icon">📊</span><span class="nav-label">總表</span></div>
