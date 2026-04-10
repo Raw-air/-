@@ -28,34 +28,80 @@ window.addEventListener('unhandledrejection', (e) => {
 
 // ─── UI 清脆音效 (Web Audio API) ───────────────────────────────────────────
 let audioCtx = null;
-function playClickSound() {
+function playClickSound(type = 'default') {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
     
-    const oscillator = audioCtx.createOscillator();
+    const time = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
     const gainNode = audioCtx.createGain();
 
-    oscillator.connect(gainNode);
+    osc.connect(gainNode);
     gainNode.connect(audioCtx.destination);
 
-    // 清脆的 UI 滴答聲
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.04);
-    
-    gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime); // 舒服的音量
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.04);
-
-    oscillator.start(audioCtx.currentTime);
-    oscillator.stop(audioCtx.currentTime + 0.05);
+    if (type === 'pin') {
+      // 類似密碼鎖的短促高頻聲
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1400, time);
+      osc.frequency.exponentialRampToValueAtTime(1000, time + 0.03);
+      gainNode.gain.setValueAtTime(0.08, time);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.03);
+      osc.start(time); osc.stop(time + 0.04);
+    } else if (type === 'back') {
+      // 返回/關閉退出的下沉音
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(500, time);
+      osc.frequency.exponentialRampToValueAtTime(200, time + 0.06);
+      gainNode.gain.setValueAtTime(0.12, time);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.06);
+      osc.start(time); osc.stop(time + 0.07);
+    } else if (type === 'confirm') {
+      // 確認/提交的明亮雙音感
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(600, time);
+      osc.frequency.exponentialRampToValueAtTime(1200, time + 0.08);
+      gainNode.gain.setValueAtTime(0.08, time);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.08);
+      osc.start(time); osc.stop(time + 0.1);
+    } else {
+      // 預設清脆滴聲
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(800, time);
+      osc.frequency.exponentialRampToValueAtTime(300, time + 0.04);
+      gainNode.gain.setValueAtTime(0.12, time);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.04);
+      osc.start(time); osc.stop(time + 0.05);
+    }
   } catch(e) {}
 }
 
 window.addEventListener('click', (e) => {
-  const isTarget = e.target.closest('button, .nav-item, .sq-card, .rc-date-clickable, .date-item, .student-row, .dev-trigger, .changelog-btn, .action-btn');
-  if (isTarget) playClickSound();
+  const target = e.target.closest('button, .nav-item, .sq-card, .rc-date-clickable, .date-item, .student-row, .dev-trigger, .changelog-btn, .action-btn, .modal-overlay');
+  if (target) {
+    if (target.id === 'back-btn' || target.classList.contains('cancel') || target.id === 'pin-cancel') {
+      playClickSound('back');
+    } else if (target.classList.contains('confirm') || target.id === 'submit-btn' || target.id === 'pin-confirm' || target.id === 'rc-confirm-btn') {
+      playClickSound('confirm');
+    } else if (target.closest('.sq-card')) {
+      playClickSound('default');
+    } else {
+      // 除了點擊 modal 背板外，其他互動都發預設音效
+      if (!target.classList.contains('modal-overlay') || e.target === target) {
+         if (e.target.closest('.modal-card')) return; // ignore clicks inside modal empty areas
+         if (target.classList.contains('modal-overlay')) playClickSound('back');
+         else playClickSound('default');
+      }
+    }
+  }
 }, true);
+
+// 針對 PIN 碼輸入框打字時發出 pin 音效
+document.addEventListener('input', (e) => {
+  if (e.target && e.target.id === 'pin-input') {
+    playClickSound('pin');
+  }
+});
 
 // ─── 初始化 ─────────────────────────────────────────────────────────────────
 
