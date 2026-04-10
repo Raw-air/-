@@ -9,10 +9,11 @@
   <meta name="theme-color" content="#0a0a14">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=31">
+  <link rel="stylesheet" href="style.css?v=32">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script>if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});</script>
 </head>
 <body>
@@ -38,6 +39,10 @@
   <div id="page-home" class="page active">
     <!-- 背景已移至外層全域 -->
     <div class="home-hero">
+      <button class="changelog-btn" onclick="openChangelogModal()">
+        <span>公告 & 日誌</span>
+        <div class="changelog-dot"></div>
+      </button>
       <img src="icon-192.png" class="home-icon" alt="icon">
       <h1 class="home-title">碧苑宿舍</h1>
       <p class="home-sub">點名管理系統</p>
@@ -303,6 +308,28 @@
           <button class="action-btn wide warning" onclick="clearBgVideo()">移除自訂影片</button>
         </div>
       </div>
+
+      <!-- 更新日誌發布區 -->
+      <div class="dev-card" style="margin-top:16px;">
+        <div class="dev-card-header">📢 系統更新日誌發布</div>
+        <p class="dev-card-hint">使用 Markdown 語法撰寫，使用者可在首頁點擊按鈕查看最新公告。</p>
+        <textarea id="dev-changelog-input" class="dev-input" style="width:100%; height:150px; padding:12px; border-radius:8px; background:rgba(0,0,0,0.3); color:#fff; border:1px solid rgba(255,255,255,0.2); margin-bottom:8px; font-family:monospace; resize:vertical; font-size:13px" placeholder="### 🚀 版本 22.0 更新&#10;- 新增過場動畫&#10;- 修復版面問題"></textarea>
+        <button class="action-btn wide" onclick="saveChangelog()">💾 儲存並發布更新日誌</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 系統更新日誌 Modal -->
+  <div id="changelog-modal" class="modal-overlay">
+    <div class="modal-card" style="max-height:80vh;display:flex;flex-direction:column;max-width:500px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:12px;">
+        <h3 style="margin:0;font-size:18px">📢 系統最新公告與日誌</h3>
+        <button onclick="closeChangelogModal()" style="background:none;border:none;color:var(--dim);font-size:24px;cursor:pointer">&times;</button>
+      </div>
+      <div id="changelog-content" class="markdown-body" style="overflow-y:auto;flex:1;padding-right:8px;">
+        <!-- Markdown 會在此處渲染 -->載入中...
+      </div>
+      <button class="modal-btn cancel" style="margin-top:16px;width:100%" onclick="closeChangelogModal()">關閉視窗</button>
     </div>
   </div>
 
@@ -327,8 +354,8 @@
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=31"></script>
-  <script src="api.js?v=31"></script>
-  <script src="app.js?v=31"></script>
+  <script src="config.js?v=32"></script>
+  <script src="api.js?v=32"></script>
+  <script src="app.js?v=32"></script>
 </body>
 </html>

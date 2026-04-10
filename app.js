@@ -71,6 +71,41 @@ async function loadData() {
   }
 }
 
+// ── 最新公告與日誌 (Changelog) ──
+function openChangelogModal() {
+  const mdContent = state.config['changelog_md'] || '目前沒有最新公告。';
+  const htmlContent = typeof marked !== 'undefined' ? marked.parse(mdContent) : `<pre style="white-space:pre-wrap;font-family:inherit;">${mdContent}</pre>`;
+  document.getElementById('changelog-content').innerHTML = htmlContent;
+  document.getElementById('changelog-modal').classList.add('active');
+}
+function closeChangelogModal() {
+  document.getElementById('changelog-modal').classList.remove('active');
+}
+
+async function saveChangelog() {
+  const content = document.getElementById('dev-changelog-input').value.trim();
+  if (!content) return showToast('請輸入日誌內容', 'error');
+
+  showLoading(true);
+  try {
+    await window._api.setConfig({ changelog_md: content });
+    state.config['changelog_md'] = content;
+    showToast('發布成功！', 'success');
+  } catch(e) {
+    showToast('發布失敗：' + e.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+// 供 dev 區載入時同步資料
+function initDevChangelog() {
+  const el = document.getElementById('dev-changelog-input');
+  if (el && state.config['changelog_md']) {
+    el.value = state.config['changelog_md'];
+  }
+}
+
 // ─── 導航 ───────────────────────────────────────────────────────────────────
 let currentPage = 'home';
 
@@ -97,6 +132,13 @@ function navigateTo(page) {
 
   const fromEl = document.getElementById(`page-${fromPage}`);
   const toEl   = document.getElementById(`page-${page}`);
+
+  // 全域背景滑動效果
+  const isHome = (page === 'home');
+  const customBg = document.getElementById('custom-video-bg');
+  const animBg = document.querySelector('.home-anim-bg');
+  if (customBg) customBg.classList.toggle('hidden-bg', !isHome);
+  if (animBg) animBg.classList.toggle('hidden-bg', !isHome);
 
   function showNewPage() {
     document.querySelectorAll('.page').forEach(p => { p.classList.remove('active'); p.style.animation = ''; });
@@ -398,7 +440,8 @@ async function toggleSquadConfirm() {
   
   const today = getTodayColumnName();
   try {
-    await window._api.setConfig({ key: 'confirm_' + today, value: state.confirmedSquads.join(',') });
+    // 儲存到 Notion (系統全域共用)
+    await window._api.setConfig({ ['confirm_' + today]: state.confirmedSquads.join(',') });
   } catch(e) {
     console.error('儲存確認狀態失敗', e);
   }
@@ -1037,7 +1080,12 @@ function openDevAuth() {
   const panel = document.getElementById('dev-panel');
   // 如果已解鎖，切換顯示/隱藏
   if (devUnlocked) {
-    panel.classList.toggle('open');
+    if (!panel.classList.contains('open')) {
+      initDevChangelog();
+      panel.classList.add('open');
+    } else {
+      panel.classList.remove('open');
+    }
     return;
   }
   // 彈出密碼輸入
@@ -1065,6 +1113,7 @@ function openDevAuth() {
       setTimeout(() => overlay.remove(), 300);
       panel.classList.add('open');
       renderNavIconUpload();
+      initDevChangelog();
       showToast('🔓 開發者模式已解鎖', 'success');
     } else {
       input.classList.add('shake');
