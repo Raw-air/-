@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#0a0a14">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=16">
+  <link rel="stylesheet" href="style.css?v=17">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -249,16 +249,15 @@
       </div>
       <p class="settings-hint">💡 空床修正值用於微調全部空床數量</p>
       <div class="setting-divider"></div>
-      <div class="setting-row">
-        <span>一雙空床修正</span>
-        <div class="stepper">
-          <button class="stepper-btn" onclick="adjustSetting('bed_offset_1s',-1)">−</button>
-          <input type="text" inputmode="numeric" id="cfg-bed-offset-1s" class="stepper-input" value="0">
-          <button class="stepper-btn" onclick="adjustSetting('bed_offset_1s',1)">+</button>
-        </div>
-      </div>
-      <p class="settings-hint">💡 一雙殘障房為雙人房，空床數可能變動，此處獨立微調</p>
+      <p class="settings-hint">⚠️ 118/120/122/124/126 為雙人房（自動屏蔽 C/D 床）<br>⚠️ 128 為儲藏室（自動隱藏）</p>
       <button class="action-btn wide save-btn" onclick="saveDormSettings()">💾 儲存宿舍參數</button>
+    </div>
+
+    <div class="settings-card">
+      <div class="settings-card-header">🎨 導覽列圖示</div>
+      <p class="settings-hint">為底部導覽列的每個頁面上傳自訂圖示（取代 EMOJI）</p>
+      <div class="icon-upload-grid" id="nav-icon-upload-grid"></div>
+      <input type="file" id="nav-icon-file-input" accept="image/*" style="display:none">
     </div>
 
     <div class="settings-card">
@@ -293,8 +292,8 @@
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=16"></script>
-  <script src="api.js?v=16"></script>
-  <script src="app.js?v=16"></script>
+  <script src="config.js?v=17"></script>
+  <script src="api.js?v=17"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>

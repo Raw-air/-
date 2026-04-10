@@ -1,6 +1,6 @@
 /**
- * 碧苑宿舍點名系統 - 主應用邏輯 v2.1
- * 新增: 總床數設定 / 儲藏室扣除 / 住宿率公式 / 空床回報
+ * 碧苑宿舍點名系統 - 主應用邏輯 v2.2
+ * 新增: 硬性房間規則 / 斜線動畫 / 導覽列自訂圖示
  */
 
 // ─── 全域狀態 ───────────────────────────────────────────────────────────────
@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   state.currentDate = getTodayColumnName();
   setupNav();
   setupPinDialog();
+  applyNavIcons();
   navigateTo('home');
   await loadData();
 });
@@ -35,6 +36,9 @@ async function loadData() {
     state.students = roster.students;
     state.dateColumns = roster.dateColumns;
     state.config = config;
+
+    // 套用硬性房間規則
+    applyRoomRules();
     
     const today = getTodayColumnName();
     const confVal = state.config['confirm_' + today];
@@ -98,12 +102,29 @@ function renderHome() {
   const weekDay = ['日','一','二','三','四','五','六'][now.getDay()];
   dateEl.textContent = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 星期${weekDay}`;
 
+  // ── 斜線動畫 ──
+  const animBg = document.querySelector('.home-anim-bg');
+  if (animBg && !animBg.hasChildNodes()) {
+    const LINE_COUNT = 18;
+    for (let i = 0; i < LINE_COUNT; i++) {
+      const line = document.createElement('div');
+      line.className = 'anim-line';
+      const dur = 8 + Math.random() * 7;  // 8~15s
+      const delay = (i / LINE_COUNT) * dur; // 均勻錯開
+      line.style.setProperty('--dur', dur + 's');
+      line.style.setProperty('--delay', '-' + delay + 's');
+      line.style.opacity = 0.4 + Math.random() * 0.6;
+      line.style.width = (1.5 + Math.random() * 2) + 'px';
+      animBg.appendChild(line);
+    }
+  }
+
   // 中隊卡片 (3列)
   const grid = document.getElementById('squad-grid');
   const floorLabels = { 1: '1樓', 2: '2樓', 3: '3樓' };
 
   grid.innerHTML = CONFIG.SQUADS.map(sq => {
-    const count = state.students.filter(s => s.squad === sq.id && !s.isEmpty).length;
+    const count = state.students.filter(s => s.squad === sq.id && !s.isEmpty && !s.hidden).length;
     const floor = sq.floor;
     const type = sq.odd ? '單數房' : '雙數房';
     return `
@@ -200,7 +221,7 @@ function renderRollCall() {
   const submitBtn = document.getElementById('submit-btn');
   if (submitBtn) submitBtn.textContent = `✅ 提交 ${state.currentDate} 點名`;
 
-  const students = state.students.filter(s => s.squad === state.currentSquad);
+  const students = state.students.filter(s => s.squad === state.currentSquad && !s.hidden);
   students.sort((a, b) => a.room.localeCompare(b.room) || a.bed.localeCompare(b.bed));
 
   let html = '';
@@ -289,7 +310,7 @@ function showSyncDot(pageId, state) {
 }
 
 function updateRollCallStats() {
-  const ss = state.students.filter(s => s.squad === state.currentSquad && !s.isEmpty);
+  const ss = state.students.filter(s => s.squad === state.currentSquad && !s.isEmpty && !s.hidden);
   let p=0, l=0, a=0;
   for (const s of ss) { const v = s.attendance[state.currentDate]||'✓'; if(v==='✓')p++; else if(v==='◎'||v==='△')l++; else a++; }
   document.getElementById('rc-stat-should').textContent = ss.length;
@@ -343,7 +364,7 @@ function setupSubmitButton() {
 }
 
 function showSubmitSuccess() {
-  const ss = state.students.filter(s => s.squad === state.currentSquad && !s.isEmpty);
+  const ss = state.students.filter(s => s.squad === state.currentSquad && !s.isEmpty && !s.hidden);
   let p=0,l=0,a=0;
   for (const s of ss) { const v=s.attendance[state.currentDate]||'✓'; if(v==='✓')p++; else if(v==='◎'||v==='△')l++; else a++;}
   document.getElementById('submit-should').textContent = ss.length;
@@ -360,8 +381,8 @@ function showSubmitSuccess() {
 function openEmptyBedModal() {
   // 若在點名頁只顯示當前中隊的房間，否則顯示全部房間
   const filtered = state.currentSquad && currentPage === 'rollcall'
-    ? state.students.filter(s => s.squad === state.currentSquad)
-    : state.students;
+    ? state.students.filter(s => s.squad === state.currentSquad && !s.hidden)
+    : state.students.filter(s => !s.hidden);
   const rooms = [...new Set(filtered.map(s => s.room))].sort();
   const sel = document.getElementById('eb-room');
   sel.innerHTML = rooms.map(r => `<option value="${r}">${r}</option>`).join('');
@@ -371,10 +392,11 @@ function openEmptyBedModal() {
 
 function updateBedOptions() {
   const room = document.getElementById('eb-room').value;
-  const beds = state.students.filter(s => s.room === room).map(s => s.bed);
+  // 遵守房間規則：雙人房只顯示 A/B
+  const allowedBeds = CONFIG.DOUBLE_ROOMS.includes(room) ? ['A','B'] : ['A','B','C','D'];
   const sel = document.getElementById('eb-bed');
-  sel.innerHTML = ['A','B','C','D'].map(b => {
-    const s = state.students.find(x => x.room === room && x.bed === b);
+  sel.innerHTML = allowedBeds.map(b => {
+    const s = state.students.find(x => x.room === room && x.bed === b && !x.hidden);
     const label = s ? (s.isEmpty ? `${b} 床（已空床）` : `${b} 床 - ${s.name}`) : `${b} 床`;
     return `<option value="${b}">${label}</option>`;
   }).join('');
@@ -411,7 +433,7 @@ async function submitEmptyBed() {
 // 換床位
 // ═════════════════════════════════════════════════════════════════════════════
 function openSwapBedModal() {
-  const rooms = [...new Set(state.students.map(s => s.room))].sort();
+  const rooms = [...new Set(state.students.filter(s => !s.hidden).map(s => s.room))].sort();
   document.getElementById('sw-from-room').innerHTML = rooms.map(r => `<option value="${r}">${r}</option>`).join('');
   document.getElementById('sw-to-room').innerHTML = rooms.map(r => `<option value="${r}">${r}</option>`).join('');
   updateSwapFromBeds();
@@ -513,9 +535,8 @@ function closeModal(id) {
  * 計算某日的全域統計資料（一個函數，renderSummary 和 copySummary 共用）
  */
 function computeDailyStats(date) {
-  const totalBeds = parseInt(state.config['total_beds']) || state.students.length;
+  const totalBeds = parseInt(state.config['total_beds']) || state.students.filter(s => !s.hidden).length;
   const bedOffset = parseInt(state.config['bed_offset']) || 0;
-  const bedOffset1s = parseInt(state.config['bed_offset_1s']) || 0;
 
   // --- 各中隊明細 ---
   const squads = [];
@@ -523,14 +544,10 @@ function computeDailyStats(date) {
   let gEmptyCount = 0, gForeignCount = 0;
 
   for (const sq of CONFIG.SQUADS) {
-    const members = state.students.filter(s => s.squad === sq.id);
+    // 排除隱藏的學生（雙人房 C/D 和儲藏室）
+    const members = state.students.filter(s => s.squad === sq.id && !s.hidden);
     // 空床 = isEmpty 的學生（靜態屬性，來自 Notion 的「空床」checkbox）
     let emptyInSquad = members.filter(s => s.isEmpty).length;
-
-    // 若為一雙，加上獨立修正值
-    if (sq.id === '一雙') {
-      emptyInSquad += bedOffset1s;
-    }
 
     // 應到 = 非空床的住宿生
     const residents = members.filter(s => !s.isEmpty);
@@ -562,7 +579,7 @@ function computeDailyStats(date) {
   }
 
   // --- 全域計算 ---
-  // 2. 空床數 = 各樓層空床總和（含一雙修正）+ 全域空床修正值
+  // 2. 空床數 = 各樓層空床總和 + 全域空床修正值
   const totalEmpty = gEmptyCount + bedOffset;
   // 3. 住宿人數 = 總床數 - 空床數
   const residents = totalBeds - totalEmpty;
@@ -570,7 +587,7 @@ function computeDailyStats(date) {
   const rate = totalBeds > 0 ? Math.round((residents / totalBeds) * 100 * 10) / 10 : 0;
 
   return {
-    totalBeds, totalEmpty, residents, rate, bedOffset, bedOffset1s,
+    totalBeds, totalEmpty, residents, rate, bedOffset,
     present: gPresent, leave: gLeave, absent: gAbsent,
     shouldAttend: gShouldAttend, foreign: gForeignCount,
     squads,
@@ -673,7 +690,7 @@ function renderHistory() {
 }
 
 function showDateDetail(col) {
-  const nonEmpty = state.students.filter(s => !s.isEmpty);
+  const nonEmpty = state.students.filter(s => !s.isEmpty && !s.hidden);
   let p=0, l=0, a=0; const list=[];
   for (const s of nonEmpty) {
     const v = s.attendance[col] || '✓';
@@ -696,25 +713,26 @@ function showDateDetail(col) {
 function renderSettings() {
   testWorkerConnection();
 
-  const sc = state.students.length;
+  const visibleStudents = state.students.filter(s => !s.hidden);
+  const sc = visibleStudents.length;
   const dc = state.dateColumns.length;
   const el = document.getElementById('settings-info');
   if (el) el.textContent = `${sc} 位學生 · ${dc} 個日期欄位`;
 
   // 宿舍參數
-  const totalBeds = parseInt(state.config['total_beds']) || state.students.length;
+  const totalBeds = parseInt(state.config['total_beds']) || visibleStudents.length;
   const bedOffset = parseInt(state.config['bed_offset']) || 0;
-  const bedOffset1s = parseInt(state.config['bed_offset_1s']) || 0;
   document.getElementById('cfg-total-beds').value = totalBeds;
   document.getElementById('cfg-bed-offset').value = bedOffset;
-  document.getElementById('cfg-bed-offset-1s').value = bedOffset1s;
+
+  // 導覽列圖示上傳
+  renderNavIconUpload();
 }
 
 function adjustSetting(key, delta) {
   const map = {
     'total_beds': 'cfg-total-beds',
     'bed_offset': 'cfg-bed-offset',
-    'bed_offset_1s': 'cfg-bed-offset-1s',
   };
   const input = document.getElementById(map[key]);
   if (!input) return;
@@ -727,16 +745,13 @@ function adjustSetting(key, delta) {
 async function saveDormSettings() {
   const totalBeds = parseInt(document.getElementById('cfg-total-beds').value) || 0;
   const bedOffset = parseInt(document.getElementById('cfg-bed-offset').value) || 0;
-  const bedOffset1s = parseInt(document.getElementById('cfg-bed-offset-1s').value) || 0;
   try {
     await window._api.setConfig({
       total_beds: String(totalBeds),
       bed_offset: String(bedOffset),
-      bed_offset_1s: String(bedOffset1s),
     });
     state.config['total_beds'] = String(totalBeds);
     state.config['bed_offset'] = String(bedOffset);
-    state.config['bed_offset_1s'] = String(bedOffset1s);
     showToast('宿舍參數已儲存','success');
   } catch (err) {
     showToast('儲存失敗：'+err.message, 'error');
@@ -843,4 +858,115 @@ window.submitSwapBed = submitSwapBed;
 window.toggleDatePicker = toggleDatePicker;
 window.selectRollCallDate = selectRollCallDate;
 window.toggleSquadConfirm = toggleSquadConfirm;
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 硬性房間規則
+// ═════════════════════════════════════════════════════════════════════════════
+function applyRoomRules() {
+  for (const s of state.students) {
+    // 儲藏室：整間隱藏
+    if (CONFIG.STORAGE_ROOMS.includes(s.room)) {
+      s.hidden = true;
+      continue;
+    }
+    // 雙人房：C、D 床隱藏
+    if (CONFIG.DOUBLE_ROOMS.includes(s.room) && (s.bed === 'C' || s.bed === 'D')) {
+      s.hidden = true;
+      continue;
+    }
+    s.hidden = false;
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 導覽列自訂圖示
+// ═════════════════════════════════════════════════════════════════════════════
+const NAV_PAGES = [
+  { page: 'home',     emoji: '🏠', label: '點名' },
+  { page: 'summary',  emoji: '📊', label: '總表' },
+  { page: 'history',  emoji: '📅', label: '歷史' },
+  { page: 'settings', emoji: '⚙️', label: '設定' },
+];
+
+function applyNavIcons() {
+  const items = document.querySelectorAll('.nav-item');
+  items.forEach(item => {
+    const page = item.dataset.page;
+    const saved = localStorage.getItem('nav_icon_' + page);
+    const iconEl = item.querySelector('.nav-icon');
+    if (!iconEl) return;
+    if (saved) {
+      iconEl.innerHTML = `<img class="nav-icon-img" src="${saved}" alt="${page}">`;
+    } else {
+      const def = NAV_PAGES.find(n => n.page === page);
+      if (def) iconEl.textContent = def.emoji;
+    }
+  });
+}
+
+function renderNavIconUpload() {
+  const grid = document.getElementById('nav-icon-upload-grid');
+  if (!grid) return;
+  grid.innerHTML = NAV_PAGES.map(n => {
+    const saved = localStorage.getItem('nav_icon_' + n.page);
+    const previewContent = saved
+      ? `<img src="${saved}" alt="${n.label}">`
+      : n.emoji;
+    const removeBtn = saved
+      ? `<button class="icon-upload-btn remove" onclick="removeNavIcon('${n.page}')">✕</button>`
+      : '';
+    return `
+      <div class="icon-upload-item">
+        <div class="icon-upload-preview">${previewContent}</div>
+        <div class="icon-upload-info">
+          <div class="label">${n.label}</div>
+          <div class="icon-upload-actions">
+            <button class="icon-upload-btn" onclick="pickNavIcon('${n.page}')">上傳</button>
+            ${removeBtn}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+let _pendingNavIconPage = null;
+
+function pickNavIcon(page) {
+  _pendingNavIconPage = page;
+  const input = document.getElementById('nav-icon-file-input');
+  input.value = '';
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      // 壓縮圖片到 64x64 再存入 localStorage
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 64; canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, 64, 64);
+        const dataUrl = canvas.toDataURL('image/png');
+        localStorage.setItem('nav_icon_' + _pendingNavIconPage, dataUrl);
+        applyNavIcons();
+        renderNavIconUpload();
+        showToast('圖示已更新', 'success');
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
+function removeNavIcon(page) {
+  localStorage.removeItem('nav_icon_' + page);
+  applyNavIcons();
+  renderNavIconUpload();
+  showToast('已恢復預設圖示', 'info');
+}
+
+window.pickNavIcon = pickNavIcon;
+window.removeNavIcon = removeNavIcon;
 

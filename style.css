@@ -63,13 +63,24 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 
 /* ═══════════ 首頁 Hero ═══════════ */
 #page-home{position:relative;}
-#page-home::before{content:'';position:fixed;inset:0;z-index:-2;pointer-events:none;
-  background-image:repeating-linear-gradient(90deg,transparent 0,rgba(255,255,255,.015) 1px,rgba(255,255,255,.03) 2px,rgba(255,255,255,.015) 3px,transparent 4px,transparent 48px);
-  background-size:48px 100%;animation:wallDrift 20s linear infinite;
-  mask-image:radial-gradient(ellipse at 50% 20%,rgba(0,0,0,1) 10%,rgba(0,0,0,0) 80%);
-  -webkit-mask-image:radial-gradient(ellipse at 50% 20%,rgba(0,0,0,1) 10%,rgba(0,0,0,0) 80%)}
-.home-anim-bg{display:none;}
-@keyframes wallDrift{from{background-position:0 0}to{background-position:-48px 0}}
+
+/* ── 斜線光球動畫背景 ── */
+.home-anim-bg{position:fixed;inset:0;z-index:-2;pointer-events:none;overflow:hidden;
+  mask-image:radial-gradient(ellipse at 50% 30%,rgba(0,0,0,.9) 10%,rgba(0,0,0,0) 75%);
+  -webkit-mask-image:radial-gradient(ellipse at 50% 30%,rgba(0,0,0,.9) 10%,rgba(0,0,0,0) 75%)}
+.anim-line{position:absolute;top:-40%;width:2px;height:180%;transform:rotate(35deg);
+  background:linear-gradient(180deg,transparent 0%,rgba(139,92,246,.08) 15%,rgba(165,180,252,.2) 50%,rgba(139,92,246,.08) 85%,transparent 100%);
+  animation:lineSweep var(--dur,12s) var(--delay,0s) linear infinite;
+  filter:blur(0.5px)}
+@keyframes lineSweep{
+  0%{left:-5%;opacity:0;transform:rotate(35deg) scaleY(.15)}
+  8%{opacity:1}
+  25%{transform:rotate(35deg) scaleY(.5)}
+  50%{transform:rotate(35deg) scaleY(1);opacity:.9}
+  75%{transform:rotate(35deg) scaleY(.5)}
+  92%{opacity:1}
+  100%{left:105%;opacity:0;transform:rotate(35deg) scaleY(.15)}
+}
 .home-hero{text-align:center;padding:32px 0 24px}
 .home-icon{width:96px;height:96px;border-radius:24px;margin-bottom:12px;filter:drop-shadow(0 4px 20px rgba(139,92,246,.3))}
 .home-title{font-size:28px;font-weight:900;letter-spacing:2px;background:linear-gradient(135deg,#e8e8f0,#a5b4fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
@@ -327,3 +338,19 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:4px}
 ::selection{background:rgba(139,92,246,.3)}
+
+/* ── 導覽列自訂圖示 ── */
+.nav-icon-img{width:24px;height:24px;object-fit:contain;border-radius:4px;transition:all .3s cubic-bezier(.34,1.56,.64,1)}
+.nav-item.active .nav-icon-img{transform:translateY(-2px);filter:drop-shadow(0 4px 12px rgba(139,92,246,.6))}
+
+/* 設定頁：圖示上傳 */
+.icon-upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+.icon-upload-item{display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px}
+.icon-upload-preview{width:36px;height:36px;border-radius:8px;background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;overflow:hidden;position:relative}
+.icon-upload-preview img{width:100%;height:100%;object-fit:contain}
+.icon-upload-info{flex:1;min-width:0}
+.icon-upload-info .label{font-size:12px;font-weight:600;margin-bottom:4px}
+.icon-upload-actions{display:flex;gap:4px}
+.icon-upload-btn{font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:rgba(255,255,255,.06);color:var(--text);cursor:pointer;white-space:nowrap}
+.icon-upload-btn:active{transform:scale(.95)}
+.icon-upload-btn.remove{color:var(--red);border-color:rgba(239,68,68,.3)}
