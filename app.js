@@ -1157,19 +1157,17 @@ function showLoading(show) {
   if(!el) return; 
   
   if (show) {
-    el.classList.remove('roll-out-bottom');
+    el.classList.remove('exit-drop');
     el.style.display = 'flex';
   } else {
-    // 隨機產生掉落的旋轉角度 (-90 到 90 度，讓每次掉落的方向與傾斜感都不同，更為隨機)
-    const rot = (Math.random() * 180 - 90).toFixed(1) + 'deg';
+    // 給予終端機視窗掉落的隨機角度 (-35 到 35 度，避免翻滾太多，維持自然感)
+    const rot = (Math.random() * 70 - 35).toFixed(1) + 'deg';
     el.style.setProperty('--rot', rot);
-    el.classList.add('roll-out-bottom');
+    el.classList.add('exit-drop');
     
-    // 等待動畫結束後才真正隱藏元素
     setTimeout(() => {
-      // 確保沒有在動畫期間又被要求載入
       if (!state.loading) el.style.display = 'none';
-    }, 800);
+    }, 700);
   }
 }
 
