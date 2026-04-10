@@ -64,14 +64,30 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 }
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* 轉場：掉落動畫 */
-.roll-out-bottom {
-  /* 使用貝茲曲線可以讓掉落加速，更有地心引力的真實感 */
-  animation: roll-out-bottom 0.8s cubic-bezier(0.55, 0.085, 0.68, 0.53) both;
+/* 轉場：終端機自然掉落與背景淡出 (不會看到背景黑框裁切邊緣) */
+.loading-overlay.exit-drop {
+  animation: fade-out-overlay 0.7s ease-in both;
 }
-@keyframes roll-out-bottom {
+.loading-overlay.exit-drop #hacking-bg {
+  animation: fade-out-bg 0.4s ease-out both;
+}
+.loading-overlay.exit-drop .terminal-loader {
+  animation: terminal-drop 0.7s cubic-bezier(0.55, 0.085, 0.68, 0.53) both;
+}
+
+@keyframes fade-out-overlay {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes fade-out-bg {
+  0% { opacity: 0.6; }
+  100% { opacity: 0; }
+}
+
+@keyframes terminal-drop {
   0% { transform: translateY(0) rotate(0deg); opacity: 1; }
-  100% { transform: translateY(120vh) rotate(var(--rot, 45deg)); opacity: 0; }
+  100% { transform: translateY(120vh) rotate(var(--rot, 20deg)); opacity: 0; }
 }
 
 /* ─ Toast ─ */
