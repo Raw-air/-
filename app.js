@@ -37,8 +37,8 @@ async function loadData() {
     state.config = config;
     
     const today = getTodayColumnName();
-    const confMatch = state.config.find(c => c.key === 'confirm_' + today);
-    if (confMatch) state.confirmedSquads = confMatch.value.split(',').filter(Boolean);
+    const confVal = state.config['confirm_' + today];
+    if (confVal) state.confirmedSquads = confVal.split(',').filter(Boolean);
     else state.confirmedSquads = [];
 
     showLoading(false);
