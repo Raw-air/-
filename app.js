@@ -105,43 +105,41 @@ function renderHome() {
   // ── 斜線球體動畫 ──
   const animBg = document.querySelector('.home-anim-bg');
   if (animBg && !animBg.hasChildNodes()) {
-    // 產生約 35 條線組成一個完整的球體
+    const sphere = document.createElement('div');
+    sphere.className = 'ball-sphere';
+    
+    // 產生 35 條水平線組成球體，再藉由 CSS 的 135deg 旋轉變成斜向
     const LINE_COUNT = 35;
-    const SPHERE_H = 360; // 球體高度範圍
     
     for (let i = 0; i < LINE_COUNT; i++) {
-      const line = document.createElement('div');
-      line.className = 'anim-line';
-      
-      // t 從 0 到 1 (垂直分佈)
-      const t = i / (LINE_COUNT - 1);
-      const normalized = 2 * t - 1; // -1 to 1
-      
-      // 根據圓的方程式算出 x 寬度比例
-      // √(1 - y^2) 讓中間最寬，兩側最窄
-      const circleX = Math.sqrt(Math.max(0, 1 - normalized * normalized));
-      
-      // 最大寬度 (中間最粗，最長可達 300px)
-      const maxW = circleX * 300;
-      if (maxW < 10) continue; // 太短的跳過
-      
-      // 垂直位置分佈 (30% ~ 70% 之間)
-      const yPos = 30 + (t * 40); 
-      
-      // 這裡每條線共用一樣的 duration，但賦予他們微小的 delay 差異
-      // 使他看起來是一起移動的「一顆球」
-      const dur = 14; 
-      const delay = (i * 0.05); // 稍微錯開時間形成立體感
-      
-      line.style.setProperty('--max-w', maxW + 'px');
-      line.style.setProperty('--y', yPos + '%');
-      line.style.setProperty('--dur', dur + 's');
-      line.style.setProperty('--delay', delay + 's');
-      // 越靠近邊緣越透明
-      line.style.opacity = (0.2 + circleX * 0.8).toFixed(2);
-      
-      animBg.appendChild(line);
+        const line = document.createElement('div');
+        line.className = 'anim-line';
+        
+        const t = i / (LINE_COUNT - 1);
+        const normalized = 2 * t - 1; // -1 to 1
+        
+        // 根據圓形公式 √(1 - y^2) 讓中間最寬，兩側漸窄
+        const circleX = Math.sqrt(Math.max(0, 1 - normalized * normalized));
+        const maxW = circleX * 360; // 容器寬度為 360px
+        
+        if (maxW < 12) continue; // 忽略太短的雜訊
+        
+        // y 軸位置 0% ~ 100%
+        const yPos = t * 100;
+        
+        // 使所有線條動畫有極微小的錯開，創造立體堆疊錯覺
+        const dur = 8; 
+        const delay = (i * 0.03); 
+        
+        line.style.setProperty('--w', maxW + 'px');
+        line.style.setProperty('--y', yPos + '%');
+        line.style.setProperty('--dur', dur + 's');
+        line.style.setProperty('--delay', delay + 's');
+        line.style.setProperty('--op', (0.1 + circleX * 0.9).toFixed(2));
+        
+        sphere.appendChild(line);
     }
+    animBg.appendChild(sphere);
   }
 
   // 中隊卡片 (3列)
