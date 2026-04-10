@@ -125,8 +125,8 @@ function renderHome() {
     const sphere = document.createElement('div');
     sphere.className = 'ball-sphere';
     
-    // 產生 35 條水平線組成球體，再藉由 CSS 的 135deg 旋轉變成斜向
-    const LINE_COUNT = 35;
+    // 產生 45 條水平線組成更綿密的高級光球
+    const LINE_COUNT = 45;
     
     for (let i = 0; i < LINE_COUNT; i++) {
         const line = document.createElement('div');
@@ -144,15 +144,19 @@ function renderHome() {
         // y 軸位置 0% ~ 100%
         const yPos = t * 100;
         
-        // 使所有線條動畫有極微小的錯開，創造立體堆疊錯覺
-        const dur = 8; 
-        const delay = (i * 0.03); 
+        // 更具藝術感的錯落 delay 與呼吸頻率
+        const dur = (Math.random() * 2 + 7.5).toFixed(2); 
+        const delay = (i * 0.05).toFixed(2); 
+        
+        // 高級色域動態色相 (220~270度左右，藍紫漸變)
+        const hue = 220 + (normalized * 30) + (Math.random() * 20);
         
         line.style.setProperty('--w', maxW + 'px');
         line.style.setProperty('--y', yPos + '%');
         line.style.setProperty('--dur', dur + 's');
         line.style.setProperty('--delay', delay + 's');
-        line.style.setProperty('--op', (0.1 + circleX * 0.9).toFixed(2));
+        line.style.setProperty('--op', (0.15 + circleX * 0.85).toFixed(2));
+        line.style.setProperty('--hue', Math.floor(hue));
         
         sphere.appendChild(line);
     }

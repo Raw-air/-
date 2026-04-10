@@ -76,25 +76,43 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
   filter: saturate(1.2);
 }
 
-/* ── 斜線球體動畫背景 ── */
+/* ── 頂級藝術光球背景 (Aurora Sphere) ── */
 .home-anim-bg {
   position: fixed; inset: 0; z-index: -2;
   pointer-events: none; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
 }
+.home-anim-bg::before {
+  content: '';
+  position: absolute;
+  width: 700px; height: 700px;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, rgba(99, 102, 241, 0.05) 40%, transparent 70%);
+  filter: blur(40px);
+  animation: bgGlowBreathe 12s ease-in-out infinite alternate;
+}
+@keyframes bgGlowBreathe {
+  0% { transform: scale(0.85); opacity: 0.6; }
+  100% { transform: scale(1.15); opacity: 1; }
+}
+
 .ball-sphere {
   position: relative;
   width: 360px; height: 360px;
-  transform: rotate(135deg); /* 使水平線變成由 左上(-X) 到 右下(+X)... 等等，我們用 135deg 後，-X(Left) 變到右上，+X(Right) 變到左下 */
-  /* 左上到右下是正45度，所以135度會讓 左方變右上，右方變左下。完美符合：右上到左下的移動軌跡！ */
+  transform: rotate(135deg); 
+  animation: sphereBreathe 18s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
 }
+@keyframes sphereBreathe {
+  0% { transform: rotate(130deg) scale(0.92); }
+  100% { transform: rotate(145deg) scale(1.08); }
+}
+
 .anim-line {
   position: absolute;
   top: var(--y); left: 50%;
   height: 2px;
   width: var(--w);
   transform: translateX(-50%);
-  overflow: hidden; /* 隱藏光束突出邊界的部分 */
+  overflow: hidden; 
   opacity: var(--op);
 }
 .anim-line::after {
@@ -103,43 +121,59 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
   inset: 0;
   background: linear-gradient(90deg, 
     transparent 0%, 
-    rgba(255,255,255,.3) 15%, 
-    rgba(255,255,255,1) 50%, 
-    rgba(255,255,255,.3) 85%, 
+    hsla(var(--hue, 240), 100%, 75%, 0.15) 15%, 
+    hsla(var(--hue, 240), 100%, 85%, 1) 50%, 
+    hsla(var(--hue, 240), 100%, 75%, 0.15) 85%, 
     transparent 100%);
   animation: lineSweep var(--dur, 8s) var(--delay, 0s) ease-in-out infinite;
-  box-shadow: 0 0 10px 2px rgba(165,180,252,0.4);
+  box-shadow: 0 0 16px 2px hsla(var(--hue, 240), 100%, 65%, 0.4);
   border-radius: 2px;
 }
 @keyframes lineSweep {
-  0% { transform: translateX(-105%); }      /* 光未進入，完全看不見 */
-  25% { transform: translateX(0%); }        /* 光完全填滿，形成飽滿的線條 */
-  60% { transform: translateX(0%); }        /* 停滯一段時間，讓整顆球形狀維持幾秒 */
-  85% { transform: translateX(105%); }      /* 光滑出另一邊，漸漸縮短到消失 */
+  0% { transform: translateX(-105%); } 
+  25% { transform: translateX(0%); }   
+  55% { transform: translateX(0%); }   
+  85% { transform: translateX(105%); } 
   100% { transform: translateX(105%); }
 }
-.home-hero{text-align:center;padding:32px 0 24px}
-.home-icon{width:96px;height:96px;border-radius:24px;margin-bottom:12px;filter:drop-shadow(0 4px 20px rgba(139,92,246,.3))}
-.home-title{font-size:28px;font-weight:900;letter-spacing:2px;background:linear-gradient(135deg,#e8e8f0,#a5b4fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.home-sub{font-size:14px;color:var(--dim);margin-top:2px;letter-spacing:4px}
-.home-date{display:inline-block;margin-top:16px;padding:8px 20px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:20px;font-size:14px;color:var(--dim)}
-.section-label{font-size:13px;color:var(--dim);margin:8px 0 12px;letter-spacing:1px}
 
-/* ─ Squad Grid 3列 (更通透磨砂玻璃) ─ */
-.squad-grid-3col{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.sq-card{background:rgba(255,255,255,.015);backdrop-filter:blur(10px) saturate(1.1);
-  -webkit-backdrop-filter:blur(10px) saturate(1.1);
-  border:1px solid rgba(255,255,255,.05);border-radius:var(--r);padding:16px 8px;
-  text-align:center;cursor:pointer;transition:all .25s cubic-bezier(.34,1.56,.64,1);
+/* ── 頂級質感的首頁 Hero 區塊 ── */
+.home-hero{text-align:center;padding:32px 0 24px; position: relative;}
+.home-icon{width:96px;height:96px;border-radius:24px;margin-bottom:12px;filter:drop-shadow(0 8px 32px rgba(139,92,246,.35)); transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);}
+.home-icon:active{transform: scale(0.9);}
+.home-title{font-size:32px;font-weight:900;letter-spacing:2px;background:linear-gradient(135deg,#ffffff,#a5b4fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-shadow:0 0 40px rgba(165,180,252,.4)}
+.home-sub{font-size:14px;color:rgba(255,255,255,.6);margin-top:2px;letter-spacing:6px;text-transform:uppercase}
+.home-date{display:inline-block;margin-top:16px;padding:8px 24px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:30px;font-size:14px;color:rgba(255,255,255,.8);box-shadow:inset 0 1px 0 rgba(255,255,255,.05); backdrop-filter: blur(10px);}
+.section-label{font-size:13px;color:rgba(255,255,255,.4);margin:12px 0 16px;letter-spacing:2px;text-transform:uppercase}
+
+/* ─ Squad Grid 3列 (頂級藝術感磨砂玻璃) ─ */
+.squad-grid-3col{display:grid;grid-template-columns:repeat(3,1fr);gap:12px; position:relative; z-index:1;}
+.sq-card{
+  background:rgba(255,255,255,.015);
+  backdrop-filter:blur(16px) saturate(1.2);
+  -webkit-backdrop-filter:blur(16px) saturate(1.2);
+  border:1px solid rgba(255,255,255,.08);
+  border-bottom-color:rgba(255,255,255,.02);
+  border-right-color:rgba(255,255,255,.02);
+  border-radius:var(--r);
+  padding:18px 8px;
+  text-align:center;cursor:pointer;
+  transition:all .35s cubic-bezier(.175,.885,.32,1.275);
   user-select:none;position:relative;overflow:hidden;
-  box-shadow:0 2px 12px rgba(0,0,0,.08),inset 0 1px 0 rgba(255,255,255,.03)}
-.sq-card::before{content:'';position:absolute;inset:0;
-  background:linear-gradient(135deg,var(--sq-c,var(--indigo)),transparent);opacity:.04;
-  border-radius:var(--r);pointer-events:none}
-.sq-card:hover{background:rgba(255,255,255,.03);transform:translateY(-3px);
-  box-shadow:0 8px 24px rgba(0,0,0,.15),inset 0 1px 0 rgba(255,255,255,.08);
-  border-color:rgba(255,255,255,.1)}
-.sq-card:active{transform:scale(.96)}
+  box-shadow:0 8px 32px rgba(0,0,0,.15),inset 0 1px 0 rgba(255,255,255,.08);
+}
+.sq-card::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(circle at 50% 0%, var(--sq-c,var(--indigo)), transparent 75%);
+  opacity:.15;border-radius:var(--r);pointer-events:none;
+}
+.sq-card:hover{
+  background:rgba(255,255,255,.04);
+  transform:translateY(-4px) scale(1.02);
+  border-color:rgba(255,255,255,.15);
+  box-shadow:0 12px 40px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.2);
+}
+.sq-card:active{transform:translateY(-1px) scale(0.98); transition:all .1s;}
 .sq-badge{position:relative;z-index:1;width:40px;height:40px;border-radius:12px;
   background:var(--sq-c,var(--indigo));margin:0 auto 8px;
   display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;color:#fff;
