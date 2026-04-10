@@ -41,13 +41,13 @@ function playClickSound(type = 'default') {
     gainNode.connect(audioCtx.destination);
 
     if (type === 'pin') {
-      // 類似密碼鎖的短促高頻聲
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(1400, time);
-      osc.frequency.exponentialRampToValueAtTime(1000, time + 0.03);
+      // 短促低沉的「卡卡」聲 (類似機械鍵盤打字)
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(120, time); // 低頻產生悶響敲擊感
       gainNode.gain.setValueAtTime(0.08, time);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.03);
-      osc.start(time); osc.stop(time + 0.04);
+      // 極短時間內急速衰減，製造清脆斷音
+      gainNode.gain.setTargetAtTime(0.001, time, 0.003); 
+      osc.start(time); osc.stop(time + 0.02);
     } else if (type === 'back') {
       // 返回/關閉退出的下沉音
       osc.type = 'sine';
