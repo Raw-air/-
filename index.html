@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#0a0a14">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=26">
+  <link rel="stylesheet" href="style.css?v=29">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -30,12 +30,13 @@
     返回
   </button>
 
+  <!-- 全域背景層 -->
+  <div id="custom-video-bg"></div>
+  <div class="home-anim-bg"></div>
+
   <!-- ═══════════ 首頁 ═══════════ -->
   <div id="page-home" class="page active">
-    <!-- 影片背景層 -->
-    <div id="custom-video-bg"></div>
-    <!-- 背景動畫光條牆 -->
-    <div class="home-anim-bg"></div>
+    <!-- 背景已移至外層全域 -->
     <div class="home-hero">
       <img src="icon-192.png" class="home-icon" alt="icon">
       <h1 class="home-title">碧苑宿舍</h1>
@@ -326,8 +327,8 @@
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=26"></script>
-  <script src="api.js?v=26"></script>
-  <script src="app.js?v=26"></script>
+  <script src="config.js?v=29"></script>
+  <script src="api.js?v=29"></script>
+  <script src="app.js?v=29"></script>
 </body>
 </html>
