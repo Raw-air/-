@@ -41,9 +41,12 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 .back-btn:active{transform:scale(.95)}
 
 /* ─ Pages ─ */
-.page{display:none;padding:calc(16px + var(--safe-t)) 16px 16px;max-width:440px;margin:0 auto}
+.page{display:none;padding:calc(16px + var(--safe-t)) 16px 16px;max-width:440px;margin:0 auto;position:relative}
 .page.active{display:block;animation:fadeUp .3s ease}
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+/* 首頁透明，讓極光球背景穿透；其他頁面用不透明背景蓋住動畫 */
+#page-home{background:transparent}
+#page-rollcall,#page-summary,#page-history,#page-settings{background:var(--bg)}
 .page-title{font-size:20px;font-weight:700;margin-bottom:16px}
 
 /* ─ Bottom Nav ─ */
