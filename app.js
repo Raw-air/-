@@ -300,13 +300,10 @@ function updateRollCallStats() {
   const confirmBtn = document.getElementById('rc-confirm-btn');
   if (state.currentDate === getTodayColumnName()) {
     confirmBtn.style.display = 'flex';
-    confirmBtn.style.flexDirection = 'column';
-    confirmBtn.style.alignItems = 'center';
-    confirmBtn.style.justifyContent = 'center';
     const isConfirmed = state.confirmedSquads.includes(state.currentSquad);
-    confirmBtn.className = 'rc-stat confirm' + (isConfirmed ? ' done' : '');
+    confirmBtn.className = 'rc-confirm-action' + (isConfirmed ? ' done' : '');
     document.getElementById('rc-confirm-icon').textContent = isConfirmed ? '🟢' : '⭕';
-    document.getElementById('rc-confirm-text').textContent = isConfirmed ? '已確認' : '未確認';
+    document.getElementById('rc-confirm-text').textContent = isConfirmed ? '確認本中隊已完成點名' : '確認本中隊完成點名';
   } else {
     confirmBtn.style.display = 'none';
   }
@@ -602,9 +599,15 @@ function renderSummary() {
 
   // 各中隊
   const grid = document.getElementById('summary-squad-grid');
-  grid.innerHTML = st.squads.map(sq => `
+  grid.innerHTML = st.squads.map(sq => {
+    const isConfirmed = state.confirmedSquads.includes(sq.id) && date === getTodayColumnName();
+    const confHtml = isConfirmed ? `<span class="sqd-conf-badge">✅ 已確認</span>` : '';
+    return `
     <div class="sqd-card" style="--sq-c:${sq.color}">
-      <div class="sqd-title">${sq.id}</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+        <div class="sqd-title" style="margin-bottom:0">${sq.id}</div>
+        ${confHtml}
+      </div>
       <div class="sqd-row">
         <span>應到 <b>${sq.shouldAttend}</b></span>
         <span style="color:var(--green)">到 <b>${sq.present}</b></span>
@@ -612,21 +615,8 @@ function renderSummary() {
         <span style="color:var(--red)">缺 <b>${sq.absent}</b></span>
       </div>
       <div class="sqd-foreign">🌏 外籍 ${sq.foreign} ・ 🛏️ 空床 ${sq.empty}</div>
-    </div>`).join('');
-
-  const confList = document.getElementById('confirmed-squads-list');
-  if (confList) {
-    if (date === getTodayColumnName()) {
-      confList.parentNode.style.display = 'block';
-      if (!state.confirmedSquads || state.confirmedSquads.length === 0) {
-        confList.innerHTML = '<span class="confirmed-tag empty">目前尚無中隊完成確認</span>';
-      } else {
-        confList.innerHTML = state.confirmedSquads.map(sq => `<span class="confirmed-tag">✓ ${sq}</span>`).join('');
-      }
-    } else {
-      confList.parentNode.style.display = 'none';
-    }
-  }
+    </div>`;
+  }).join('');
 
   document.getElementById('summary-prev-date').onclick = () => changeSummaryDate(-1);
   document.getElementById('summary-next-date').onclick = () => changeSummaryDate(1);
