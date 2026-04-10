@@ -1346,7 +1346,7 @@ function openDevAuth() {
     setTimeout(() => overlay.remove(), 300);
   };
   document.getElementById('dev-pin-confirm').onclick = tryUnlock;
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('dev-pin-confirm').click(); });
 }
 
 window.openDevAuth = openDevAuth;
