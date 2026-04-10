@@ -105,30 +105,32 @@ function renderHome() {
   // ── 斜線球體動畫 ──
   const animBg = document.querySelector('.home-anim-bg');
   if (animBg && !animBg.hasChildNodes()) {
-    const BALL_COUNT = 3; // 3 個球體錄續推出
+    const BALL_COUNT = 3;
     for (let b = 0; b < BALL_COUNT; b++) {
       const group = document.createElement('div');
       group.className = 'ball-group';
-      const dur = 10 + Math.random() * 8; // 10~18s
+      const dur = 10 + Math.random() * 8;
       const delay = b * (dur / BALL_COUNT);
       group.style.setProperty('--dur', dur + 's');
       group.style.setProperty('--delay', '-' + delay + 's');
 
-      // 球內 15 條線，高度按圓形分佈（中間高、兩側短）
-      const LINE_COUNT = 15;
+      // 球內 20 條線，高度嚴格按圓形方程分佈
+      const LINE_COUNT = 20;
       for (let i = 0; i < LINE_COUNT; i++) {
         const line = document.createElement('div');
         line.className = 'anim-line';
+        // 水平位置：從 5% ~ 95% 均佈
         const t = i / (LINE_COUNT - 1); // 0~1
-        const x = t * 100; // 水平位置 0%~100%
-        // 圓形分佈：scaleY = sqrt(1 - (2t-1)^2)
+        const x = 5 + t * 90; // 5%~95%
+        // 圓形方程: h = 2 * R * sqrt(1 - (2t-1)^2)
+        // R = 容器半徑 = 130px
         const normalized = 2 * t - 1; // -1 ~ 1
-        const sy = Math.sqrt(Math.max(0, 1 - normalized * normalized));
-        const h = 40 + sy * 260; // 最短 40px，最高 300px
+        const circleY = Math.sqrt(Math.max(0, 1 - normalized * normalized));
+        const h = circleY * 240; // 最高 240px（直徑），邊緣趨近 0
+        if (h < 8) continue; // 太短的跳過
         line.style.setProperty('--lx', x + '%');
         line.style.setProperty('--lh', h + 'px');
-        line.style.setProperty('--sy', (0.3 + sy * 0.7).toFixed(2));
-        line.style.opacity = (0.3 + sy * 0.7).toFixed(2);
+        line.style.opacity = (0.2 + circleY * 0.8).toFixed(2);
         group.appendChild(line);
       }
       animBg.appendChild(group);
