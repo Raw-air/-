@@ -42,9 +42,11 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 
 /* ─ Pages ─ */
 .page{display:none;padding:calc(16px + var(--safe-t)) 16px 16px;max-width:440px;margin:0 auto;position:relative}
-.page.active{display:block;animation:fadeUp .3s ease}
-@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
-/* 首頁透明，讓極光球背景穿透；其他頁面用不透明背景蓋住動畫 */
+.page.active{display:block;animation:fadeUp .28s cubic-bezier(0.16,1,0.3,1)}
+/* fadeUp 用純 transform 不動 opacity，避免父層 opacity<1 導致 backdrop-filter 閃透明 bug */
+@keyframes fadeUp{from{transform:translateY(16px)}to{transform:none}}
+@keyframes pageExit{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-10px)}}
+/* 首頁透明，讓極光球背景窿透；其他頁面用不透明背景蓋住動畫 */
 #page-home{background:transparent}
 #page-rollcall,#page-summary,#page-history,#page-settings{background:var(--bg)}
 .page-title{font-size:20px;font-weight:700;margin-bottom:16px}
@@ -312,6 +314,21 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 .sqd-title{font-weight:700;font-size:15px;margin-bottom:6px}
 .sqd-row{display:flex;gap:12px;font-size:13px;flex-wrap:wrap}.sqd-row b{font-weight:700}
 .sqd-foreign{font-size:11px;color:var(--dim);margin-top:4px}
+
+/* 已回報 圓圈封印 badge */
+.sqd-conf-badge{display:flex;align-items:center;gap:6px;color:var(--green);flex-shrink:0}
+.conf-ring{
+  width:48px;height:48px;
+  border:2.5px solid var(--green);
+  border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;font-weight:900;color:var(--green);
+  box-shadow:0 0 14px rgba(34,197,94,0.25),inset 0 0 8px rgba(34,197,94,0.05);
+  position:relative;
+  animation:ringAppear .4s cubic-bezier(.175,.885,.32,1.275) both;
+}
+@keyframes ringAppear{from{opacity:0;transform:scale(.4) rotate(-30deg)}to{opacity:1;transform:scale(1) rotate(0deg)}}
+.sqd-conf-badge span{font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--green)}
 
 /* 空床回報 Action Card */
 .empty-bed-action{display:flex;align-items:center;gap:14px;width:100%;margin-bottom:12px;padding:16px 18px;

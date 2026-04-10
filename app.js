@@ -81,22 +81,35 @@ function setupNav() {
 }
 
 function navigateTo(page) {
+  if (page === currentPage) { renderCurrentPage(); return; }
+
+  const fromPage = currentPage;
   currentPage = page;
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  const el = document.getElementById(`page-${page}`);
-  if (el) el.classList.add('active');
+
+  // 立刻更新導覽列 & 按鈕狀態
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
   if (navItem) navItem.classList.add('active');
-
   const backBtn = document.getElementById('back-btn');
   backBtn.style.display = (page === 'rollcall') ? 'flex' : 'none';
-
-  // 隱藏 FAB
   const fab = document.querySelector('.fab-empty-bed');
   if (fab) fab.style.display = (page === 'rollcall') ? 'flex' : 'none';
 
-  renderCurrentPage();
+  const fromEl = document.getElementById(`page-${fromPage}`);
+  const toEl   = document.getElementById(`page-${page}`);
+
+  function showNewPage() {
+    document.querySelectorAll('.page').forEach(p => { p.classList.remove('active'); p.style.animation = ''; });
+    if (toEl) toEl.classList.add('active');
+    renderCurrentPage();
+  }
+
+  if (fromEl && fromEl.classList.contains('active')) {
+    fromEl.style.animation = 'pageExit 0.18s ease forwards';
+    setTimeout(showNewPage, 170);
+  } else {
+    showNewPage();
+  }
 }
 
 function renderCurrentPage() {
@@ -662,7 +675,7 @@ function renderSummary() {
   const grid = document.getElementById('summary-squad-grid');
   grid.innerHTML = st.squads.map(sq => {
     const isConfirmed = state.confirmedSquads.includes(sq.id) && date === getTodayColumnName();
-    const confHtml = isConfirmed ? `<span class="sqd-conf-badge">✅ 已確認</span>` : '';
+    const confHtml = isConfirmed ? `<div class="sqd-conf-badge"><div class="conf-ring">✓</div><span>已回報</span></div>` : '';
     return `
     <div class="sqd-card" style="--sq-c:${sq.color}">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
