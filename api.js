@@ -51,6 +51,12 @@ class ApiClient {
   swapBeds(pageIdA, pageIdB) {
     return this._fetch('/api/swap-beds', 'POST', { pageIdA, pageIdB });
   }
+
+  // 取得所有公告日誌
+  getChangelog() { return this._fetch('/api/changelog'); }
+
+  // 發布新公告日誌
+  postChangelog(content) { return this._fetch('/api/changelog', 'POST', { content }); }
 }
 
 // 全域單例
