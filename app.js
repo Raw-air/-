@@ -314,42 +314,42 @@ async function submitSwapBed() {
   const studentB = state.students.find(s => s.room === toRoom && s.bed === toBed);
 
   if (!studentA) { showToast('找不到來源學生', 'error'); return; }
+  if (!studentB) { showToast('找不到目標床位資料', 'error'); return; }
+
+  const btn = document.querySelector('#swap-bed-modal .modal-btn.confirm');
+  if (btn) { btn.disabled = true; btn.textContent = '交換中...'; }
 
   try {
-    const updates = [];
+    // 呼叫新端點：整行資料互換（姓名/班別/學號/空床/所有出席紀錄全部交換）
+    // 物理位置（寢床號/床號/中隊）保持不變
+    await window._api.swapBeds(studentA.id, studentB.id);
 
-    // 學生 A 搬到目標位置
-    updates.push({
-      pageId: studentA.id,
-      swapBed: { room: toRoom, bed: toBed },
-    });
+    // 本地狀態同步：交換兩個學生物件除位置外的所有資料
+    const posA = { id: studentA.id, room: studentA.room, bed: studentA.bed, squad: studentA.squad };
+    const posB = { id: studentB.id, room: studentB.room, bed: studentB.bed, squad: studentB.squad };
 
-    // 如果目標有人，對調回來源位置
-    if (studentB && !studentB.isEmpty) {
-      updates.push({
-        pageId: studentB.id,
-        swapBed: { room: fromRoom, bed: fromBed },
-      });
+    // 交換所有非位置屬性
+    const keysToSwap = ['name', 'class', 'studentId', 'isForeign', 'isEmpty', 'attendance'];
+    for (const key of keysToSwap) {
+      const tmp = studentA[key];
+      studentA[key] = studentB[key];
+      studentB[key] = tmp;
     }
 
-    await window._api.updateAttendance(updates);
+    // 位置保持不變（用回原本的值）
+    Object.assign(studentA, posA);
+    Object.assign(studentB, posB);
 
-    // 本地更新
-    studentA.room = toRoom;
-    studentA.bed = toBed;
-    if (studentB && !studentB.isEmpty) {
-      studentB.room = fromRoom;
-      studentB.bed = fromBed;
-    }
-
-    const msg = studentB && !studentB.isEmpty
-      ? `${studentA.name} ↔ ${studentB.name} 床位已對調`
-      : `${studentA.name} 已搬到 ${toRoom} ${toBed} 床`;
+    const nameA = studentA.name || '（空床）';
+    const nameB = studentB.name || '（空床）';
+    const msg = `✅ 已完整交換：${fromRoom}${fromBed} ${nameA} ↔ ${toRoom}${toBed} ${nameB}`;
     showToast(msg, 'success');
     closeModal('swap-bed-modal');
     renderSummary();
   } catch (err) {
     showToast('換床位失敗：' + err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '確認換床位'; }
   }
 }
 

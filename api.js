@@ -44,6 +44,13 @@ class ApiClient {
 
   // 更新系統設定
   setConfig(data) { return this._fetch('/api/config', 'POST', data); }
+
+  // 換床位（整行資料交換）
+  // pageIdA: 來源學生的 Notion pageId
+  // pageIdB: 目標床位的 Notion pageId（可以是空床）
+  swapBeds(pageIdA, pageIdB) {
+    return this._fetch('/api/swap-beds', 'POST', { pageIdA, pageIdB });
+  }
 }
 
 // 全域單例
