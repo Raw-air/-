@@ -17,13 +17,27 @@ const state = {
 };
 
 // ─── 初始化 ─────────────────────────────────────────────────────────────────
+window.addEventListener('error', (e) => {
+  showLoading(false);
+  showToast('系統錯誤: ' + e.message, 'error');
+});
+window.addEventListener('unhandledrejection', (e) => {
+  showLoading(false);
+  showToast('未預期的錯誤: ' + (e.reason ? e.reason.message : 'Unknown'), 'error');
+});
+
 document.addEventListener('DOMContentLoaded', async () => {
-  state.currentDate = getTodayColumnName();
-  setupNav();
-  setupPinDialog();
-  applyNavIcons();
-  navigateTo('home');
-  await loadData();
+  try {
+    state.currentDate = getTodayColumnName();
+    setupNav();
+    setupPinDialog();
+    applyNavIcons();
+    navigateTo('home');
+    await loadData();
+  } catch (err) {
+    showLoading(false);
+    showToast('初始化嚴重錯誤：' + err.message, 'error');
+  }
 });
 
 async function loadData() {
@@ -33,9 +47,9 @@ async function loadData() {
       window._api.getRoster(),
       window._api.getConfig(),
     ]);
-    state.students = roster.students;
-    state.dateColumns = roster.dateColumns;
-    state.config = config;
+    state.students = roster.students || [];
+    state.dateColumns = roster.dateColumns || [];
+    state.config = config || {};
 
     // 套用硬性房間規則
     applyRoomRules();
