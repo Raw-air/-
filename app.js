@@ -34,6 +34,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     applyNavIcons();
     navigateTo('home');
     await loadData();
+
+    // 背景輪詢同步點名狀態
+    setInterval(async () => {
+      try {
+        const newConfig = await window._api.getConfig();
+        state.config = newConfig;
+        const today = getTodayColumnName();
+        const confVal = state.config['confirm_' + today];
+        const newConfirmed = confVal ? confVal.split(',').filter(Boolean) : [];
+        if (newConfirmed.join(',') !== state.confirmedSquads.join(',')) {
+          state.confirmedSquads = newConfirmed;
+          if (currentPage === 'summary') renderSummary();
+        }
+      } catch(e){}
+    }, 15000);
+
   } catch (err) {
     showLoading(false);
     showToast('初始化嚴重錯誤：' + err.message, 'error');
@@ -75,12 +91,67 @@ async function loadData() {
 function openChangelogModal() {
   const mdContent = state.config['changelog_md'] || '目前沒有最新公告。';
   const htmlContent = typeof marked !== 'undefined' ? marked.parse(mdContent) : `<pre style="white-space:pre-wrap;font-family:inherit;">${mdContent}</pre>`;
-  document.getElementById('changelog-content').innerHTML = htmlContent;
-  document.getElementById('changelog-modal').classList.add('active');
+  
+  const contentEl = document.getElementById('changelog-content');
+  contentEl.innerHTML = htmlContent;
+
+  if (typeof marked !== 'undefined') {
+    // 建立折疊邏輯
+    const headings = contentEl.querySelectorAll('h3');
+    headings.forEach((h3, i) => {
+      const wrapper = document.createElement('div');
+      wrapper.style.display = i === 0 ? 'block' : 'none'; // 預設展開最新的
+      wrapper.style.paddingLeft = '12px';
+      wrapper.style.borderLeft = '2px solid rgba(255,255,255,0.1)';
+      wrapper.style.marginLeft = '4px';
+      wrapper.style.marginTop = '8px';
+      wrapper.style.marginBottom = '20px';
+      
+      let nextNode = h3.nextElementSibling;
+      while (nextNode && nextNode.tagName !== 'H3' && nextNode.tagName !== 'H2' && nextNode.tagName !== 'H1') {
+        const toMove = nextNode;
+        nextNode = nextNode.nextElementSibling;
+        wrapper.appendChild(toMove);
+      }
+      
+      h3.parentNode.insertBefore(wrapper, h3.nextSibling);
+
+      h3.style.cursor = 'pointer';
+      h3.style.display = 'flex';
+      h3.style.justifyContent = 'space-between';
+      h3.style.alignItems = 'center';
+      h3.style.background = 'rgba(255,255,255,0.05)';
+      h3.style.padding = '10px 14px';
+      h3.style.borderRadius = '8px';
+      h3.style.marginTop = '0';
+      h3.style.marginBottom = '0';
+      
+      // 添加箭頭
+      const chevron = document.createElement('span');
+      chevron.innerHTML = i === 0 ? '▲' : '▼';
+      chevron.style.fontSize = '12px';
+      chevron.style.color = 'var(--dim)';
+      chevron.style.transition = 'transform 0.2s';
+      h3.appendChild(chevron);
+
+      h3.onclick = () => {
+        const isHidden = wrapper.style.display === 'none';
+        wrapper.style.display = isHidden ? 'block' : 'none';
+        chevron.innerHTML = isHidden ? '▲' : '▼';
+      };
+    });
+  }
+
+  document.getElementById('changelog-modal').classList.add('visible');
 }
+
 function closeChangelogModal() {
-  document.getElementById('changelog-modal').classList.remove('active');
+  document.getElementById('changelog-modal').classList.remove('visible');
 }
+
+window.openChangelogModal = openChangelogModal;
+window.closeChangelogModal = closeChangelogModal;
+window.saveChangelog = saveChangelog;
 
 async function saveChangelog() {
   const content = document.getElementById('dev-changelog-input').value.trim();
