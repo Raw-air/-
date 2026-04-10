@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#0a0a14">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=17">
+  <link rel="stylesheet" href="style.css?v=18">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -254,13 +254,6 @@
     </div>
 
     <div class="settings-card">
-      <div class="settings-card-header">🎨 導覽列圖示</div>
-      <p class="settings-hint">為底部導覽列的每個頁面上傳自訂圖示（取代 EMOJI）</p>
-      <div class="icon-upload-grid" id="nav-icon-upload-grid"></div>
-      <input type="file" id="nav-icon-file-input" accept="image/*" style="display:none">
-    </div>
-
-    <div class="settings-card">
       <div class="settings-card-header">📤 匯出 Excel</div>
       <button id="export-btn" class="action-btn wide" onclick="exportExcel()">📥 匯出完整 Excel</button>
     </div>
@@ -268,6 +261,22 @@
     <div class="settings-card">
       <div class="settings-card-header">🔄 資料操作</div>
       <button class="action-btn wide" onclick="loadData()">🔄 重新從 Notion 載入</button>
+    </div>
+
+    <!-- 開發者調適區入口 -->
+    <div class="dev-trigger" onclick="openDevAuth()">
+      <span class="dev-trigger-icon">🔧</span>
+      <span class="dev-trigger-text">開發者調適區</span>
+    </div>
+
+    <!-- 開發者面板（需要密碼） -->
+    <div id="dev-panel" class="dev-panel">
+      <div class="dev-card">
+        <div class="dev-card-header">🎨 導覽列圖示</div>
+        <p class="dev-card-hint">為底部導覽列的每個頁面上傳自訂圖示（取代 EMOJI）</p>
+        <div class="icon-upload-grid" id="nav-icon-upload-grid"></div>
+        <input type="file" id="nav-icon-file-input" accept="image/*" style="display:none">
+      </div>
     </div>
   </div>
 
@@ -292,8 +301,8 @@
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=17"></script>
-  <script src="api.js?v=17"></script>
-  <script src="app.js?v=17"></script>
+  <script src="config.js?v=18"></script>
+  <script src="api.js?v=18"></script>
+  <script src="app.js?v=18"></script>
 </body>
 </html>

@@ -65,21 +65,26 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 #page-home{position:relative;}
 
 /* ── 斜線光球動畫背景 ── */
-.home-anim-bg{position:fixed;inset:0;z-index:-2;pointer-events:none;overflow:hidden;
-  mask-image:radial-gradient(ellipse at 50% 30%,rgba(0,0,0,.9) 10%,rgba(0,0,0,0) 75%);
-  -webkit-mask-image:radial-gradient(ellipse at 50% 30%,rgba(0,0,0,.9) 10%,rgba(0,0,0,0) 75%)}
-.anim-line{position:absolute;top:-40%;width:2px;height:180%;transform:rotate(35deg);
-  background:linear-gradient(180deg,transparent 0%,rgba(139,92,246,.08) 15%,rgba(165,180,252,.2) 50%,rgba(139,92,246,.08) 85%,transparent 100%);
-  animation:lineSweep var(--dur,12s) var(--delay,0s) linear infinite;
-  filter:blur(0.5px)}
-@keyframes lineSweep{
-  0%{left:-5%;opacity:0;transform:rotate(35deg) scaleY(.15)}
-  8%{opacity:1}
-  25%{transform:rotate(35deg) scaleY(.5)}
-  50%{transform:rotate(35deg) scaleY(1);opacity:.9}
-  75%{transform:rotate(35deg) scaleY(.5)}
-  92%{opacity:1}
-  100%{left:105%;opacity:0;transform:rotate(35deg) scaleY(.15)}
+.home-anim-bg{position:fixed;inset:0;z-index:-2;pointer-events:none;overflow:hidden}
+.ball-group{position:absolute;top:50%;transform:translateY(-50%);
+  width:220px;height:320px;
+  animation:ballSweep var(--dur,14s) var(--delay,0s) linear infinite;
+  filter:blur(0.3px)}
+.ball-group .anim-line{position:absolute;left:var(--lx,50%);top:50%;
+  width:2px;transform:translate(-50%,-50%) rotate(35deg) scaleY(var(--sy,1));
+  height:var(--lh,100%);
+  background:linear-gradient(180deg,transparent 0%,rgba(139,92,246,.06) 10%,rgba(165,180,252,.25) 50%,rgba(139,92,246,.06) 90%,transparent 100%);
+  border-radius:1px}
+/* 球體輪廓遮罩 - 讓線條集合體看起来是圓形 */
+.ball-group::after{content:'';position:absolute;inset:-20%;border-radius:50%;
+  background:radial-gradient(ellipse at 50% 50%,transparent 35%,var(--bg) 65%);
+  pointer-events:none}
+@keyframes ballSweep{
+  0%{left:-18%;opacity:0}
+  6%{opacity:.7}
+  50%{opacity:1}
+  94%{opacity:.7}
+  100%{left:100%;opacity:0}
 }
 .home-hero{text-align:center;padding:32px 0 24px}
 .home-icon{width:96px;height:96px;border-radius:24px;margin-bottom:12px;filter:drop-shadow(0 4px 20px rgba(139,92,246,.3))}
@@ -88,12 +93,17 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 .home-date{display:inline-block;margin-top:16px;padding:8px 20px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:20px;font-size:14px;color:var(--dim)}
 .section-label{font-size:13px;color:var(--dim);margin:8px 0 12px;letter-spacing:1px}
 
-/* ─ Squad Grid 3列 ─ */
+/* ─ Squad Grid 3列 (毛玻璃) ─ */
 .squad-grid-3col{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.sq-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:16px 8px;
-  text-align:center;cursor:pointer;transition:all .2s;user-select:none;position:relative;overflow:hidden}
-.sq-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,var(--sq-c,var(--indigo)),transparent);opacity:.06;border-radius:var(--r)}
-.sq-card:hover{background:var(--card-h);transform:translateY(-2px);box-shadow:0 4px 20px rgba(0,0,0,.3)}
+.sq-card{background:rgba(255,255,255,.04);backdrop-filter:blur(16px) saturate(1.3);
+  -webkit-backdrop-filter:blur(16px) saturate(1.3);
+  border:1px solid rgba(255,255,255,.1);border-radius:var(--r);padding:16px 8px;
+  text-align:center;cursor:pointer;transition:all .25s cubic-bezier(.34,1.56,.64,1);user-select:none;position:relative;overflow:hidden;
+  box-shadow:0 2px 16px rgba(0,0,0,.2),inset 0 1px 0 rgba(255,255,255,.06)}
+.sq-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,var(--sq-c,var(--indigo)),transparent);opacity:.08;border-radius:var(--r)}
+.sq-card:hover{background:rgba(255,255,255,.08);transform:translateY(-3px);
+  box-shadow:0 8px 32px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.1);
+  border-color:rgba(255,255,255,.18)}
 .sq-card:active{transform:scale(.96)}
 .sq-badge{width:40px;height:40px;border-radius:12px;background:var(--sq-c,var(--indigo));margin:0 auto 8px;
   display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;color:#fff;
@@ -354,3 +364,16 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 .icon-upload-btn{font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:rgba(255,255,255,.06);color:var(--text);cursor:pointer;white-space:nowrap}
 .icon-upload-btn:active{transform:scale(.95)}
 .icon-upload-btn.remove{color:var(--red);border-color:rgba(239,68,68,.3)}
+
+/* ── 開發者調適區 ── */
+.dev-trigger{display:flex;align-items:center;gap:8px;padding:12px 16px;cursor:pointer;transition:all .2s;border-radius:var(--r);
+  background:rgba(255,255,255,.02);border:1px dashed rgba(255,255,255,.08);margin-top:16px}
+.dev-trigger:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.15)}
+.dev-trigger:active{transform:scale(.98)}
+.dev-trigger-icon{font-size:16px;opacity:.4}
+.dev-trigger-text{font-size:12px;color:var(--muted);letter-spacing:1px}
+.dev-panel{margin-top:12px;display:none}
+.dev-panel.open{display:block;animation:fadeUp .3s ease}
+.dev-card{background:rgba(239,68,68,.03);border:1px solid rgba(239,68,68,.12);border-radius:var(--r);padding:16px;margin-bottom:12px}
+.dev-card-header{font-size:14px;font-weight:700;margin-bottom:10px;color:rgba(239,68,68,.7);display:flex;align-items:center;gap:6px}
+.dev-card-hint{font-size:11px;color:var(--muted);margin-bottom:8px}

@@ -102,20 +102,36 @@ function renderHome() {
   const weekDay = ['日','一','二','三','四','五','六'][now.getDay()];
   dateEl.textContent = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 星期${weekDay}`;
 
-  // ── 斜線動畫 ──
+  // ── 斜線球體動畫 ──
   const animBg = document.querySelector('.home-anim-bg');
   if (animBg && !animBg.hasChildNodes()) {
-    const LINE_COUNT = 18;
-    for (let i = 0; i < LINE_COUNT; i++) {
-      const line = document.createElement('div');
-      line.className = 'anim-line';
-      const dur = 8 + Math.random() * 7;  // 8~15s
-      const delay = (i / LINE_COUNT) * dur; // 均勻錯開
-      line.style.setProperty('--dur', dur + 's');
-      line.style.setProperty('--delay', '-' + delay + 's');
-      line.style.opacity = 0.4 + Math.random() * 0.6;
-      line.style.width = (1.5 + Math.random() * 2) + 'px';
-      animBg.appendChild(line);
+    const BALL_COUNT = 3; // 3 個球體錄續推出
+    for (let b = 0; b < BALL_COUNT; b++) {
+      const group = document.createElement('div');
+      group.className = 'ball-group';
+      const dur = 10 + Math.random() * 8; // 10~18s
+      const delay = b * (dur / BALL_COUNT);
+      group.style.setProperty('--dur', dur + 's');
+      group.style.setProperty('--delay', '-' + delay + 's');
+
+      // 球內 15 條線，高度按圓形分佈（中間高、兩側短）
+      const LINE_COUNT = 15;
+      for (let i = 0; i < LINE_COUNT; i++) {
+        const line = document.createElement('div');
+        line.className = 'anim-line';
+        const t = i / (LINE_COUNT - 1); // 0~1
+        const x = t * 100; // 水平位置 0%~100%
+        // 圓形分佈：scaleY = sqrt(1 - (2t-1)^2)
+        const normalized = 2 * t - 1; // -1 ~ 1
+        const sy = Math.sqrt(Math.max(0, 1 - normalized * normalized));
+        const h = 40 + sy * 260; // 最短 40px，最高 300px
+        line.style.setProperty('--lx', x + '%');
+        line.style.setProperty('--lh', h + 'px');
+        line.style.setProperty('--sy', (0.3 + sy * 0.7).toFixed(2));
+        line.style.opacity = (0.3 + sy * 0.7).toFixed(2);
+        group.appendChild(line);
+      }
+      animBg.appendChild(group);
     }
   }
 
@@ -725,8 +741,8 @@ function renderSettings() {
   document.getElementById('cfg-total-beds').value = totalBeds;
   document.getElementById('cfg-bed-offset').value = bedOffset;
 
-  // 導覽列圖示上傳
-  renderNavIconUpload();
+  // 導覽列圖示（僅開發者模式解鎖後才渲染）
+  if (devUnlocked) renderNavIconUpload();
 }
 
 function adjustSetting(key, delta) {
@@ -969,4 +985,61 @@ function removeNavIcon(page) {
 
 window.pickNavIcon = pickNavIcon;
 window.removeNavIcon = removeNavIcon;
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 開發者調適區（6 位密碼保護）
+// ═════════════════════════════════════════════════════════════════════════════
+const DEV_PASSWORD = '147258'; // 6 位開發者密碼
+let devUnlocked = false;
+
+function openDevAuth() {
+  const panel = document.getElementById('dev-panel');
+  // 如果已解鎖，切換顯示/隱藏
+  if (devUnlocked) {
+    panel.classList.toggle('open');
+    return;
+  }
+  // 彈出密碼輸入
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay visible';
+  overlay.innerHTML = `
+    <div class="modal-card">
+      <h3>🔐 開發者驗證</h3>
+      <p class="modal-desc">請輸入 6 位數開發者密碼</p>
+      <input type="password" id="dev-pin-input" class="pin-input" maxlength="6" placeholder="••••••" inputmode="numeric" autocomplete="off">
+      <div class="modal-actions">
+        <button class="modal-btn cancel" id="dev-pin-cancel">取消</button>
+        <button class="modal-btn confirm" id="dev-pin-confirm">解鎖</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const input = document.getElementById('dev-pin-input');
+  setTimeout(() => input.focus(), 100);
+
+  const tryUnlock = () => {
+    if (input.value === DEV_PASSWORD) {
+      devUnlocked = true;
+      overlay.classList.remove('visible');
+      setTimeout(() => overlay.remove(), 300);
+      panel.classList.add('open');
+      renderNavIconUpload();
+      showToast('🔓 開發者模式已解鎖', 'success');
+    } else {
+      input.classList.add('shake');
+      setTimeout(() => input.classList.remove('shake'), 500);
+      showToast('密碼錯誤', 'error');
+      input.value = '';
+    }
+  };
+
+  document.getElementById('dev-pin-cancel').onclick = () => {
+    overlay.classList.remove('visible');
+    setTimeout(() => overlay.remove(), 300);
+  };
+  document.getElementById('dev-pin-confirm').onclick = tryUnlock;
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
+}
+
+window.openDevAuth = openDevAuth;
 
