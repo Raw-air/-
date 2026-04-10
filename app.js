@@ -138,13 +138,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function loadData() {
   try {
     showLoading(true);
-    const [roster, config] = await Promise.all([
+    const [roster, config, changelogs] = await Promise.all([
       window._api.getRoster(),
       window._api.getConfig(),
+      window._api.getChangelog().catch(() => []) // 容錯處理：若尚未設定 DB 不會整個炸掉
     ]);
     state.students = roster.students || [];
     state.dateColumns = roster.dateColumns || [];
     state.config = config || {};
+    state.changelogs = changelogs || [];
 
     // 套用硬性房間規則
     applyRoomRules();
@@ -159,6 +161,7 @@ async function loadData() {
 
     showLoading(false);
     renderCurrentPage();
+    checkChangelogDot();
     showToast(`已載入 ${state.students.length} 位學生`, 'success');
   } catch (err) {
     showLoading(false);
@@ -166,21 +169,43 @@ async function loadData() {
   }
 }
 
+// 檢查首頁紅點
+function checkChangelogDot() {
+  const dot = document.querySelector('.changelog-dot');
+  if (!dot) return;
+  if (state.changelogs && state.changelogs.length > 0) {
+    const latestId = state.changelogs[0].id;
+    const lastSeen = localStorage.getItem('last_seen_changelog');
+    if (lastSeen !== latestId) {
+      dot.style.display = 'block';
+    } else {
+      dot.style.display = 'none';
+    }
+  } else {
+    dot.style.display = 'none';
+  }
+}
+
 // ── 最新公告與日誌 (Changelog) ──
 function openChangelogModal() {
-  // 找出所有 changelog 項目並按時間反序排列 (最新的在最上面)
-  const entries = Object.keys(state.config)
+  // 從獨立資料庫取得的新版公告
+  const newEntries = (state.changelogs || []).map(log => log.content);
+
+  // 兼容設定資料庫中的舊版公告
+  const legacyEntries = Object.keys(state.config)
     .filter(k => k.startsWith('changelog_entry_'))
     .sort()
     .reverse()
     .map(k => state.config[k]);
   
-  // 兼容舊版單一欄位
   if (state.config['changelog_md']) {
-    entries.push(state.config['changelog_md']);
+    legacyEntries.push(state.config['changelog_md']);
   }
 
-  const mdContent = entries.join('\n\n') || '目前沒有最新公告。';
+  // 合併
+  const allEntries = [...newEntries, ...legacyEntries];
+  const mdContent = allEntries.join('\n\n') || '目前沒有最新公告。';
+  
   const htmlContent = typeof marked !== 'undefined' ? marked.parse(mdContent) : `<pre style="white-space:pre-wrap;font-family:inherit;">${mdContent}</pre>`;
   
   const contentEl = document.getElementById('changelog-content');
@@ -233,6 +258,13 @@ function openChangelogModal() {
     });
   }
 
+  // 記錄已讀最新公告
+  if (state.changelogs && state.changelogs.length > 0) {
+    localStorage.setItem('last_seen_changelog', state.changelogs[0].id);
+    const dot = document.querySelector('.changelog-dot');
+    if (dot) dot.style.display = 'none';
+  }
+
   document.getElementById('changelog-modal').classList.add('visible');
 }
 
@@ -250,14 +282,16 @@ async function saveChangelog() {
 
   showLoading(true);
   try {
-    const key = `changelog_entry_${Date.now()}`;
-    await window._api.setConfig({ [key]: content });
-    state.config[key] = content;
+    await window._api.postChangelog(content);
+    // 重新載入公告資料來更新畫面
+    const logs = await window._api.getChangelog().catch(() => []);
+    state.changelogs = logs;
+    checkChangelogDot();
     
-    document.getElementById('dev-changelog-input').value = ''; // 清空讓下次好輸入
-    showToast('發布成功！已新增至歷史頂端', 'success');
+    document.getElementById('dev-changelog-input').value = ''; 
+    showToast('發布成功！已新增至公告資料庫', 'success');
   } catch(e) {
-    showToast('發布失敗：' + e.message, 'error');
+    showToast('發布失敗：請檢查設定 ' + e.message, 'error');
   } finally {
     showLoading(false);
   }

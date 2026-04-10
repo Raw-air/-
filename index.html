@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#0a0a14">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=37">
+  <link rel="stylesheet" href="style.css?v=39">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -315,9 +315,27 @@
         <p class="dev-card-hint">新發布的內容會自動累加在歷史公告的「最上方」，不會覆寫舊資料。請使用 Markdown 語法撰寫即將新增的更新內容。</p>
         <textarea id="dev-changelog-input" class="dev-input" style="width:100%; height:150px; padding:12px; border-radius:8px; background:rgba(0,0,0,0.3); color:#fff; border:1px solid rgba(255,255,255,0.2); margin-bottom:8px; font-family:monospace; resize:vertical; font-size:13px" placeholder="### 🚀 版本 22.0 更新&#10;- 新增過場動畫&#10;- 修復版面問題"></textarea>
         <button class="action-btn wide" onclick="saveChangelog()">💾 儲存並新增公告</button>
+        <button class="action-btn wide warning" style="margin-top:8px" onclick="setupChangelogDB()">⚙️ 自動建立專屬公告資料庫</button>
       </div>
     </div>
   </div>
+
+  <script>
+    async function setupChangelogDB() {
+      if(!confirm("這將會在 Notion 自動建立一個新的公告資料庫。確定要執行嗎？")) return;
+      try {
+        const res = await fetch(window.CONFIG.WORKER_URL + '/api/setup-changelog-db', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          prompt('🎉 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 CHANGELOG_DB_ID：', data.CHANGELOG_DB_ID);
+        } else {
+          alert('建立失敗: ' + data.error);
+        }
+      } catch (err) {
+        alert('發生錯誤: ' + err.message);
+      }
+    }
+  </script>
 
   <!-- 系統更新日誌 Modal -->
   <div id="changelog-modal" class="modal-overlay">
@@ -354,8 +372,8 @@
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=37"></script>
-  <script src="api.js?v=37"></script>
-  <script src="app.js?v=37"></script>
+  <script src="config.js?v=39"></script>
+  <script src="api.js?v=39"></script>
+  <script src="app.js?v=39"></script>
 </body>
 </html>
