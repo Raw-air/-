@@ -41,6 +41,9 @@ async function loadData() {
     // 套用硬性房間規則
     applyRoomRules();
     
+    // 套用全域背景影片設定
+    loadGlobalBgVideo();
+    
     const today = getTodayColumnName();
     const confVal = state.config['confirm_' + today];
     if (confVal) state.confirmedSquads = confVal.split(',').filter(Boolean);
@@ -1052,12 +1055,13 @@ function openDevAuth() {
 window.openDevAuth = openDevAuth;
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 伺服器自訂背景影片 (LocalStorage URL 儲存)
+// 伺服器自訂背景影片 (全域 Notion Config 儲存)
 // ═════════════════════════════════════════════════════════════════════════════
-function loadBgVideo() {
-  const url = localStorage.getItem('bg_video_url');
-  const scale = localStorage.getItem('bg_video_scale') || 1.0;
-  const opacity = localStorage.getItem('bg_video_opacity') || 0.25;
+function loadGlobalBgVideo() {
+  // 從 Notion 全域設定讀取
+  const url = state.config['bg_video_url'];
+  const scale = state.config['bg_video_scale'] || 1.0;
+  const opacity = state.config['bg_video_opacity'] || 0.25;
   
   const container = document.getElementById('custom-video-bg');
   const animBg = document.querySelector('.home-anim-bg');
@@ -1087,10 +1091,16 @@ function previewBgVideoStyle() {
   if (video) {
     video.style.transform = `scale(${scale})`;
     video.style.opacity = opacity;
+  } else {
+    // 若尚未載入影片，嘗試立刻用輸入的網址做預覽
+    const url = document.getElementById('bg-video-url').value.trim();
+    if (url) {
+      document.getElementById('custom-video-bg').innerHTML = `<video src="${url}" autoplay loop muted playsinline style="transform: scale(${scale}); opacity: ${opacity};"></video>`;
+    }
   }
 }
 
-function applyBgVideoUrl() {
+async function applyBgVideoUrl() {
   const url = document.getElementById('bg-video-url').value.trim();
   const scale = document.getElementById('bg-video-scale').value;
   const opacity = document.getElementById('bg-video-opacity').value;
@@ -1099,28 +1109,49 @@ function applyBgVideoUrl() {
     return showToast('請先輸入影片網址', 'error');
   }
 
-  localStorage.setItem('bg_video_url', url);
-  localStorage.setItem('bg_video_scale', scale);
-  localStorage.setItem('bg_video_opacity', opacity);
-  
-  showToast('背景影片已套用', 'success');
-  loadBgVideo();
+  showLoading(true);
+  try {
+    // 儲存至 Notion 全域 Config
+    await window._api.setConfig({
+      bg_video_url: url,
+      bg_video_scale: scale,
+      bg_video_opacity: opacity
+    });
+    
+    // 更新本地狀態
+    state.config['bg_video_url'] = url;
+    state.config['bg_video_scale'] = scale;
+    state.config['bg_video_opacity'] = opacity;
+
+    showToast('全域背景影片已更新', 'success');
+    loadGlobalBgVideo();
+  } catch (err) {
+    showToast('儲存失敗：' + err.message, 'error');
+  }
+  showLoading(false);
 }
 
-function clearBgVideo() {
-  localStorage.removeItem('bg_video_url');
-  localStorage.removeItem('bg_video_scale');
-  localStorage.removeItem('bg_video_opacity');
-  
-  const urlInput = document.getElementById('bg-video-url');
-  if (urlInput) {
-    urlInput.value = '';
-    document.getElementById('bg-video-scale').value = 1.0;
-    document.getElementById('bg-video-opacity').value = 0.25;
-  }
+async function clearBgVideo() {
+  showLoading(true);
+  try {
+    // 將 URL 設為空字串，以清除 Notion 上的設定
+    await window._api.setConfig({ bg_video_url: '' });
+    
+    state.config['bg_video_url'] = '';
+    
+    const urlInput = document.getElementById('bg-video-url');
+    if (urlInput) {
+      urlInput.value = '';
+      document.getElementById('bg-video-scale').value = 1.0;
+      document.getElementById('bg-video-opacity').value = 0.25;
+    }
 
-  showToast('已恢復預設光球動畫', 'success');
-  loadBgVideo();
+    showToast('已恢復全域預設光球動畫', 'success');
+    loadGlobalBgVideo();
+  } catch (err) {
+    showToast('清除失敗：' + err.message, 'error');
+  }
+  showLoading(false);
 }
 
 window.applyBgVideoUrl = applyBgVideoUrl;
