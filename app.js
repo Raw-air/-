@@ -13,6 +13,7 @@ const state = {
   changes: [],
   loading: true,
   calMonth: new Date(),
+  confirmedSquads: [],
 };
 
 // ─── 初始化 ─────────────────────────────────────────────────────────────────
@@ -34,6 +35,12 @@ async function loadData() {
     state.students = roster.students;
     state.dateColumns = roster.dateColumns;
     state.config = config;
+    
+    const today = getTodayColumnName();
+    const confMatch = state.config.find(c => c.key === 'confirm_' + today);
+    if (confMatch) state.confirmedSquads = confMatch.value.split(',').filter(Boolean);
+    else state.confirmedSquads = [];
+
     showLoading(false);
     renderCurrentPage();
     showToast(`已載入 ${state.students.length} 位學生`, 'success');
@@ -289,6 +296,37 @@ function updateRollCallStats() {
   document.getElementById('rc-stat-present').textContent = p;
   document.getElementById('rc-stat-leave').textContent = l;
   document.getElementById('rc-stat-absent').textContent = a;
+
+  const confirmBtn = document.getElementById('rc-confirm-btn');
+  if (state.currentDate === getTodayColumnName()) {
+    confirmBtn.style.display = 'flex';
+    confirmBtn.style.flexDirection = 'column';
+    confirmBtn.style.alignItems = 'center';
+    confirmBtn.style.justifyContent = 'center';
+    const isConfirmed = state.confirmedSquads.includes(state.currentSquad);
+    confirmBtn.className = 'rc-stat confirm' + (isConfirmed ? ' done' : '');
+    document.getElementById('rc-confirm-icon').textContent = isConfirmed ? '🟢' : '⭕';
+    document.getElementById('rc-confirm-text').textContent = isConfirmed ? '已確認' : '未確認';
+  } else {
+    confirmBtn.style.display = 'none';
+  }
+}
+
+async function toggleSquadConfirm() {
+  const sq = state.currentSquad;
+  if (state.confirmedSquads.includes(sq)) {
+    state.confirmedSquads = state.confirmedSquads.filter(s => s !== sq);
+  } else {
+    state.confirmedSquads.push(sq);
+  }
+  updateRollCallStats();
+  
+  const today = getTodayColumnName();
+  try {
+    await window._api.setConfig({ key: 'confirm_' + today, value: state.confirmedSquads.join(',') });
+  } catch(e) {
+    console.error('儲存確認狀態失敗', e);
+  }
 }
 
 function setupSubmitButton() {
@@ -576,6 +614,20 @@ function renderSummary() {
       <div class="sqd-foreign">🌏 外籍 ${sq.foreign} ・ 🛏️ 空床 ${sq.empty}</div>
     </div>`).join('');
 
+  const confList = document.getElementById('confirmed-squads-list');
+  if (confList) {
+    if (date === getTodayColumnName()) {
+      confList.parentNode.style.display = 'block';
+      if (!state.confirmedSquads || state.confirmedSquads.length === 0) {
+        confList.innerHTML = '<span class="confirmed-tag empty">目前尚無中隊完成確認</span>';
+      } else {
+        confList.innerHTML = state.confirmedSquads.map(sq => `<span class="confirmed-tag">✓ ${sq}</span>`).join('');
+      }
+    } else {
+      confList.parentNode.style.display = 'none';
+    }
+  }
+
   document.getElementById('summary-prev-date').onclick = () => changeSummaryDate(-1);
   document.getElementById('summary-next-date').onclick = () => changeSummaryDate(1);
   document.getElementById('copy-summary-btn').onclick = () => copySummary(date);
@@ -800,4 +852,5 @@ window.submitSwapBed = submitSwapBed;
 
 window.toggleDatePicker = toggleDatePicker;
 window.selectRollCallDate = selectRollCallDate;
+window.toggleSquadConfirm = toggleSquadConfirm;
 

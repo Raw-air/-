@@ -62,6 +62,7 @@
         <div class="rc-stat green"><span>實到</span><b id="rc-stat-present">0</b></div>
         <div class="rc-stat yellow"><span>請假</span><b id="rc-stat-leave">0</b></div>
         <div class="rc-stat red"><span>未到</span><b id="rc-stat-absent">0</b></div>
+        <div id="rc-confirm-btn" class="rc-stat confirm" onclick="toggleSquadConfirm()" style="display:none"><span id="rc-confirm-text">確認</span><b id="rc-confirm-icon">⭕</b></div>
       </div>
     </header>
     <div id="rc-student-list" class="student-list"></div>
@@ -190,6 +191,14 @@
       </div>
       <span class="eb-arrow">›</span>
     </button>
+
+    <!-- 今日已確認中隊 -->
+    <div class="summary-section" style="margin-top:24px;background:rgba(255,255,255,.02);border-radius:16px;padding:16px;border:1px solid rgba(255,255,255,.05)">
+      <div class="summary-title" style="margin-top:0;font-size:14px;display:flex;align-items:center;gap:6px">
+        <span style="color:#4ade80">✅</span> 今日已完成回報的中隊
+      </div>
+      <div id="confirmed-squads-list" class="confirmed-squads-list" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px"></div>
+    </div>
 
     <div class="summary-actions">
       <button id="copy-summary-btn" class="action-btn">📋 複製總表</button>
