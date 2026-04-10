@@ -62,7 +62,19 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 .nav-item.active .nav-label{color:var(--text);font-weight:700}
 
 /* ═══════════ 首頁 Hero ═══════════ */
-#page-home{position:relative;}
+#page-home { position: relative; }
+
+/* 自訂影片背景 */
+#custom-video-bg {
+  position: fixed; inset: 0; z-index: -3; /* 在所有東西背後 */
+  pointer-events: none; overflow: hidden;
+}
+#custom-video-bg video {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  opacity: 0.25; /* 不干擾文字的亮度 */
+  filter: saturate(1.2);
+}
 
 /* ── 斜線球體動畫背景 ── */
 .home-anim-bg {

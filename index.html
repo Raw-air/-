@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#0a0a14">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=22">
+  <link rel="stylesheet" href="style.css?v=23">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -32,6 +32,8 @@
 
   <!-- ═══════════ 首頁 ═══════════ -->
   <div id="page-home" class="page active">
+    <!-- 影片背景層 -->
+    <div id="custom-video-bg"></div>
     <!-- 背景動畫光條牆 -->
     <div class="home-anim-bg"></div>
     <div class="home-hero">
@@ -271,11 +273,23 @@
 
     <!-- 開發者面板（需要密碼） -->
     <div id="dev-panel" class="dev-panel">
+      <!-- 導覽列圖示上傳 -->
       <div class="dev-card">
         <div class="dev-card-header">🎨 導覽列圖示</div>
         <p class="dev-card-hint">為底部導覽列的每個頁面上傳自訂圖示（取代 EMOJI）</p>
         <div class="icon-upload-grid" id="nav-icon-upload-grid"></div>
         <input type="file" id="nav-icon-file-input" accept="image/*" style="display:none">
+      </div>
+
+      <!-- 背景影片上傳 -->
+      <div class="dev-card" style="margin-top:16px;">
+        <div class="dev-card-header">🎥 自訂背景影片</div>
+        <p class="dev-card-hint">上傳合適的影片 (MP4/WebM) 替代光球動畫。建議小於 20MB 以確保流暢運行。</p>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <button class="action-btn wide" onclick="document.getElementById('bg-video-input').click()">選擇影片預覽</button>
+          <input type="file" id="bg-video-input" accept="video/mp4, video/webm" style="display:none" onchange="handleBgVideoUpload(event)">
+          <button class="action-btn wide warning" onclick="clearBgVideo()">移除自訂影片</button>
+        </div>
       </div>
     </div>
   </div>

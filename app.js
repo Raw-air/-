@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupNav();
   setupPinDialog();
   applyNavIcons();
+  loadBgVideo(); // 載入背景影片
   navigateTo('home');
   await loadData();
 });
@@ -1049,4 +1050,102 @@ function openDevAuth() {
 }
 
 window.openDevAuth = openDevAuth;
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 自訂背景影片 (IndexedDB 儲存)
+// ═════════════════════════════════════════════════════════════════════════════
+const DB_NAME = 'DormAppDB';
+const STORE_NAME = 'media';
+
+function initDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = () => reject('IndexedDB 啟動失敗');
+  });
+}
+
+async function setIDB(key, blob) {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).put(blob, key);
+    tx.oncomplete = resolve;
+    tx.onerror = reject;
+  });
+}
+
+async function getIDB(key) {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const getReq = tx.objectStore(STORE_NAME).get(key);
+    getReq.onsuccess = e => resolve(e.target.result);
+    getReq.onerror = reject;
+  });
+}
+
+async function removeIDB(key) {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete(key);
+    tx.oncomplete = resolve;
+    tx.onerror = reject;
+  });
+}
+
+async function loadBgVideo() {
+  const blob = await getIDB('bg_video');
+  const container = document.getElementById('custom-video-bg');
+  const animBg = document.querySelector('.home-anim-bg');
+  if (blob) {
+    const url = URL.createObjectURL(blob);
+    container.innerHTML = `<video src="${url}" autoplay loop muted playsinline></video>`;
+    if (animBg) animBg.style.display = 'none'; // 如果有影片，隱藏預設動畫
+  } else {
+    container.innerHTML = '';
+    if (animBg) animBg.style.display = 'flex';
+  }
+}
+
+async function handleBgVideoUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  // 限制影片大小 (20MB)
+  if (file.size > 20 * 1024 * 1024) {
+    e.target.value = ''; // reset
+    return showToast('影片過大，請選擇小於 20MB 的檔案以免影響效能', 'error');
+  }
+  
+  showLoading(true);
+  try {
+    await setIDB('bg_video', file);
+    showToast('背景影片已套用', 'success');
+    loadBgVideo();
+  } catch (err) {
+    showToast('儲存失敗', 'error');
+  }
+  showLoading(false);
+  e.target.value = ''; // reset
+}
+
+async function clearBgVideo() {
+  try {
+    await removeIDB('bg_video');
+    showToast('已恢復預設光球動畫', 'success');
+    loadBgVideo();
+  } catch (err) {
+    showToast('清除失敗', 'error');
+  }
+}
+
+window.handleBgVideoUpload = handleBgVideoUpload;
+window.clearBgVideo = clearBgVideo;
 
