@@ -22,7 +22,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupNav();
   setupPinDialog();
   applyNavIcons();
-  loadBgVideo(); // 載入背景影片
   navigateTo('home');
   await loadData();
 });
