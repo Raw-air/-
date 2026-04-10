@@ -649,19 +649,42 @@ function updateRollCallStats() {
 
 async function toggleSquadConfirm() {
   const sq = state.currentSquad;
-  if (state.confirmedSquads.includes(sq)) {
-    state.confirmedSquads = state.confirmedSquads.filter(s => s !== sq);
+  const btn = document.getElementById('rc-confirm-btn');
+  
+  // 防呆：如果正在同步，忽略重複點擊
+  if (btn.disabled) return;
+  
+  const isCurrentlyConfirmed = state.confirmedSquads.includes(sq);
+  
+  // 顯示載入中狀態 (卡住按鈕不讓使用者亂點)
+  btn.disabled = true;
+  document.getElementById('rc-confirm-text').textContent = '⏳ 即時同步中...';
+  
+  // 預計要變成的最終結果
+  let targetSquads = [];
+  if (isCurrentlyConfirmed) {
+    targetSquads = state.confirmedSquads.filter(s => s !== sq);
   } else {
-    state.confirmedSquads.push(sq);
+    targetSquads = [...state.confirmedSquads, sq];
   }
-  updateRollCallStats();
   
   const today = getTodayColumnName();
   try {
-    // 儲存到 Notion (系統全域共用)
-    await window._api.setConfig({ ['confirm_' + today]: state.confirmedSquads.join(',') });
+    // 儲存到 Notion (系統全域共用)，需等候完成才改變本地狀態
+    await window._api.setConfig({ ['confirm_' + today]: targetSquads.join(',') });
+    
+    // 如果沒有拋出錯誤，代表網路更新成功！
+    state.confirmedSquads = targetSquads;
+    state.config['confirm_' + today] = targetSquads.join(',');
+    
+    showToast(isCurrentlyConfirmed ? '已取消回報' : '✅ 點名回報成功！已即時同步至總表', 'success');
   } catch(e) {
     console.error('儲存確認狀態失敗', e);
+    showToast('信號不穩定，回報失敗，請重試', 'error');
+  } finally {
+    // 放開按鈕，並依據最新（或被還原）的資料重新渲染按鈕狀態
+    btn.disabled = false;
+    updateRollCallStats(); 
   }
 }
 
@@ -1128,7 +1151,27 @@ setInterval(async () => {
 }, CONFIG.AUTO_SAVE_INTERVAL);
 
 // ─── UI 工具 ────────────────────────────────────────────────────────────────
-function showLoading(show) { state.loading=show; const el=document.getElementById('loading-overlay'); if(el) el.style.display=show?'flex':'none'; }
+function showLoading(show) { 
+  state.loading = show; 
+  const el = document.getElementById('loading-overlay'); 
+  if(!el) return; 
+  
+  if (show) {
+    el.classList.remove('roll-out-bottom');
+    el.style.display = 'flex';
+  } else {
+    // 隨機產生掉落的旋轉角度 (-90 到 90 度，讓每次掉落的方向與傾斜感都不同，更為隨機)
+    const rot = (Math.random() * 180 - 90).toFixed(1) + 'deg';
+    el.style.setProperty('--rot', rot);
+    el.classList.add('roll-out-bottom');
+    
+    // 等待動畫結束後才真正隱藏元素
+    setTimeout(() => {
+      // 確保沒有在動畫期間又被要求載入
+      if (!state.loading) el.style.display = 'none';
+    }, 800);
+  }
+}
 
 function showToast(msg, type='info') {
   const c = document.getElementById('toast-container'); if(!c) return;
