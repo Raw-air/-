@@ -127,6 +127,60 @@ function enterSquad(squadId) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// 日期選擇器
+// ═════════════════════════════════════════════════════════════════════════════
+function toggleDatePicker() {
+  const panel = document.getElementById('date-picker-panel');
+  const btn   = document.getElementById('rc-date-btn');
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) {
+    closeDatePicker();
+  } else {
+    renderDatePicker();
+    panel.classList.add('open');
+    btn.classList.add('open');
+  }
+}
+
+function closeDatePicker() {
+  document.getElementById('date-picker-panel')?.classList.remove('open');
+  document.getElementById('rc-date-btn')?.classList.remove('open');
+}
+
+function renderDatePicker() {
+  const today = getTodayColumnName();
+  const list  = document.getElementById('date-picker-list');
+  // 倒序排列：最新的在最上面
+  const dates = [...state.dateColumns].reverse();
+  list.innerHTML = dates.map(d => {
+    const isActive  = d === state.currentDate;
+    const isToday   = d === today;
+    return `<div class="date-item${isActive?' active':''}${isToday?' today-marker':''}"
+                 onclick="selectRollCallDate('${d}')">${d}</div>`;
+  }).join('');
+  // 自動捲到選中的日期
+  setTimeout(() => {
+    const active = list.querySelector('.date-item.active');
+    if (active) active.scrollIntoView({ block: 'nearest' });
+  }, 50);
+}
+
+function selectRollCallDate(date) {
+  state.currentDate = date;
+  closeDatePicker();
+  renderRollCall();
+}
+
+// 點選面板外關閉
+document.addEventListener('click', e => {
+  const btn   = document.getElementById('rc-date-btn');
+  const panel = document.getElementById('date-picker-panel');
+  if (btn && panel && !btn.contains(e.target) && !panel.contains(e.target)) {
+    closeDatePicker();
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
 // 點名
 // ═════════════════════════════════════════════════════════════════════════════
 function renderRollCall() {
@@ -134,6 +188,10 @@ function renderRollCall() {
 
   document.getElementById('rc-squad-name').textContent = state.currentSquad;
   document.getElementById('rc-date').textContent = state.currentDate;
+
+  // 更新提交按鈕顯示目前日期
+  const submitBtn = document.getElementById('submit-btn');
+  if (submitBtn) submitBtn.textContent = `✅ 提交 ${state.currentDate} 點名`;
 
   const students = state.students.filter(s => s.squad === state.currentSquad);
   students.sort((a, b) => a.room.localeCompare(b.room) || a.bed.localeCompare(b.bed));
@@ -145,8 +203,10 @@ function renderRollCall() {
     const status = s.attendance[state.currentDate] || '✓';
     const si = CONFIG.STATUS[status] || CONFIG.STATUS['✓'];
     const absent = status !== '✓';
+    const isPending = state.changes.some(c => c.pageId === s.id && c.date === state.currentDate);
     html += `
       <div class="student-row ${s.isEmpty?'empty-bed':''} ${absent?'absent':''}"
+           data-pid="${s.id}"
            onclick="${s.isEmpty?'':`toggleStatus('${s.id}')`}">
         <div class="student-info">
           <div class="student-bed" style="background:${getSquadColor(state.currentSquad)}">${s.bed}</div>
@@ -155,8 +215,11 @@ function renderRollCall() {
             <div class="student-meta">${s.class||''} ${s.studentId||''}</div>
           </div>
         </div>
-        ${s.isEmpty?'<span class="empty-tag">空床</span>':
-          `<div class="status-badge" style="background:${si.color}20;color:${si.color};border:1px solid ${si.color}40">${si.icon} ${si.label}</div>`}
+        <div style="display:flex;align-items:center;gap:6px">
+          ${s.isEmpty?'<span class="empty-tag">空床</span>':
+            `<div class="status-badge" style="background:${si.color}20;color:${si.color};border:1px solid ${si.color}40">${si.icon} ${si.label}</div>`}
+          <span class="sync-dot${isPending?' pending':''}"></span>
+        </div>
       </div>`;
   }
   document.getElementById('rc-student-list').innerHTML = html;
@@ -164,16 +227,58 @@ function renderRollCall() {
   setupSubmitButton();
 }
 
+// 每位學生的 debounce timer
+const _syncTimers = {};
+
 function toggleStatus(pageId) {
   const s = state.students.find(x => x.id === pageId);
   if (!s || s.isEmpty) return;
-  const cur = s.attendance[state.currentDate] || '✓';
+
+  const cur  = s.attendance[state.currentDate] || '✓';
   const next = { '✓':'◎', '◎':'✘', '✘':'✓', '△':'✓' }[cur] || '✓';
   s.attendance[state.currentDate] = next;
-  const idx = state.changes.findIndex(c => c.pageId === pageId);
-  if (idx >= 0) state.changes[idx] = { pageId, date: state.currentDate, value: next };
-  else state.changes.push({ pageId, date: state.currentDate, value: next });
+
+  // 保留在 changes 以供提交按鈕使用
+  const idx = state.changes.findIndex(c => c.pageId === pageId && c.date === state.currentDate);
+  const change = { pageId, date: state.currentDate, value: next };
+  if (idx >= 0) state.changes[idx] = change;
+  else state.changes.push(change);
+
+  // 即時更新 UI
   renderRollCall();
+
+  // 立即同步到 Notion（debounce 800ms 防止快速連點重複 API）
+  clearTimeout(_syncTimers[pageId]);
+  _syncTimers[pageId] = setTimeout(async () => {
+    try {
+      await window._api.updateAttendance([change]);
+      // 同步成功：移除 changes 中已成功的那筆
+      const i = state.changes.findIndex(c => c.pageId === pageId && c.date === state.currentDate && c.value === next);
+      if (i >= 0) state.changes.splice(i, 1);
+      // 微小的成功提示（不打擾操作）
+      showSyncDot(pageId, 'ok');
+    } catch (err) {
+      // 失敗保留在 changes 留待手動提交
+      showSyncDot(pageId, 'err');
+      console.warn('auto-sync failed:', err.message);
+    }
+  }, 800);
+}
+
+// 在學生行顯示同步狀態小點
+function showSyncDot(pageId, state) {
+  const rows = document.querySelectorAll('.student-row');
+  // 找到對應行（透過 onclick 屬性）
+  for (const row of rows) {
+    if (row.dataset.pid === pageId) {
+      const dot = row.querySelector('.sync-dot');
+      if (dot) {
+        dot.className = `sync-dot ${state}`;
+        setTimeout(() => dot.classList.remove('ok','err'), 2000);
+      }
+      break;
+    }
+  }
 }
 
 function updateRollCallStats() {
