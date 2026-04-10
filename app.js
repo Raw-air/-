@@ -56,6 +56,23 @@ function playClickSound(type = 'default') {
       gainNode.gain.setValueAtTime(0.12, time);
       gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.06);
       osc.start(time); osc.stop(time + 0.07);
+    } else if (type === 'unlock') {
+      // 解鎖的短促「喀啦」清脆聲 (快速雙音頻)
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(600, time);
+      osc.frequency.setValueAtTime(1000, time + 0.02); // 第二下喀聲的短促高音
+      gainNode.gain.setValueAtTime(0.08, time);
+      gainNode.gain.setTargetAtTime(0.001, time, 0.005);
+      osc.start(time); osc.stop(time + 0.05);
+    } else if (type === 'dev_unlock') {
+      // 開發者模式解鎖：科技感上升重低音
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(440, time);
+      osc.frequency.exponentialRampToValueAtTime(880, time + 0.1);
+      osc.frequency.exponentialRampToValueAtTime(1760, time + 0.2);
+      gainNode.gain.setValueAtTime(0.1, time);
+      gainNode.gain.setTargetAtTime(0.001, time + 0.1, 0.05);
+      osc.start(time); osc.stop(time + 0.25);
     } else if (type === 'confirm') {
       // 確認/提交的明亮雙音感
       osc.type = 'triangle';
@@ -81,7 +98,11 @@ window.addEventListener('click', (e) => {
   if (target) {
     if (target.id === 'back-btn' || target.classList.contains('cancel') || target.id === 'pin-cancel') {
       playClickSound('back');
-    } else if (target.classList.contains('confirm') || target.id === 'submit-btn' || target.id === 'pin-confirm' || target.id === 'rc-confirm-btn') {
+    } else if (target.id === 'pin-confirm') {
+      playClickSound('unlock'); // 解鎖中隊專屬的喀啦聲
+    } else if (target.id === 'dev-pin-confirm') {
+      playClickSound('dev_unlock'); // 開發者解鎖專屬科技音
+    } else if (target.classList.contains('confirm') || target.id === 'submit-btn' || target.id === 'rc-confirm-btn') {
       playClickSound('confirm');
     } else if (target.closest('.sq-card')) {
       playClickSound('default');

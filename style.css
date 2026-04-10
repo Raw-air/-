@@ -28,18 +28,18 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 #hacking-bg {
   position: absolute; inset: 0; margin: 0; padding: 8px 12px;
   font-family: "Courier New", Courier, monospace; font-size: 10px;
-  color: #0f0; opacity: 0.25; z-index: 0; pointer-events: none;
+  color: #d8b4fe; opacity: 0.6; text-shadow: 0 0 6px rgba(168, 85, 247, 0.4); z-index: 0; pointer-events: none;
   overflow: hidden; line-height: 1.5; white-space: pre-wrap;
   word-break: break-all;
 }
 @keyframes blinkCursor { 50% { border-right-color: transparent; } }
-@keyframes typeAndDelete {
-  0%, 10% { width: 0; }
-  45%, 55% { width: 6.2em; }
-  90%, 100% { width: 0; }
+@keyframes breatheText {
+  0%, 100% { opacity: 0.4; text-shadow: 0 0 2px rgba(255, 255, 255, 0.3); }
+  50% { opacity: 1; text-shadow: 0 0 16px rgba(255, 255, 255, 1), 0 0 8px rgba(255, 255, 255, 0.8); }
 }
+
 .terminal-loader {
-  border: 0.1em solid #333; background-color: #1a1a1a; color: #0f0;
+  border: 0.1em solid #333; background-color: #1a1a1a; color: #fff;
   font-family: "Courier New", Courier, monospace; font-size: 1em;
   padding: 1.5em 1em; width: 12em;
   box-shadow: 0 4px 24px rgba(0,255,0,0.15), 0 4px 8px rgba(0,0,0,0.6);
@@ -59,8 +59,8 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 .terminal-title { float: left; line-height: 1.5em; color: #eee; font-weight: normal; }
 .text {
   display: inline-block; white-space: nowrap; overflow: hidden;
-  border-right: 0.2em solid green; margin-top: 1.5em;
-  animation: typeAndDelete 4s steps(11) infinite, blinkCursor 0.5s step-end infinite alternate;
+  margin-top: 1.5em;
+  animation: breatheText 2s ease-in-out infinite;
 }
 @keyframes spin{to{transform:rotate(360deg)}}
 
