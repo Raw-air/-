@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#0a0a14">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=23">
+  <link rel="stylesheet" href="style.css?v=24">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -281,13 +281,24 @@
         <input type="file" id="nav-icon-file-input" accept="image/*" style="display:none">
       </div>
 
-      <!-- 背景影片上傳 -->
+      <!-- 背景影片 (伺服器 URL) -->
       <div class="dev-card" style="margin-top:16px;">
-        <div class="dev-card-header">🎥 自訂背景影片</div>
-        <p class="dev-card-hint">上傳合適的影片 (MP4/WebM) 替代光球動畫。建議小於 20MB 以確保流暢運行。</p>
+        <div class="dev-card-header">🎥 伺服器背景影片</div>
+        <p class="dev-card-hint">輸入影片直連網址 (MP4/WebM)。</p>
         <div style="display:flex;flex-direction:column;gap:8px;">
-          <button class="action-btn wide" onclick="document.getElementById('bg-video-input').click()">選擇影片預覽</button>
-          <input type="file" id="bg-video-input" accept="video/mp4, video/webm" style="display:none" onchange="handleBgVideoUpload(event)">
+          <input type="text" id="bg-video-url" class="dev-input" placeholder="https://example.com/video.mp4" style="width:100%; padding:8px; border-radius:8px; background:rgba(0,0,0,0.3); color:#fff; border:1px solid rgba(255,255,255,0.2);">
+          
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+            <label style="color:#aaa; font-size:12px;">影片大小 (Scale)</label>
+            <input type="range" id="bg-video-scale" min="0.5" max="3" step="0.1" value="1.0" style="width:60%;" oninput="previewBgVideoStyle()">
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <label style="color:#aaa; font-size:12px;">透明度 (Opacity)</label>
+            <input type="range" id="bg-video-opacity" min="0" max="1" step="0.05" value="0.25" style="width:60%;" oninput="previewBgVideoStyle()">
+          </div>
+
+          <button class="action-btn wide" onclick="applyBgVideoUrl()">套用並載入</button>
           <button class="action-btn wide warning" onclick="clearBgVideo()">移除自訂影片</button>
         </div>
       </div>
