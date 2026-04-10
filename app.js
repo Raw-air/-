@@ -26,6 +26,39 @@ window.addEventListener('unhandledrejection', (e) => {
   showToast('未預期的錯誤: ' + (e.reason ? e.reason.message : 'Unknown'), 'error');
 });
 
+// ─── UI 清脆音效 (Web Audio API) ───────────────────────────────────────────
+let audioCtx = null;
+function playClickSound() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    // 清脆的 UI 滴答聲
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.04);
+    
+    gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime); // 舒服的音量
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.04);
+
+    oscillator.start(audioCtx.currentTime);
+    oscillator.stop(audioCtx.currentTime + 0.05);
+  } catch(e) {}
+}
+
+window.addEventListener('click', (e) => {
+  const isTarget = e.target.closest('button, .nav-item, .sq-card, .rc-date-clickable, .date-item, .student-row, .dev-trigger, .changelog-btn, .action-btn');
+  if (isTarget) playClickSound();
+}, true);
+
+// ─── 初始化 ─────────────────────────────────────────────────────────────────
+
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     state.currentDate = getTodayColumnName();
