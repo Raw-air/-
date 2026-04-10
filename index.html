@@ -9,20 +9,84 @@
   <meta name="theme-color" content="#0a0a14">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=39">
+  <link rel="stylesheet" href="style.css?v=41">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script>if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});</script>
+  <script>
+    if('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').then(reg => {
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              window.location.reload(); // 當有新版本 SW 啟動時自動強制重整
+            }
+          });
+        });
+      }).catch(()=>{});
+    }
+  </script>
 </head>
 <body>
 
   <!-- Loading -->
   <div id="loading-overlay" class="loading-overlay">
-    <div class="loading-spinner"></div>
-    <p>載入資料中...</p>
+    <!-- 駭客/指令碼背景特效區 -->
+    <div id="hacking-bg"></div>
+    
+    <div class="terminal-loader">
+      <div class="terminal-header">
+        <div class="terminal-title">Status</div>
+        <div class="terminal-controls">
+          <div class="control close"></div>
+          <div class="control minimize"></div>
+          <div class="control maximize"></div>
+        </div>
+      </div>
+      <div class="text">資料庫同步資料中...</div>
+    </div>
   </div>
+  <script>
+    (function(){
+      const logs = [
+        "[INFO] [Server thread/INFO]: Starting minecraft server version 1.20.4",
+        "[INFO] [Server thread/INFO]: Loading properties",
+        "[INFO] [Server thread/INFO]: Default game type: SURVIVAL",
+        "[INFO] [Server thread/INFO]: Generating keypair",
+        "[INFO] [Server thread/INFO]: Starting Minecraft server on *:25565",
+        "[INFO] [Server thread/INFO]: Using default channel type",
+        "[INFO] [Server thread/INFO]: Preparing level \"world\"",
+        "[INFO] [Server thread/INFO]: Preparing start region for dimension minecraft:overworld",
+        "[INFO] [Server thread/INFO]: Time elapsed: 1459 ms",
+        "[INFO] [Server thread/INFO]: Done (2.531s)! For help, type \"help\"",
+        "[API] Fetching Database ID... OK",
+        "[AUTH] Validating Bearer Token... 200 OK",
+        "[SYNC] Downloaded 4.2 MB of bed state records",
+        "[SYNC] Mapping user ID to Notion internal page tree",
+        "[WARN] Skipped bed 128 (marked as storage)",
+        "[INFO] Data sync complete. Ready for connections."
+      ];
+      const bg = document.getElementById('hacking-bg');
+      if(bg) {
+        let content = '';
+        /* Initialize with some random logs */
+        for(let i=0; i<40; i++){
+          content += logs[Math.floor(Math.random()*logs.length)] + "\\n";
+        }
+        bg.textContent = content;
+        /* Rapidly append lines */
+        setInterval(() => {
+          let lines = bg.textContent.split('\\n');
+          if(lines.length > 80) lines.splice(0, lines.length - 80);
+          lines.push(logs[Math.floor(Math.random()*logs.length)]);
+          bg.textContent = lines.join('\\n');
+          bg.scrollTop = bg.scrollHeight;
+        }, 80);
+      }
+    })();
+  </script>
   <div id="toast-container" class="toast-container"></div>
 
   <!-- 返回 -->
@@ -235,7 +299,23 @@
       <div class="settings-card-header">📡 連線狀態</div>
       <div id="conn-status" class="conn-badge">檢查中...</div>
       <div id="settings-info" class="settings-dim"></div>
+      <button class="action-btn wide warning" style="margin-top:12px;font-size:12px;padding:8px" onclick="clearSystemCache()">🗑️ 強制清除快取 (解Bug專用)</button>
     </div>
+
+    <script>
+      function clearSystemCache() {
+        if (!confirm('系統將會清除所有快取並重新載入，確定嗎？')) return;
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            for(let registration of registrations) { registration.unregister(); }
+          });
+        }
+        caches.keys().then(function(names) {
+          for (let name of names) caches.delete(name);
+        });
+        setTimeout(() => window.location.reload(true), 500);
+      }
+    </script>
 
     <div class="settings-card">
       <div class="settings-card-header">🏠 宿舍參數</div>
@@ -372,8 +452,8 @@
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=39"></script>
-  <script src="api.js?v=39"></script>
-  <script src="app.js?v=39"></script>
+  <script src="config.js?v=41"></script>
+  <script src="api.js?v=41"></script>
+  <script src="app.js?v=41"></script>
 </body>
 </html>
