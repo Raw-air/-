@@ -30,6 +30,14 @@ window.addEventListener('unhandledrejection', (e) => {
 let audioCtx = null;
 function playClickSound(type = 'default') {
   try {
+    if (type === 'dev_unlock') {
+      // 開放者解鎖改採用指定 MP3
+      const audio = new Audio('./Lp/6aa77c5e3bd7d98779628b82589dcb77.mp3');
+      audio.volume = 0.8;
+      audio.play().catch(() => {});
+      return; 
+    }
+
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
     
@@ -64,15 +72,6 @@ function playClickSound(type = 'default') {
       gainNode.gain.setValueAtTime(0.08, time);
       gainNode.gain.setTargetAtTime(0.001, time, 0.005);
       osc.start(time); osc.stop(time + 0.05);
-    } else if (type === 'dev_unlock') {
-      // 開發者模式解鎖：科技感上升重低音
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(440, time);
-      osc.frequency.exponentialRampToValueAtTime(880, time + 0.1);
-      osc.frequency.exponentialRampToValueAtTime(1760, time + 0.2);
-      gainNode.gain.setValueAtTime(0.1, time);
-      gainNode.gain.setTargetAtTime(0.001, time + 0.1, 0.05);
-      osc.start(time); osc.stop(time + 0.25);
     } else if (type === 'confirm') {
       // 確認/提交的明亮雙音感
       osc.type = 'triangle';
@@ -119,7 +118,7 @@ window.addEventListener('click', (e) => {
 
 // 針對 PIN 碼輸入框打字時發出 pin 音效
 document.addEventListener('input', (e) => {
-  if (e.target && e.target.id === 'pin-input') {
+  if (e.target && (e.target.id === 'pin-input' || e.target.id === 'dev-pin-input')) {
     playClickSound('pin');
   }
 });
