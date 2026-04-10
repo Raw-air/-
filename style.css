@@ -68,6 +68,7 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 #custom-video-bg {
   position: fixed; inset: 0; z-index: -3; /* 在所有東西背後 */
   pointer-events: none; overflow: hidden;
+  transition: opacity 0.5s ease-in-out;
 }
 #custom-video-bg video {
   width: 100%; height: 100%;
@@ -81,6 +82,7 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
   position: fixed; inset: 0; z-index: -2;
   pointer-events: none; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
+  transition: opacity 0.5s ease-in-out;
 }
 .home-anim-bg::before {
   content: '';

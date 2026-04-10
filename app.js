@@ -96,6 +96,13 @@ function navigateTo(page) {
   const fab = document.querySelector('.fab-empty-bed');
   if (fab) fab.style.display = (page === 'rollcall') ? 'flex' : 'none';
 
+  // 處理全域背景的淡出/淡入 (僅在首頁顯示)
+  const isHome = (page === 'home');
+  const customBg = document.getElementById('custom-video-bg');
+  const animBg = document.querySelector('.home-anim-bg');
+  if (customBg) customBg.style.opacity = isHome ? '1' : '0';
+  if (animBg) animBg.style.opacity = isHome ? '1' : '0';
+
   renderCurrentPage();
 }
 
