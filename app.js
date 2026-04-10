@@ -105,35 +105,42 @@ function renderHome() {
   // ── 斜線球體動畫 ──
   const animBg = document.querySelector('.home-anim-bg');
   if (animBg && !animBg.hasChildNodes()) {
-    const BALL_COUNT = 3;
-    for (let b = 0; b < BALL_COUNT; b++) {
-      const group = document.createElement('div');
-      group.className = 'ball-group';
-      const dur = 10 + Math.random() * 8;
-      const delay = b * (dur / BALL_COUNT);
-      group.style.setProperty('--dur', dur + 's');
-      group.style.setProperty('--delay', '-' + delay + 's');
-
-      // 球內 20 條線，高度嚴格按圓形方程分佈
-      const LINE_COUNT = 20;
-      for (let i = 0; i < LINE_COUNT; i++) {
-        const line = document.createElement('div');
-        line.className = 'anim-line';
-        // 水平位置：從 5% ~ 95% 均佈
-        const t = i / (LINE_COUNT - 1); // 0~1
-        const x = 5 + t * 90; // 5%~95%
-        // 圓形方程: h = 2 * R * sqrt(1 - (2t-1)^2)
-        // R = 容器半徑 = 130px
-        const normalized = 2 * t - 1; // -1 ~ 1
-        const circleY = Math.sqrt(Math.max(0, 1 - normalized * normalized));
-        const h = circleY * 240; // 最高 240px（直徑），邊緣趨近 0
-        if (h < 8) continue; // 太短的跳過
-        line.style.setProperty('--lx', x + '%');
-        line.style.setProperty('--lh', h + 'px');
-        line.style.opacity = (0.2 + circleY * 0.8).toFixed(2);
-        group.appendChild(line);
-      }
-      animBg.appendChild(group);
+    // 產生約 35 條線組成一個完整的球體
+    const LINE_COUNT = 35;
+    const SPHERE_H = 360; // 球體高度範圍
+    
+    for (let i = 0; i < LINE_COUNT; i++) {
+      const line = document.createElement('div');
+      line.className = 'anim-line';
+      
+      // t 從 0 到 1 (垂直分佈)
+      const t = i / (LINE_COUNT - 1);
+      const normalized = 2 * t - 1; // -1 to 1
+      
+      // 根據圓的方程式算出 x 寬度比例
+      // √(1 - y^2) 讓中間最寬，兩側最窄
+      const circleX = Math.sqrt(Math.max(0, 1 - normalized * normalized));
+      
+      // 最大寬度 (中間最粗，最長可達 300px)
+      const maxW = circleX * 300;
+      if (maxW < 10) continue; // 太短的跳過
+      
+      // 垂直位置分佈 (30% ~ 70% 之間)
+      const yPos = 30 + (t * 40); 
+      
+      // 這裡每條線共用一樣的 duration，但賦予他們微小的 delay 差異
+      // 使他看起來是一起移動的「一顆球」
+      const dur = 14; 
+      const delay = (i * 0.05); // 稍微錯開時間形成立體感
+      
+      line.style.setProperty('--max-w', maxW + 'px');
+      line.style.setProperty('--y', yPos + '%');
+      line.style.setProperty('--dur', dur + 's');
+      line.style.setProperty('--delay', delay + 's');
+      // 越靠近邊緣越透明
+      line.style.opacity = (0.2 + circleX * 0.8).toFixed(2);
+      
+      animBg.appendChild(line);
     }
   }
 
