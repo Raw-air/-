@@ -792,3 +792,12 @@ window.submitEmptyBed = submitEmptyBed;
 window.closeModal = closeModal;
 window.adjustSetting = adjustSetting;
 window.saveDormSettings = saveDormSettings;
+
+window.openSwapBedModal = openSwapBedModal;
+window.updateSwapFromBeds = updateSwapFromBeds;
+window.updateSwapToBeds = updateSwapToBeds;
+window.submitSwapBed = submitSwapBed;
+
+window.toggleDatePicker = toggleDatePicker;
+window.selectRollCallDate = selectRollCallDate;
+

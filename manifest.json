@@ -3,7 +3,7 @@
   "short_name": "碧苑點名",
   "description": "碧苑宿舍人性化點名管理系統",
   "start_url": "./index.html",
-  "display": "standalone",
+  "display": "fullscreen",
   "orientation": "portrait",
   "theme_color": "#080810",
   "background_color": "#080810",
