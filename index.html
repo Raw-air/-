@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -9,25 +10,113 @@
   <meta name="theme-color" content="#0a0a14">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=37">
+  <link rel="stylesheet" href="style.css?v=42">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script>if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});</script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').then(reg => {
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              window.location.reload(); // 當有新版本 SW 啟動時自動強制重整
+            }
+          });
+        });
+      }).catch(() => { });
+    }
+  </script>
 </head>
+
 <body>
 
   <!-- Loading -->
   <div id="loading-overlay" class="loading-overlay">
-    <div class="loading-spinner"></div>
-    <p>載入資料中...</p>
+    <!-- Minecraft 伺服器啟動日誌背景特效 -->
+    <pre id="hacking-bg"></pre>
+
+    <div class="terminal-loader">
+      <div class="terminal-header">
+        <div class="terminal-title">終端機</div>
+        <div class="terminal-controls">
+          <div class="control close"></div>
+          <div class="control minimize"></div>
+          <div class="control maximize"></div>
+        </div>
+      </div>
+      <div class="text">資料庫同步中...</div>
+    </div>
   </div>
+  <script>
+    (function () {
+      const logs = [
+        "[Server thread/INFO]: Starting minecraft server version 1.20.4",
+        "[Server thread/INFO]: Loading properties",
+        "[Server thread/INFO]: Default game type: SURVIVAL",
+        "[Server thread/INFO]: Generating keypair",
+        "[Server thread/INFO]: Starting Minecraft server on *:25565",
+        "[Server thread/INFO]: Using default channel type",
+        "[Server thread/INFO]: Preparing level \"world\"",
+        "[Server thread/INFO]: Preparing start region for dimension minecraft:overworld",
+        "[Server thread/INFO]: Preparing spawn area: 83%",
+        "[Server thread/INFO]: Time elapsed: 1459 ms",
+        "[Server thread/INFO]: Done (2.531s)! For help, type \"help\"",
+        "[Server thread/INFO]: Starting remote control listener",
+        "[Server thread/INFO]: RCON running on 0.0.0.0:25575",
+        "[Server thread/INFO]: Checking for auth services...",
+        "[Server thread/INFO]: Loading dimension minecraft:the_nether",
+        "[Server thread/INFO]: Loading dimension minecraft:the_end",
+        "[Server thread/INFO]: Player count: 0/20",
+        "[Server thread/WARN]: Ambiguity between arguments on line 4",
+        "[API] Connecting to WORKER_URL endpoint...",
+        "[API] GET /api/config → 200 OK (143ms)",
+        "[AUTH] Validating Bearer Token... 200 OK",
+        "[AUTH] Integration scope: read_content, update_content",
+        "[DB] Fetching MASTER_DB_ID schema...",
+        "[DB] Found 124 records",
+        "[SYNC] Downloaded 4.2 MB of bed state records",
+        "[SYNC] Mapping student IDs to Notion internal page tree",
+        "[SYNC] Building attendance matrix for current semester",
+        "[WARN] Bed 128 skipped — marked as 儲藏室",
+        "[WARN] Rate limit approaching: 3 req/s",
+        "[INFO] Applying room rules for double rooms 118/120/122/124/126",
+        "[INFO] changelog_db handshake OK",
+        "[INFO] Data sync complete. Ready for connections."
+      ];
+
+      const bg = document.getElementById('hacking-bg');
+      if (bg) {
+        const lines = [];
+        for (let i = 0; i < 60; i++) {
+          lines.push('[' + new Date().toTimeString().slice(0, 8) + '] ' + logs[Math.floor(Math.random() * logs.length)]);
+        }
+        bg.textContent = lines.join('\n');
+
+        function loopLogs() {
+          const allLines = bg.textContent.split('\n');
+          if (allLines.length > 120) allLines.splice(0, allLines.length - 120);
+          allLines.push('[' + new Date().toTimeString().slice(0, 8) + '] ' + logs[Math.floor(Math.random() * logs.length)]);
+          bg.textContent = allLines.join('\n');
+          bg.scrollTop = bg.scrollHeight;
+          
+          // 模擬終端機載入時的一卡一卡頓挫感
+          const nextDelay = Math.random() < 0.15 ? Math.random() * 600 + 300 : Math.random() * 60 + 20;
+          setTimeout(loopLogs, nextDelay);
+        }
+        setTimeout(loopLogs, 50);
+      }
+    })();
+  </script>
   <div id="toast-container" class="toast-container"></div>
 
   <!-- 返回 -->
   <button id="back-btn" class="back-btn" style="display:none" onclick="navigateTo('home')">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M15 18l-6-6 6-6" />
+    </svg>
     返回
   </button>
 
@@ -50,6 +139,9 @@
     </div>
     <p class="section-label">選擇你的中隊</p>
     <div id="squad-grid" class="squad-grid-3col"></div>
+
+    <p class="section-label" style="margin-top:24px;">幹部專區</p>
+    <div id="management-grid" style="display:flex;flex-direction:column;gap:12px;position:relative;z-index:1;"></div>
   </div>
 
   <!-- ═══════════ 點名 ═══════════ -->
@@ -78,7 +170,8 @@
 
     <div class="rc-confirm-container">
       <!-- 超明顯的確認按鈕 -->
-      <button id="rc-confirm-btn" class="rc-confirm-action" onclick="toggleSquadConfirm()" style="display:none;width:100%">
+      <button id="rc-confirm-btn" class="rc-confirm-action" onclick="toggleSquadConfirm()"
+        style="display:none;width:100%">
         <span id="rc-confirm-icon">⭕</span>
         <span id="rc-confirm-text">確認本中隊完成點名</span>
       </button>
@@ -235,7 +328,26 @@
       <div class="settings-card-header">📡 連線狀態</div>
       <div id="conn-status" class="conn-badge">檢查中...</div>
       <div id="settings-info" class="settings-dim"></div>
+      <button class="action-btn wide warning" style="margin-top:12px;font-size:12px;padding:8px"
+        onclick="clearSystemCache()">🗑️ 強制清除快取 (解Bug專用)</button>
     </div>
+
+    <script>
+      async function clearSystemCache() {
+        if (!confirm('系統將會清除所有快取並重新載入，確定嗎？')) return;
+        try {
+          if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map(reg => reg.unregister()));
+          }
+          const names = await caches.keys();
+          await Promise.all(names.map(name => caches.delete(name)));
+        } catch(e) {
+          console.error('Clear cache error:', e);
+        }
+        window.location.reload(true);
+      }
+    </script>
 
     <div class="settings-card">
       <div class="settings-card-header">🏠 宿舍參數</div>
@@ -271,6 +383,7 @@
       <button class="action-btn wide" onclick="loadData()">🔄 重新從 Notion 載入</button>
     </div>
 
+
     <!-- 開發者調適區入口 -->
     <div class="dev-trigger" onclick="openDevAuth()">
       <span class="dev-trigger-icon">🔧</span>
@@ -279,8 +392,56 @@
 
     <!-- 開發者面板（需要密碼） -->
     <div id="dev-panel" class="dev-panel">
-      <!-- 導覽列圖示上傳 -->
+      <!-- 幹部按鈕自訂 + 密碼 -->
       <div class="dev-card">
+        <div class="dev-card-header">👑 幹部專區設定</div>
+        <p class="dev-card-hint">設定首頁幹部按鈕的 EMOJI、名稱與登入密碼，儲存後即時同步至雲端。</p>
+
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <!-- 社長 -->
+          <div style="padding:12px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.25);border-radius:12px;">
+            <div style="font-size:12px;color:rgba(245,158,11,0.7);font-weight:700;margin-bottom:10px;">😒 社長</div>
+            <div style="display:flex;gap:8px;margin-bottom:8px;">
+              <input type="text" id="dev-icon-president" class="dev-input"
+                placeholder="EMOJI" maxlength="4"
+                style="width:56px;text-align:center;font-size:22px;padding:6px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(245,158,11,0.4);">
+              <input type="text" id="dev-label-president" class="dev-input"
+                placeholder="按鈕名稱"
+                style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(245,158,11,0.4);">
+              <button class="action-btn" style="padding:8px 12px;font-size:12px;" onclick="saveRoleAppearance('president')">🎨</button>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <input type="password" id="cfg-pin-president" class="dev-input" maxlength="6" inputmode="numeric"
+                placeholder="6 位數登入密碼"
+                style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(245,158,11,0.4);letter-spacing:4px;">
+              <button class="action-btn" style="padding:8px 12px;font-size:12px;" onclick="saveRolePIN('president', 'cfg-pin-president')">🔐</button>
+            </div>
+          </div>
+
+          <!-- 副社長 -->
+          <div style="padding:12px;background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.25);border-radius:12px;">
+            <div style="font-size:12px;color:rgba(16,185,129,0.7);font-weight:700;margin-bottom:10px;">🥝 副社長</div>
+            <div style="display:flex;gap:8px;margin-bottom:8px;">
+              <input type="text" id="dev-icon-vice-president" class="dev-input"
+                placeholder="EMOJI" maxlength="4"
+                style="width:56px;text-align:center;font-size:22px;padding:6px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(16,185,129,0.4);">
+              <input type="text" id="dev-label-vice-president" class="dev-input"
+                placeholder="按鈕名稱"
+                style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(16,185,129,0.4);">
+              <button class="action-btn" style="padding:8px 12px;font-size:12px;" onclick="saveRoleAppearance('vice_president')">🎨</button>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <input type="password" id="cfg-pin-vice-president" class="dev-input" maxlength="6" inputmode="numeric"
+                placeholder="6 位數登入密碼"
+                style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(16,185,129,0.4);letter-spacing:4px;">
+              <button class="action-btn" style="padding:8px 12px;font-size:12px;" onclick="saveRolePIN('vice_president', 'cfg-pin-vice-president')">🔐</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 導覽列圖示上傳 -->
+      <div class="dev-card" style="margin-top:16px;">
         <div class="dev-card-header">🎨 導覽列圖示</div>
         <p class="dev-card-hint">為底部導覽列的每個頁面上傳自訂圖示（取代 EMOJI）</p>
         <div class="icon-upload-grid" id="nav-icon-upload-grid"></div>
@@ -292,16 +453,19 @@
         <div class="dev-card-header">🎥 伺服器背景影片</div>
         <p class="dev-card-hint">輸入影片直連網址 (MP4/WebM)。</p>
         <div style="display:flex;flex-direction:column;gap:8px;">
-          <input type="text" id="bg-video-url" class="dev-input" placeholder="https://example.com/video.mp4" style="width:100%; padding:8px; border-radius:8px; background:rgba(0,0,0,0.3); color:#fff; border:1px solid rgba(255,255,255,0.2);">
-          
+          <input type="text" id="bg-video-url" class="dev-input" placeholder="https://example.com/video.mp4"
+            style="width:100%; padding:8px; border-radius:8px; background:rgba(0,0,0,0.3); color:#fff; border:1px solid rgba(255,255,255,0.2);">
+
           <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
             <label style="color:#aaa; font-size:12px;">影片大小 (Scale)</label>
-            <input type="range" id="bg-video-scale" min="0.5" max="3" step="0.1" value="1.0" style="width:60%;" oninput="previewBgVideoStyle()">
+            <input type="range" id="bg-video-scale" min="0.5" max="3" step="0.1" value="1.0" style="width:60%;"
+              oninput="previewBgVideoStyle()">
           </div>
 
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <label style="color:#aaa; font-size:12px;">透明度 (Opacity)</label>
-            <input type="range" id="bg-video-opacity" min="0" max="1" step="0.05" value="0.25" style="width:60%;" oninput="previewBgVideoStyle()">
+            <input type="range" id="bg-video-opacity" min="0" max="1" step="0.05" value="0.25" style="width:60%;"
+              oninput="previewBgVideoStyle()">
           </div>
 
           <button class="action-btn wide" onclick="applyBgVideoUrl()">套用並載入</button>
@@ -313,18 +477,41 @@
       <div class="dev-card" style="margin-top:16px;">
         <div class="dev-card-header">📢 系統更新日誌發布</div>
         <p class="dev-card-hint">新發布的內容會自動累加在歷史公告的「最上方」，不會覆寫舊資料。請使用 Markdown 語法撰寫即將新增的更新內容。</p>
-        <textarea id="dev-changelog-input" class="dev-input" style="width:100%; height:150px; padding:12px; border-radius:8px; background:rgba(0,0,0,0.3); color:#fff; border:1px solid rgba(255,255,255,0.2); margin-bottom:8px; font-family:monospace; resize:vertical; font-size:13px" placeholder="### 🚀 版本 22.0 更新&#10;- 新增過場動畫&#10;- 修復版面問題"></textarea>
+        <textarea id="dev-changelog-input" class="dev-input"
+          style="width:100%; height:150px; padding:12px; border-radius:8px; background:rgba(0,0,0,0.3); color:#fff; border:1px solid rgba(255,255,255,0.2); margin-bottom:8px; font-family:monospace; resize:vertical; font-size:13px"
+          placeholder="### 🚀 版本 22.0 更新&#10;- 新增過場動畫&#10;- 修復版面問題"></textarea>
         <button class="action-btn wide" onclick="saveChangelog()">💾 儲存並新增公告</button>
+        <button class="action-btn wide warning" style="margin-top:8px" onclick="setupChangelogDB()">⚙️
+          自動建立專屬公告資料庫</button>
       </div>
     </div>
   </div>
 
+  <script>
+    async function setupChangelogDB() {
+      if (!confirm("這將會在 Notion 自動建立一個新的公告資料庫。確定要執行嗎？")) return;
+      try {
+        const res = await fetch(window.CONFIG.WORKER_URL + '/api/setup-changelog-db', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          prompt('🎉 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 CHANGELOG_DB_ID：', data.CHANGELOG_DB_ID);
+        } else {
+          alert('建立失敗: ' + data.error);
+        }
+      } catch (err) {
+        alert('發生錯誤: ' + err.message);
+      }
+    }
+  </script>
+
   <!-- 系統更新日誌 Modal -->
   <div id="changelog-modal" class="modal-overlay">
     <div class="modal-card" style="max-height:80vh;display:flex;flex-direction:column;max-width:500px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:12px;">
+      <div
+        style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:12px;">
         <h3 style="margin:0;font-size:18px">📢 系統最新公告與日誌</h3>
-        <button onclick="closeChangelogModal()" style="background:none;border:none;color:var(--dim);font-size:24px;cursor:pointer">&times;</button>
+        <button onclick="closeChangelogModal()"
+          style="background:none;border:none;color:var(--dim);font-size:24px;cursor:pointer">&times;</button>
       </div>
       <div id="changelog-content" class="markdown-body" style="overflow-y:auto;flex:1;padding-right:8px;">
         <!-- Markdown 會在此處渲染 -->載入中...
@@ -348,14 +535,16 @@
   <!-- 底部導航 -->
   <div class="bottom-nav-glow"></div>
   <nav class="bottom-nav">
-    <div class="nav-item active" data-page="home"><span class="nav-icon">🏠</span><span class="nav-label">點名</span></div>
+    <div class="nav-item active" data-page="home"><span class="nav-icon">🏠</span><span class="nav-label">點名</span>
+    </div>
     <div class="nav-item" data-page="summary"><span class="nav-icon">📊</span><span class="nav-label">總表</span></div>
     <div class="nav-item" data-page="history"><span class="nav-icon">📅</span><span class="nav-label">歷史</span></div>
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=37"></script>
-  <script src="api.js?v=37"></script>
-  <script src="app.js?v=37"></script>
+  <script src="config.js?v=46"></script>
+  <script src="api.js?v=46"></script>
+  <script src="app.js?v=46"></script>
 </body>
+
 </html>

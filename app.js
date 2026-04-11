@@ -30,9 +30,17 @@ window.addEventListener('unhandledrejection', (e) => {
 let audioCtx = null;
 function playClickSound(type = 'default') {
   try {
+    if (type === 'dev_unlock') {
+      // 開放者解鎖改採用指定 MP3
+      const audio = new Audio('./Lp/6aa77c5e3bd7d98779628b82589dcb77.mp3');
+      audio.volume = 0.8;
+      audio.play().catch(() => { });
+      return;
+    }
+
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
-    
+
     const time = audioCtx.currentTime;
     const osc = audioCtx.createOscillator();
     const gainNode = audioCtx.createGain();
@@ -46,7 +54,7 @@ function playClickSound(type = 'default') {
       osc.frequency.setValueAtTime(120, time); // 低頻產生悶響敲擊感
       gainNode.gain.setValueAtTime(0.08, time);
       // 極短時間內急速衰減，製造清脆斷音
-      gainNode.gain.setTargetAtTime(0.001, time, 0.003); 
+      gainNode.gain.setTargetAtTime(0.001, time, 0.003);
       osc.start(time); osc.stop(time + 0.02);
     } else if (type === 'back') {
       // 返回/關閉退出的下沉音
@@ -56,6 +64,14 @@ function playClickSound(type = 'default') {
       gainNode.gain.setValueAtTime(0.12, time);
       gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.06);
       osc.start(time); osc.stop(time + 0.07);
+    } else if (type === 'unlock') {
+      // 解鎖的短促「喀啦」清脆聲 (快速雙音頻)
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(600, time);
+      osc.frequency.setValueAtTime(1000, time + 0.02); // 第二下喀聲的短促高音
+      gainNode.gain.setValueAtTime(0.08, time);
+      gainNode.gain.setTargetAtTime(0.001, time, 0.005);
+      osc.start(time); osc.stop(time + 0.05);
     } else if (type === 'confirm') {
       // 確認/提交的明亮雙音感
       osc.type = 'triangle';
@@ -73,7 +89,7 @@ function playClickSound(type = 'default') {
       gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.04);
       osc.start(time); osc.stop(time + 0.05);
     }
-  } catch(e) {}
+  } catch (e) { }
 }
 
 window.addEventListener('click', (e) => {
@@ -81,16 +97,20 @@ window.addEventListener('click', (e) => {
   if (target) {
     if (target.id === 'back-btn' || target.classList.contains('cancel') || target.id === 'pin-cancel') {
       playClickSound('back');
-    } else if (target.classList.contains('confirm') || target.id === 'submit-btn' || target.id === 'pin-confirm' || target.id === 'rc-confirm-btn') {
+    } else if (target.id === 'pin-confirm') {
+      playClickSound('unlock'); // 解鎖中隊專屬的喀啦聲
+    } else if (target.id === 'dev-pin-confirm') {
+      playClickSound('dev_unlock'); // 開發者解鎖專屬科技音
+    } else if (target.classList.contains('confirm') || target.id === 'submit-btn' || target.id === 'rc-confirm-btn') {
       playClickSound('confirm');
     } else if (target.closest('.sq-card')) {
       playClickSound('default');
     } else {
       // 除了點擊 modal 背板外，其他互動都發預設音效
       if (!target.classList.contains('modal-overlay') || e.target === target) {
-         if (e.target.closest('.modal-card')) return; // ignore clicks inside modal empty areas
-         if (target.classList.contains('modal-overlay')) playClickSound('back');
-         else playClickSound('default');
+        if (e.target.closest('.modal-card')) return; // ignore clicks inside modal empty areas
+        if (target.classList.contains('modal-overlay')) playClickSound('back');
+        else playClickSound('default');
       }
     }
   }
@@ -98,7 +118,7 @@ window.addEventListener('click', (e) => {
 
 // 針對 PIN 碼輸入框打字時發出 pin 音效
 document.addEventListener('input', (e) => {
-  if (e.target && e.target.id === 'pin-input') {
+  if (e.target && (e.target.id === 'pin-input' || e.target.id === 'dev-pin-input')) {
     playClickSound('pin');
   }
 });
@@ -126,7 +146,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           state.confirmedSquads = newConfirmed;
           if (currentPage === 'summary') renderSummary();
         }
-      } catch(e){}
+      } catch (e) { }
     }, 15000);
 
   } catch (err) {
@@ -138,20 +158,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function loadData() {
   try {
     showLoading(true);
-    const [roster, config] = await Promise.all([
+    const [roster, config, changelogs] = await Promise.all([
       window._api.getRoster(),
       window._api.getConfig(),
+      window._api.getChangelog().catch(() => []) // 容錯處理：若尚未設定 DB 不會整個炸掉
     ]);
     state.students = roster.students || [];
     state.dateColumns = roster.dateColumns || [];
     state.config = config || {};
+    state.changelogs = changelogs || [];
 
     // 套用硬性房間規則
     applyRoomRules();
-    
+
     // 套用全域背景影片設定
     loadGlobalBgVideo();
-    
+
     const today = getTodayColumnName();
     const confVal = state.config['confirm_' + today];
     if (confVal) state.confirmedSquads = confVal.split(',').filter(Boolean);
@@ -159,6 +181,7 @@ async function loadData() {
 
     showLoading(false);
     renderCurrentPage();
+    checkChangelogDot();
     showToast(`已載入 ${state.students.length} 位學生`, 'success');
   } catch (err) {
     showLoading(false);
@@ -166,23 +189,45 @@ async function loadData() {
   }
 }
 
+// 檢查首頁紅點
+function checkChangelogDot() {
+  const dot = document.querySelector('.changelog-dot');
+  if (!dot) return;
+  if (state.changelogs && state.changelogs.length > 0) {
+    const latestId = state.changelogs[0].id;
+    const lastSeen = localStorage.getItem('last_seen_changelog');
+    if (lastSeen !== latestId) {
+      dot.style.display = 'block';
+    } else {
+      dot.style.display = 'none';
+    }
+  } else {
+    dot.style.display = 'none';
+  }
+}
+
 // ── 最新公告與日誌 (Changelog) ──
 function openChangelogModal() {
-  // 找出所有 changelog 項目並按時間反序排列 (最新的在最上面)
-  const entries = Object.keys(state.config)
+  // 從獨立資料庫取得的新版公告
+  const newEntries = (state.changelogs || []).map(log => log.content);
+
+  // 兼容設定資料庫中的舊版公告
+  const legacyEntries = Object.keys(state.config)
     .filter(k => k.startsWith('changelog_entry_'))
     .sort()
     .reverse()
     .map(k => state.config[k]);
-  
-  // 兼容舊版單一欄位
+
   if (state.config['changelog_md']) {
-    entries.push(state.config['changelog_md']);
+    legacyEntries.push(state.config['changelog_md']);
   }
 
-  const mdContent = entries.join('\n\n') || '目前沒有最新公告。';
+  // 合併
+  const allEntries = [...newEntries, ...legacyEntries];
+  const mdContent = allEntries.join('\n\n') || '目前沒有最新公告。';
+
   const htmlContent = typeof marked !== 'undefined' ? marked.parse(mdContent) : `<pre style="white-space:pre-wrap;font-family:inherit;">${mdContent}</pre>`;
-  
+
   const contentEl = document.getElementById('changelog-content');
   contentEl.innerHTML = htmlContent;
 
@@ -197,14 +242,14 @@ function openChangelogModal() {
       wrapper.style.marginLeft = '4px';
       wrapper.style.marginTop = '8px';
       wrapper.style.marginBottom = '20px';
-      
+
       let nextNode = h3.nextElementSibling;
       while (nextNode && nextNode.tagName !== 'H3' && nextNode.tagName !== 'H2' && nextNode.tagName !== 'H1') {
         const toMove = nextNode;
         nextNode = nextNode.nextElementSibling;
         wrapper.appendChild(toMove);
       }
-      
+
       h3.parentNode.insertBefore(wrapper, h3.nextSibling);
 
       h3.style.cursor = 'pointer';
@@ -216,7 +261,7 @@ function openChangelogModal() {
       h3.style.borderRadius = '8px';
       h3.style.marginTop = '0';
       h3.style.marginBottom = '0';
-      
+
       // 添加箭頭
       const chevron = document.createElement('span');
       chevron.innerHTML = i === 0 ? '▲' : '▼';
@@ -231,6 +276,13 @@ function openChangelogModal() {
         chevron.innerHTML = isHidden ? '▲' : '▼';
       };
     });
+  }
+
+  // 記錄已讀最新公告
+  if (state.changelogs && state.changelogs.length > 0) {
+    localStorage.setItem('last_seen_changelog', state.changelogs[0].id);
+    const dot = document.querySelector('.changelog-dot');
+    if (dot) dot.style.display = 'none';
   }
 
   document.getElementById('changelog-modal').classList.add('visible');
@@ -250,14 +302,16 @@ async function saveChangelog() {
 
   showLoading(true);
   try {
-    const key = `changelog_entry_${Date.now()}`;
-    await window._api.setConfig({ [key]: content });
-    state.config[key] = content;
-    
-    document.getElementById('dev-changelog-input').value = ''; // 清空讓下次好輸入
-    showToast('發布成功！已新增至歷史頂端', 'success');
-  } catch(e) {
-    showToast('發布失敗：' + e.message, 'error');
+    await window._api.postChangelog(content);
+    // 重新載入公告資料來更新畫面
+    const logs = await window._api.getChangelog().catch(() => []);
+    state.changelogs = logs;
+    checkChangelogDot();
+
+    document.getElementById('dev-changelog-input').value = '';
+    showToast('發布成功！已新增至公告資料庫', 'success');
+  } catch (e) {
+    showToast('發布失敗：請檢查設定 ' + e.message, 'error');
   } finally {
     showLoading(false);
   }
@@ -271,6 +325,7 @@ function initDevChangelog() {
 
 // ─── 導航 ───────────────────────────────────────────────────────────────────
 let currentPage = 'home';
+let isInitialHomeRender = true;
 
 function setupNav() {
   document.querySelectorAll('.nav-item').forEach(item => {
@@ -294,7 +349,7 @@ function navigateTo(page) {
   if (fab) fab.style.display = (page === 'rollcall') ? 'flex' : 'none';
 
   const fromEl = document.getElementById(`page-${fromPage}`);
-  const toEl   = document.getElementById(`page-${page}`);
+  const toEl = document.getElementById(`page-${page}`);
 
   // 全域背景滑動效果
   const isHome = (page === 'home');
@@ -334,49 +389,49 @@ function renderHome() {
   // 日期
   const dateEl = document.getElementById('home-date');
   const now = new Date();
-  const weekDay = ['日','一','二','三','四','五','六'][now.getDay()];
-  dateEl.textContent = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 星期${weekDay}`;
+  const weekDay = ['日', '一', '二', '三', '四', '五', '六'][now.getDay()];
+  dateEl.textContent = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 星期${weekDay}`;
 
   // ── 斜線球體動畫 ──
   const animBg = document.querySelector('.home-anim-bg');
   if (animBg && !animBg.hasChildNodes()) {
     const sphere = document.createElement('div');
     sphere.className = 'ball-sphere';
-    
+
     // 產生 45 條水平線組成更綿密的高級光球
     const LINE_COUNT = 45;
-    
+
     for (let i = 0; i < LINE_COUNT; i++) {
-        const line = document.createElement('div');
-        line.className = 'anim-line';
-        
-        const t = i / (LINE_COUNT - 1);
-        const normalized = 2 * t - 1; // -1 to 1
-        
-        // 根據圓形公式 √(1 - y^2) 讓中間最寬，兩側漸窄
-        const circleX = Math.sqrt(Math.max(0, 1 - normalized * normalized));
-        const maxW = circleX * 360; // 容器寬度為 360px
-        
-        if (maxW < 12) continue; // 忽略太短的雜訊
-        
-        // y 軸位置 0% ~ 100%
-        const yPos = t * 100;
-        
-        // 更具藝術感的錯落 delay 與呼吸頻率
-        const dur = (Math.random() * 2 + 7.5).toFixed(2); 
-        const delay = (i * 0.05).toFixed(2); 
-        
-        // 高級色域動態色相 (220~270度左右，藍紫漸變)
-        const hue = 220 + (normalized * 30) + (Math.random() * 20);
-        
-        line.style.setProperty('--w', maxW + 'px');
-        line.style.setProperty('--y', yPos + '%');
-        line.style.setProperty('--dur', dur + 's');
-        line.style.setProperty('--delay', delay + 's');
-        line.style.setProperty('--op', (0.15 + circleX * 0.85).toFixed(2));
-        line.style.setProperty('--hue', Math.floor(hue));
-        
-        sphere.appendChild(line);
+      const line = document.createElement('div');
+      line.className = 'anim-line';
+
+      const t = i / (LINE_COUNT - 1);
+      const normalized = 2 * t - 1; // -1 to 1
+
+      // 根據圓形公式 √(1 - y^2) 讓中間最寬，兩側漸窄
+      const circleX = Math.sqrt(Math.max(0, 1 - normalized * normalized));
+      const maxW = circleX * 360; // 容器寬度為 360px
+
+      if (maxW < 12) continue; // 忽略太短的雜訊
+
+      // y 軸位置 0% ~ 100%
+      const yPos = t * 100;
+
+      // 更具藝術感的錯落 delay 與呼吸頻率
+      const dur = (Math.random() * 2 + 7.5).toFixed(2);
+      const delay = (i * 0.05).toFixed(2);
+
+      // 高級色域動態色相 (220~270度左右，藍紫漸變)
+      const hue = 220 + (normalized * 30) + (Math.random() * 20);
+
+      line.style.setProperty('--w', maxW + 'px');
+      line.style.setProperty('--y', yPos + '%');
+      line.style.setProperty('--dur', dur + 's');
+      line.style.setProperty('--delay', delay + 's');
+      line.style.setProperty('--op', (0.15 + circleX * 0.85).toFixed(2));
+      line.style.setProperty('--hue', Math.floor(hue));
+
+      sphere.appendChild(line);
     }
     animBg.appendChild(sphere);
   }
@@ -385,18 +440,59 @@ function renderHome() {
   const grid = document.getElementById('squad-grid');
   const floorLabels = { 1: '1樓', 2: '2樓', 3: '3樓' };
 
-  grid.innerHTML = CONFIG.SQUADS.map(sq => {
+  grid.innerHTML = CONFIG.SQUADS.map((sq, i) => {
     const count = state.students.filter(s => s.squad === sq.id && !s.isEmpty && !s.hidden).length;
     const floor = sq.floor;
     const type = sq.odd ? '單數房' : '雙數房';
+
+    const animClass = isInitialHomeRender ? 'pop-initial' : 'pop-return';
+
+    const baseDelay = isInitialHomeRender ? 3.0 : 0; // 折衷給您 3.0 秒
+    const delay = (baseDelay + i * 0.03).toFixed(2) + 's';
+
     return `
-      <div class="sq-card" style="--sq-c:${sq.color}" onclick="enterSquad('${sq.id}')">
+      <div class="sq-card ${animClass}" style="--sq-c:${sq.color}; animation-delay: ${delay}; -webkit-animation-delay: ${delay};" onclick="enterSquad('${sq.id}')">
         <div class="sq-badge" style="background:${sq.color}">${floor}</div>
         <div class="sq-name">${sq.id}</div>
         <div class="sq-desc">${floorLabels[floor]}・${type}</div>
       </div>
     `;
   }).join('');
+
+  // 幹部管理按鈕
+  const managementGrid = document.getElementById('management-grid');
+  if (managementGrid) {
+    const roles = [
+      {
+        id: 'president',
+        label: state.config['role_label_president'] || '社長管理選單',
+        color: '#f59e0b',
+        icon: state.config['role_icon_president'] || '😒'
+      },
+      {
+        id: 'vice_president',
+        label: state.config['role_label_vice_president'] || '副社長管理選單',
+        color: '#10b981',
+        icon: state.config['role_icon_vice_president'] || '🥝'
+      }
+    ];
+    // 接續中隊卡片的動畫延遲時間
+    const squadCount = CONFIG.SQUADS.length;
+    managementGrid.innerHTML = roles.map((role, i) => {
+      const animClass = isInitialHomeRender ? 'pop-initial' : 'pop-return';
+      const baseDelay = isInitialHomeRender ? 3.0 : 0;
+      const delay = (baseDelay + (squadCount + i) * 0.03).toFixed(2) + 's';
+
+      return `
+        <div class="sq-card ${animClass}" style="--sq-c:${role.color}; animation-delay: ${delay}; -webkit-animation-delay: ${delay}; padding: 18px; display:flex; align-items:center; justify-content:center; gap: 12px; border-radius: 16px;" onclick="enterManagement('${role.id}', '${role.label}')">
+          <div style="font-size:24px; filter:drop-shadow(0 2px 8px ${role.color}80);">${role.icon}</div>
+          <div class="sq-name" style="margin:0; font-size:18px; font-weight:800; letter-spacing:1px;">${role.label}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  isInitialHomeRender = false;
 }
 
 function enterSquad(squadId) {
@@ -416,12 +512,20 @@ function enterSquad(squadId) {
   }
 }
 
+function enterManagement(roleId, title) {
+  // 自動進入需密碼的驗證程序 (6位數要求由 maxlength="6" 配合 Notion pin_${roleId} 提供)
+  showPinDialog(roleId, () => {
+    showToast(`歡迎進入，${title}！專屬功能建置中...`, 'success');
+    // 未來擴充：navigateTo('president_dashboard');
+  }, `🔐 ${title} 身分驗證`);
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // 日期選擇器
 // ═════════════════════════════════════════════════════════════════════════════
 function toggleDatePicker() {
   const panel = document.getElementById('date-picker-panel');
-  const btn   = document.getElementById('rc-date-btn');
+  const btn = document.getElementById('rc-date-btn');
   const isOpen = panel.classList.contains('open');
   if (isOpen) {
     closeDatePicker();
@@ -439,13 +543,13 @@ function closeDatePicker() {
 
 function renderDatePicker() {
   const today = getTodayColumnName();
-  const list  = document.getElementById('date-picker-list');
+  const list = document.getElementById('date-picker-list');
   // 倒序排列：最新的在最上面
   const dates = [...state.dateColumns].reverse();
   list.innerHTML = dates.map(d => {
-    const isActive  = d === state.currentDate;
-    const isToday   = d === today;
-    return `<div class="date-item${isActive?' active':''}${isToday?' today-marker':''}"
+    const isActive = d === state.currentDate;
+    const isToday = d === today;
+    return `<div class="date-item${isActive ? ' active' : ''}${isToday ? ' today-marker' : ''}"
                  onclick="selectRollCallDate('${d}')">${d}</div>`;
   }).join('');
   // 自動捲到選中的日期
@@ -463,7 +567,7 @@ function selectRollCallDate(date) {
 
 // 點選面板外關閉
 document.addEventListener('click', e => {
-  const btn   = document.getElementById('rc-date-btn');
+  const btn = document.getElementById('rc-date-btn');
   const panel = document.getElementById('date-picker-panel');
   if (btn && panel && !btn.contains(e.target) && !panel.contains(e.target)) {
     closeDatePicker();
@@ -495,20 +599,20 @@ function renderRollCall() {
     const absent = status !== '✓';
     const isPending = state.changes.some(c => c.pageId === s.id && c.date === state.currentDate);
     html += `
-      <div class="student-row ${s.isEmpty?'empty-bed':''} ${absent?'absent':''}"
+      <div class="student-row ${s.isEmpty ? 'empty-bed' : ''} ${absent ? 'absent' : ''}"
            data-pid="${s.id}"
-           onclick="${s.isEmpty?'':`toggleStatus('${s.id}')`}">
+           onclick="${s.isEmpty ? '' : `toggleStatus('${s.id}')`}">
         <div class="student-info">
           <div class="student-bed" style="background:${getSquadColor(state.currentSquad)}">${s.bed}</div>
           <div>
-            <div class="student-name">${s.isEmpty?'（空床）':s.name}${s.isForeign?' 🌏':''}</div>
-            <div class="student-meta">${s.class||''} ${s.studentId||''}</div>
+            <div class="student-name">${s.isEmpty ? '（空床）' : s.name}${s.isForeign ? ' 🌏' : ''}</div>
+            <div class="student-meta">${s.class || ''} ${s.studentId || ''}</div>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:6px">
-          ${s.isEmpty?'<span class="empty-tag">空床</span>':
-            `<div class="status-badge" style="background:${si.color}20;color:${si.color};border:1px solid ${si.color}40">${si.icon} ${si.label}</div>`}
-          <span class="sync-dot${isPending?' pending':''}"></span>
+          ${s.isEmpty ? '<span class="empty-tag">空床</span>' :
+        `<div class="status-badge" style="background:${si.color}20;color:${si.color};border:1px solid ${si.color}40">${si.icon} ${si.label}</div>`}
+          <span class="sync-dot${isPending ? ' pending' : ''}"></span>
         </div>
       </div>`;
   }
@@ -524,8 +628,8 @@ function toggleStatus(pageId) {
   const s = state.students.find(x => x.id === pageId);
   if (!s || s.isEmpty) return;
 
-  const cur  = s.attendance[state.currentDate] || '✓';
-  const next = { '✓':'◎', '◎':'✘', '✘':'✓', '△':'✓' }[cur] || '✓';
+  const cur = s.attendance[state.currentDate] || '✓';
+  const next = { '✓': '◎', '◎': '✘', '✘': '✓', '△': '✓' }[cur] || '✓';
   s.attendance[state.currentDate] = next;
 
   // 保留在 changes 以供提交按鈕使用
@@ -564,7 +668,7 @@ function showSyncDot(pageId, state) {
       const dot = row.querySelector('.sync-dot');
       if (dot) {
         dot.className = `sync-dot ${state}`;
-        setTimeout(() => dot.classList.remove('ok','err'), 2000);
+        setTimeout(() => dot.classList.remove('ok', 'err'), 2000);
       }
       break;
     }
@@ -573,8 +677,8 @@ function showSyncDot(pageId, state) {
 
 function updateRollCallStats() {
   const ss = state.students.filter(s => s.squad === state.currentSquad && !s.isEmpty && !s.hidden);
-  let p=0, l=0, a=0;
-  for (const s of ss) { const v = s.attendance[state.currentDate]||'✓'; if(v==='✓')p++; else if(v==='◎'||v==='△')l++; else a++; }
+  let p = 0, l = 0, a = 0;
+  for (const s of ss) { const v = s.attendance[state.currentDate] || '✓'; if (v === '✓') p++; else if (v === '◎' || v === '△') l++; else a++; }
   document.getElementById('rc-stat-should').textContent = ss.length;
   document.getElementById('rc-stat-present').textContent = p;
   document.getElementById('rc-stat-leave').textContent = l;
@@ -594,48 +698,71 @@ function updateRollCallStats() {
 
 async function toggleSquadConfirm() {
   const sq = state.currentSquad;
-  if (state.confirmedSquads.includes(sq)) {
-    state.confirmedSquads = state.confirmedSquads.filter(s => s !== sq);
+  const btn = document.getElementById('rc-confirm-btn');
+
+  // 防呆：如果正在同步，忽略重複點擊
+  if (btn.disabled) return;
+
+  const isCurrentlyConfirmed = state.confirmedSquads.includes(sq);
+
+  // 顯示載入中狀態 (卡住按鈕不讓使用者亂點)
+  btn.disabled = true;
+  document.getElementById('rc-confirm-text').textContent = '⏳ 即時同步中...';
+
+  // 預計要變成的最終結果
+  let targetSquads = [];
+  if (isCurrentlyConfirmed) {
+    targetSquads = state.confirmedSquads.filter(s => s !== sq);
   } else {
-    state.confirmedSquads.push(sq);
+    targetSquads = [...state.confirmedSquads, sq];
   }
-  updateRollCallStats();
-  
+
   const today = getTodayColumnName();
   try {
-    // 儲存到 Notion (系統全域共用)
-    await window._api.setConfig({ ['confirm_' + today]: state.confirmedSquads.join(',') });
-  } catch(e) {
+    // 儲存到 Notion (系統全域共用)，需等候完成才改變本地狀態
+    await window._api.setConfig({ ['confirm_' + today]: targetSquads.join(',') });
+
+    // 如果沒有拋出錯誤，代表網路更新成功！
+    state.confirmedSquads = targetSquads;
+    state.config['confirm_' + today] = targetSquads.join(',');
+
+    showToast(isCurrentlyConfirmed ? '已取消回報' : '✅ 點名回報成功！已即時同步至總表', 'success');
+  } catch (e) {
     console.error('儲存確認狀態失敗', e);
+    showToast('信號不穩定，回報失敗，請重試', 'error');
+  } finally {
+    // 放開按鈕，並依據最新（或被還原）的資料重新渲染按鈕狀態
+    btn.disabled = false;
+    updateRollCallStats();
   }
 }
 
 function setupSubmitButton() {
   const btn = document.getElementById('submit-btn');
   btn.onclick = async () => {
-    if (!state.changes.length) { showToast('沒有需要提交的變更','info'); return; }
+    if (!state.changes.length) { showToast('沒有需要提交的變更', 'info'); return; }
     btn.disabled = true; btn.textContent = '⏳ 提交中...';
     try {
-      for (let i=0; i<state.changes.length; i+=45)
-        await window._api.updateAttendance(state.changes.slice(i,i+45));
-      showToast(`已提交 ${state.changes.length} 筆變更`,'success');
+      for (let i = 0; i < state.changes.length; i += 45)
+        await window._api.updateAttendance(state.changes.slice(i, i + 45));
+      showToast(`已提交 ${state.changes.length} 筆變更`, 'success');
       showSubmitSuccess();
       state.changes = [];
-    } catch (err) { showToast('提交失敗：'+err.message,'error'); }
+    } catch (err) { showToast('提交失敗：' + err.message, 'error'); }
     finally { btn.disabled = false; btn.textContent = '✅ 提交今日點名'; }
   };
 }
 
 function showSubmitSuccess() {
   const ss = state.students.filter(s => s.squad === state.currentSquad && !s.isEmpty && !s.hidden);
-  let p=0,l=0,a=0;
-  for (const s of ss) { const v=s.attendance[state.currentDate]||'✓'; if(v==='✓')p++; else if(v==='◎'||v==='△')l++; else a++;}
+  let p = 0, l = 0, a = 0;
+  for (const s of ss) { const v = s.attendance[state.currentDate] || '✓'; if (v === '✓') p++; else if (v === '◎' || v === '△') l++; else a++; }
   document.getElementById('submit-should').textContent = ss.length;
   document.getElementById('submit-present').textContent = p;
   document.getElementById('submit-leave').textContent = l;
   document.getElementById('submit-absent').textContent = a;
   const m = document.getElementById('submit-success-modal');
-  m.classList.add('visible'); setTimeout(()=>m.classList.remove('visible'),3000);
+  m.classList.add('visible'); setTimeout(() => m.classList.remove('visible'), 3000);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -656,7 +783,7 @@ function openEmptyBedModal() {
 function updateBedOptions() {
   const room = document.getElementById('eb-room').value;
   // 遵守房間規則：雙人房只顯示 A/B
-  const allowedBeds = CONFIG.DOUBLE_ROOMS.includes(room) ? ['A','B'] : ['A','B','C','D'];
+  const allowedBeds = CONFIG.DOUBLE_ROOMS.includes(room) ? ['A', 'B'] : ['A', 'B', 'C', 'D'];
   const sel = document.getElementById('eb-bed');
   sel.innerHTML = allowedBeds.map(b => {
     const s = state.students.find(x => x.room === room && x.bed === b && !x.hidden);
@@ -670,8 +797,8 @@ async function submitEmptyBed() {
   const bed = document.getElementById('eb-bed').value;
   const student = state.students.find(s => s.room === room && s.bed === bed);
 
-  if (!student) { showToast('找不到此床位','error'); return; }
-  if (student.isEmpty) { showToast('此床位已是空床','info'); closeModal('empty-bed-modal'); return; }
+  if (!student) { showToast('找不到此床位', 'error'); return; }
+  if (student.isEmpty) { showToast('此床位已是空床', 'info'); closeModal('empty-bed-modal'); return; }
 
   try {
     // 在 Notion 中將「空床」checkbox 設為 true
@@ -683,12 +810,12 @@ async function submitEmptyBed() {
     // 本地更新
     student.isEmpty = true;
 
-    showToast(`${room} ${bed} 床已標記為空床`,'success');
+    showToast(`${room} ${bed} 床已標記為空床`, 'success');
     closeModal('empty-bed-modal');
     renderRollCall();
     renderSummary();
   } catch (err) {
-    showToast('更新失敗：'+err.message,'error');
+    showToast('更新失敗：' + err.message, 'error');
   }
 }
 
@@ -933,38 +1060,38 @@ function copySummary(date) {
 function renderHistory() {
   const year = state.calMonth.getFullYear();
   const month = state.calMonth.getMonth();
-  document.getElementById('hist-month').textContent = `${year} 年 ${month+1} 月`;
+  document.getElementById('hist-month').textContent = `${year} 年 ${month + 1} 月`;
 
   const firstDay = new Date(year, month, 1).getDay();
-  const days = new Date(year, month+1, 0).getDate();
+  const days = new Date(year, month + 1, 0).getDate();
   let html = '<div class="cal-header">日</div><div class="cal-header">一</div><div class="cal-header">二</div><div class="cal-header">三</div><div class="cal-header">四</div><div class="cal-header">五</div><div class="cal-header">六</div>';
-  for (let i=0; i<firstDay; i++) html += '<div class="cal-cell empty"></div>';
-  for (let d=1; d<=days; d++) {
-    const col = `${month+1}月${d}日`;
+  for (let i = 0; i < firstDay; i++) html += '<div class="cal-cell empty"></div>';
+  for (let d = 1; d <= days; d++) {
+    const col = `${month + 1}月${d}日`;
     const has = state.dateColumns.includes(col);
     const today = col === getTodayColumnName();
     let badge = 0;
-    if (has) for (const s of state.students) if (!s.isEmpty && s.attendance[col] && s.attendance[col]!=='✓') badge++;
-    html += `<div class="cal-cell ${has?'has-data':''} ${today?'today':''}" ${has?`onclick="showDateDetail('${col}')"`:''}><div class="cal-day">${d}</div>${has&&badge?`<div class="cal-badge">${badge}</div>`:''}</div>`;
+    if (has) for (const s of state.students) if (!s.isEmpty && s.attendance[col] && s.attendance[col] !== '✓') badge++;
+    html += `<div class="cal-cell ${has ? 'has-data' : ''} ${today ? 'today' : ''}" ${has ? `onclick="showDateDetail('${col}')"` : ''}><div class="cal-day">${d}</div>${has && badge ? `<div class="cal-badge">${badge}</div>` : ''}</div>`;
   }
   document.getElementById('hist-calendar').innerHTML = html;
-  document.getElementById('cal-prev-month').onclick = () => { state.calMonth.setMonth(state.calMonth.getMonth()-1); renderHistory(); };
-  document.getElementById('cal-next-month').onclick = () => { state.calMonth.setMonth(state.calMonth.getMonth()+1); renderHistory(); };
+  document.getElementById('cal-prev-month').onclick = () => { state.calMonth.setMonth(state.calMonth.getMonth() - 1); renderHistory(); };
+  document.getElementById('cal-next-month').onclick = () => { state.calMonth.setMonth(state.calMonth.getMonth() + 1); renderHistory(); };
 }
 
 function showDateDetail(col) {
   const nonEmpty = state.students.filter(s => !s.isEmpty && !s.hidden);
-  let p=0, l=0, a=0; const list=[];
+  let p = 0, l = 0, a = 0; const list = [];
   for (const s of nonEmpty) {
     const v = s.attendance[col] || '✓';
     if (v === '✓' || v === '△') p++;
-    else if (v === '◎') { l++; list.push({...s, status: v}); }
-    else if (v === '✘') { a++; list.push({...s, status: v}); }
+    else if (v === '◎') { l++; list.push({ ...s, status: v }); }
+    else if (v === '✘') { a++; list.push({ ...s, status: v }); }
   }
   let html = `<div class="detail-header"><h3>${col}</h3><div class="detail-stats"><span style="color:var(--green)">到 ${p}</span><span style="color:var(--yellow)">假 ${l}</span><span style="color:var(--red)">缺 ${a}</span></div></div>`;
   if (list.length) {
     html += '<div class="detail-list">';
-    for (const s of list) { const si = CONFIG.STATUS[s.status]||CONFIG.STATUS['◎']; html += `<div class="detail-row"><span>${s.room} ${s.bed} ${s.name}</span><span style="color:${si.color}">${si.icon} ${si.label}</span></div>`; }
+    for (const s of list) { const si = CONFIG.STATUS[s.status] || CONFIG.STATUS['◎']; html += `<div class="detail-row"><span>${s.room} ${s.bed} ${s.name}</span><span style="color:${si.color}">${si.icon} ${si.label}</span></div>`; }
     html += '</div>';
   } else html += '<p style="color:var(--dim);text-align:center;padding:20px">全員到齊 🎉</p>';
   document.getElementById('hist-detail').innerHTML = html;
@@ -1015,9 +1142,47 @@ async function saveDormSettings() {
     });
     state.config['total_beds'] = String(totalBeds);
     state.config['bed_offset'] = String(bedOffset);
-    showToast('宿舍參數已儲存','success');
+    showToast('宿舍參數已儲存', 'success');
   } catch (err) {
-    showToast('儲存失敗：'+err.message, 'error');
+    showToast('儲存失敗：' + err.message, 'error');
+  }
+}
+
+async function saveRolePIN(roleId, inputId) {
+  const input = document.getElementById(inputId);
+  const pin = input ? input.value.trim() : '';
+  if (!pin) { showToast('請輸入密碼', 'error'); return; }
+  if (!/^\d{6}$/.test(pin)) { showToast('密碼必須為 6 位數字', 'error'); return; }
+  const key = `pin_${roleId}`;
+  try {
+    await window._api.setConfig({ [key]: pin });
+    state.config[key] = pin;
+    input.value = '';
+    showToast('密碼已儲存並同步至雲端 ✅', 'success');
+  } catch (err) {
+    showToast('儲存失敗：' + err.message, 'error');
+  }
+}
+
+async function saveRoleAppearance(roleId) {
+  const suffix = roleId === 'vice_president' ? 'vice-president' : roleId;
+  const iconEl = document.getElementById(`dev-icon-${suffix}`);
+  const labelEl = document.getElementById(`dev-label-${suffix}`);
+  const icon = iconEl ? iconEl.value.trim() : '';
+  const label = labelEl ? labelEl.value.trim() : '';
+  if (!icon && !label) { showToast('請輸入 EMOJI 或名稱', 'error'); return; }
+  const updates = {};
+  if (icon) { updates[`role_icon_${roleId}`] = icon; state.config[`role_icon_${roleId}`] = icon; }
+  if (label) { updates[`role_label_${roleId}`] = label; state.config[`role_label_${roleId}`] = label; }
+  try {
+    await window._api.setConfig(updates);
+    showToast('外觀已儲存並即時生效 ✅', 'success');
+    if (iconEl) iconEl.value = '';
+    if (labelEl) labelEl.value = '';
+    // 即時重繪首頁讓變化立刻看得到
+    if (currentPage === 'home') renderHome();
+  } catch (err) {
+    showToast('儲存失敗：' + err.message, 'error');
   }
 }
 
@@ -1040,7 +1205,7 @@ async function testWorkerConnection() {
 let pinCallback = null, pinSquadId = null;
 
 function setupPinDialog() {
-  document.getElementById('pin-cancel').onclick = () => { document.getElementById('pin-dialog').classList.remove('visible'); pinCallback=null; };
+  document.getElementById('pin-cancel').onclick = () => { document.getElementById('pin-dialog').classList.remove('visible'); pinCallback = null; };
   document.getElementById('pin-confirm').onclick = () => {
     const input = document.getElementById('pin-input');
     const pin = input.value;
@@ -1048,55 +1213,73 @@ function setupPinDialog() {
     if (pin === expected || pin === state.config['pin_admin']) {
       document.getElementById('pin-dialog').classList.remove('visible');
       input.value = ''; if (pinCallback) pinCallback();
-    } else { input.classList.add('shake'); setTimeout(()=>input.classList.remove('shake'),500); showToast('PIN 碼錯誤','error'); }
+    } else { input.classList.add('shake'); setTimeout(() => input.classList.remove('shake'), 500); showToast('PIN 碼錯誤', 'error'); }
   };
-  document.getElementById('pin-input').addEventListener('keydown', e => { if (e.key==='Enter') document.getElementById('pin-confirm').click(); });
+  document.getElementById('pin-input').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('pin-confirm').click(); });
 }
 
-function showPinDialog(squadId, callback) {
+function showPinDialog(squadId, callback, customTitle) {
   pinSquadId = squadId; pinCallback = callback;
-  document.getElementById('pin-dialog-title').textContent = `${squadId} 中隊點名`;
+  document.getElementById('pin-dialog-title').textContent = customTitle || `${squadId} 中隊點名`;
   document.getElementById('pin-input').value = '';
   document.getElementById('pin-dialog').classList.add('visible');
-  setTimeout(()=>document.getElementById('pin-input').focus(), 100);
+  setTimeout(() => document.getElementById('pin-input').focus(), 100);
 }
 
 // ─── 自動備份 ───────────────────────────────────────────────────────────────
 setInterval(async () => {
   if (state.changes.length > 0) {
     try {
-      for (let i=0; i<state.changes.length; i+=45) await window._api.updateAttendance(state.changes.slice(i,i+45));
-      showToast(`自動備份 ${state.changes.length} 筆`,'info');
+      for (let i = 0; i < state.changes.length; i += 45) await window._api.updateAttendance(state.changes.slice(i, i + 45));
+      showToast(`自動備份 ${state.changes.length} 筆`, 'info');
       state.changes = [];
     } catch (e) { console.error('自動備份失敗', e); }
   }
 }, CONFIG.AUTO_SAVE_INTERVAL);
 
 // ─── UI 工具 ────────────────────────────────────────────────────────────────
-function showLoading(show) { state.loading=show; const el=document.getElementById('loading-overlay'); if(el) el.style.display=show?'flex':'none'; }
+function showLoading(show) {
+  state.loading = show;
+  const el = document.getElementById('loading-overlay');
+  if (!el) return;
 
-function showToast(msg, type='info') {
-  const c = document.getElementById('toast-container'); if(!c) return;
-  const t = document.createElement('div'); t.className=`toast toast-${type}`; t.textContent=msg;
-  c.appendChild(t); setTimeout(()=>t.classList.add('visible'),10);
-  setTimeout(()=>{ t.classList.remove('visible'); setTimeout(()=>t.remove(),300); },3000);
+  if (show) {
+    el.classList.remove('exit-drop');
+    el.style.display = 'flex';
+  } else {
+    // 給予終端機視窗掉落的隨機角度 (-35 到 35 度，避免翻滾太多，維持自然感)
+    const rot = (Math.random() * 70 - 35).toFixed(1) + 'deg';
+    el.style.setProperty('--rot', rot);
+    el.classList.add('exit-drop');
+
+    setTimeout(() => {
+      if (!state.loading) el.style.display = 'none';
+    }, 700);
+  }
+}
+
+function showToast(msg, type = 'info') {
+  const c = document.getElementById('toast-container'); if (!c) return;
+  const t = document.createElement('div'); t.className = `toast toast-${type}`; t.textContent = msg;
+  c.appendChild(t); setTimeout(() => t.classList.add('visible'), 10);
+  setTimeout(() => { t.classList.remove('visible'); setTimeout(() => t.remove(), 300); }, 3000);
 }
 
 // ─── 匯出 ───────────────────────────────────────────────────────────────────
 function exportExcel() {
-  if (!state.students.length) { showToast('沒有資料','error'); return; }
+  if (!state.students.length) { showToast('沒有資料', 'error'); return; }
   try {
-    const headers = ['名稱','寢床號','床號','班別','學號', ...state.dateColumns];
+    const headers = ['名稱', '寢床號', '床號', '班別', '學號', ...state.dateColumns];
     const rows = state.students.map(s => {
       const r = [s.name, s.room, s.bed, s.class, s.studentId];
-      for (const d of state.dateColumns) r.push(s.attendance[d]||'✓');
+      for (const d of state.dateColumns) r.push(s.attendance[d] || '✓');
       return r;
     });
-    const ws = XLSX.utils.aoa_to_sheet([headers,...rows]);
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '點名總表');
     XLSX.writeFile(wb, `碧苑點名_${CONFIG.SEMESTER}_${getTodayColumnName()}.xlsx`);
-    showToast('Excel 已下載','success');
-  } catch (err) { showToast('匯出失敗：'+err.message,'error'); }
+    showToast('Excel 已下載', 'success');
+  } catch (err) { showToast('匯出失敗：' + err.message, 'error'); }
 }
 
 // ─── 全域暴露 ───────────────────────────────────────────────────────────────
@@ -1145,9 +1328,9 @@ function applyRoomRules() {
 // 導覽列自訂圖示
 // ═════════════════════════════════════════════════════════════════════════════
 const NAV_PAGES = [
-  { page: 'home',     emoji: '🏠', label: '點名' },
-  { page: 'summary',  emoji: '📊', label: '總表' },
-  { page: 'history',  emoji: '📅', label: '歷史' },
+  { page: 'home', emoji: '🏠', label: '點名' },
+  { page: 'summary', emoji: '📊', label: '總表' },
+  { page: 'history', emoji: '📅', label: '歷史' },
   { page: 'settings', emoji: '⚙️', label: '設定' },
 ];
 
@@ -1291,7 +1474,7 @@ function openDevAuth() {
     setTimeout(() => overlay.remove(), 300);
   };
   document.getElementById('dev-pin-confirm').onclick = tryUnlock;
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('dev-pin-confirm').click(); });
 }
 
 window.openDevAuth = openDevAuth;
@@ -1304,14 +1487,14 @@ function loadGlobalBgVideo() {
   const url = state.config['bg_video_url'];
   const scale = state.config['bg_video_scale'] || 1.0;
   const opacity = state.config['bg_video_opacity'] || 0.25;
-  
+
   const container = document.getElementById('custom-video-bg');
   const animBg = document.querySelector('.home-anim-bg');
-  
+
   if (url) {
     container.innerHTML = `<video src="${url}" autoplay loop muted playsinline style="transform: scale(${scale}); opacity: ${opacity};"></video>`;
     if (animBg) animBg.style.display = 'none'; // 隱藏預設動畫
-    
+
     // 同步到 UI (如果在設定頁)
     const urlInput = document.getElementById('bg-video-url');
     if (urlInput) {
@@ -1329,7 +1512,7 @@ function previewBgVideoStyle() {
   const scale = document.getElementById('bg-video-scale').value;
   const opacity = document.getElementById('bg-video-opacity').value;
   const video = document.querySelector('#custom-video-bg video');
-  
+
   if (video) {
     video.style.transform = `scale(${scale})`;
     video.style.opacity = opacity;
@@ -1359,7 +1542,7 @@ async function applyBgVideoUrl() {
       bg_video_scale: scale,
       bg_video_opacity: opacity
     });
-    
+
     // 更新本地狀態
     state.config['bg_video_url'] = url;
     state.config['bg_video_scale'] = scale;
@@ -1378,9 +1561,9 @@ async function clearBgVideo() {
   try {
     // 將 URL 設為空字串，以清除 Notion 上的設定
     await window._api.setConfig({ bg_video_url: '' });
-    
+
     state.config['bg_video_url'] = '';
-    
+
     const urlInput = document.getElementById('bg-video-url');
     if (urlInput) {
       urlInput.value = '';
