@@ -30,8 +30,8 @@ window.addEventListener('unhandledrejection', (e) => {
 let audioCtx = null;
 function playClickSound(type = 'default') {
   try {
+    // dev_unlock 用 MP3，提前 0.2s 播放（瀏覽器限制，最快就是 0s delay）
     if (type === 'dev_unlock') {
-      // 開放者解鎖改採用指定 MP3
       const audio = new Audio('./Lp/6aa77c5e3bd7d98779628b82589dcb77.mp3');
       audio.volume = 0.8;
       audio.play().catch(() => { });
@@ -40,24 +40,101 @@ function playClickSound(type = 'default') {
 
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
-
     const time = audioCtx.currentTime;
+
+    // ── 打密碼音效：白噪音高頻短爆 + 低頻點擊疊加 ──
+    if (type === 'pin') {
+      const bufferSize = audioCtx.sampleRate * 0.04;
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1);
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      const noiseGain = audioCtx.createGain();
+      noiseGain.gain.setValueAtTime(0.035, time);
+      noiseGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.04);
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 2200;
+      filter.Q.value = 1.5;
+      source.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(audioCtx.destination);
+      source.start(time);
+      // 低頻點擊疊加「咔」質感
+      const clickOsc = audioCtx.createOscillator();
+      const clickGain = audioCtx.createGain();
+      clickOsc.type = 'square';
+      clickOsc.frequency.setValueAtTime(180, time);
+      clickGain.gain.setValueAtTime(0.06, time);
+      clickGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.025);
+      clickOsc.connect(clickGain);
+      clickGain.connect(audioCtx.destination);
+      clickOsc.start(time); clickOsc.stop(time + 0.03);
+      return;
+    }
+
+    // ── 點名專用音效 ──
+    if (type === 'roll_in') {
+      // 到齊：清脆高頻上揚 ⬆️
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.connect(g); g.connect(audioCtx.destination);
+      o.type = 'sine';
+      o.frequency.setValueAtTime(1200, time);
+      o.frequency.exponentialRampToValueAtTime(1600, time + 0.04);
+      g.gain.setValueAtTime(0.1, time);
+      g.gain.exponentialRampToValueAtTime(0.001, time + 0.06);
+      o.start(time); o.stop(time + 0.07);
+      return;
+    }
+    if (type === 'roll_leave') {
+      // 請假/課外：溫和中頻下滑 🟡
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.connect(g); g.connect(audioCtx.destination);
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(880, time);
+      o.frequency.exponentialRampToValueAtTime(600, time + 0.08);
+      g.gain.setValueAtTime(0.1, time);
+      g.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+      o.start(time); o.stop(time + 0.11);
+      return;
+    }
+    if (type === 'roll_absent') {
+      // 缺席：低沉鍛擊雙擊 🔴
+      [0, 0.07].forEach(delay => {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.connect(g); g.connect(audioCtx.destination);
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(220, time + delay);
+        o.frequency.exponentialRampToValueAtTime(160, time + delay + 0.06);
+        g.gain.setValueAtTime(0.08, time + delay);
+        g.gain.exponentialRampToValueAtTime(0.001, time + delay + 0.07);
+        o.start(time + delay); o.stop(time + delay + 0.08);
+      });
+      return;
+    }
+    if (type === 'all_present') {
+      // 全員到齊慶祝三連音 Do-Mi-Sol (C5-E5-G5)
+      [523.25, 659.25, 783.99].forEach((freq, i) => {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.connect(g); g.connect(audioCtx.destination);
+        o.type = 'triangle';
+        const t = time + i * 0.1;
+        o.frequency.setValueAtTime(freq, t);
+        g.gain.setValueAtTime(0.12, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+        o.start(t); o.stop(t + 0.14);
+      });
+      return;
+    }
+
+    // ── 一般音效（使用共用 osc + gain）──
     const osc = audioCtx.createOscillator();
     const gainNode = audioCtx.createGain();
-
     osc.connect(gainNode);
     gainNode.connect(audioCtx.destination);
 
-    if (type === 'pin') {
-      // 短促低沉的「卡卡」聲 (類似機械鍵盤打字)
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(120, time); // 低頻產生悶響敲擊感
-      gainNode.gain.setValueAtTime(0.08, time);
-      // 極短時間內急速衰減，製造清脆斷音
-      gainNode.gain.setTargetAtTime(0.001, time, 0.003);
-      osc.start(time); osc.stop(time + 0.02);
-    } else if (type === 'back') {
-      // 返回/關閉退出的下沉音
+    if (type === 'back') {
       osc.type = 'sine';
       osc.frequency.setValueAtTime(500, time);
       osc.frequency.exponentialRampToValueAtTime(200, time + 0.06);
@@ -65,21 +142,27 @@ function playClickSound(type = 'default') {
       gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.06);
       osc.start(time); osc.stop(time + 0.07);
     } else if (type === 'unlock') {
-      // 解鎖的短促「喀啦」清脆聲 (快速雙音頻)
       osc.type = 'square';
       osc.frequency.setValueAtTime(600, time);
-      osc.frequency.setValueAtTime(1000, time + 0.02); // 第二下喀聲的短促高音
+      osc.frequency.setValueAtTime(1000, time + 0.02);
       gainNode.gain.setValueAtTime(0.08, time);
       gainNode.gain.setTargetAtTime(0.001, time, 0.005);
       osc.start(time); osc.stop(time + 0.05);
     } else if (type === 'confirm') {
-      // 確認/提交的明亮雙音感
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(600, time);
       osc.frequency.exponentialRampToValueAtTime(1200, time + 0.08);
       gainNode.gain.setValueAtTime(0.08, time);
       gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.08);
       osc.start(time); osc.stop(time + 0.1);
+    } else if (type === 'dev_error') {
+      // 開發者密碼錯誤：低沉鋸齒下沉音
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(320, time);
+      osc.frequency.exponentialRampToValueAtTime(140, time + 0.12);
+      gainNode.gain.setValueAtTime(0.1, time);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.14);
+      osc.start(time); osc.stop(time + 0.15);
     } else {
       // 預設清脆滴聲
       osc.type = 'sine';
@@ -100,15 +183,14 @@ window.addEventListener('click', (e) => {
     } else if (target.id === 'pin-confirm') {
       playClickSound('unlock'); // 解鎖中隊專屬的喀啦聲
     } else if (target.id === 'dev-pin-confirm') {
-      playClickSound('dev_unlock'); // 開發者解鎖專屬科技音
+      // 開發者確認按鈕：音效由 tryUnlock 邏輯控制，這裡不重複播放
     } else if (target.classList.contains('confirm') || target.id === 'submit-btn' || target.id === 'rc-confirm-btn') {
       playClickSound('confirm');
     } else if (target.closest('.sq-card')) {
       playClickSound('default');
     } else {
-      // 除了點擊 modal 背板外，其他互動都發預設音效
       if (!target.classList.contains('modal-overlay') || e.target === target) {
-        if (e.target.closest('.modal-card')) return; // ignore clicks inside modal empty areas
+        if (e.target.closest('.modal-card')) return;
         if (target.classList.contains('modal-overlay')) playClickSound('back');
         else playClickSound('default');
       }
@@ -208,41 +290,104 @@ function checkChangelogDot() {
 
 // ── 最新公告與日誌 (Changelog) ──
 function openChangelogModal() {
-  // 從獨立資料庫取得的新版公告
-  const newEntries = (state.changelogs || []).map(log => log.content);
+  // 從獨立資料庫取得的新版公告（附帶時間戳）
+  const rawLogs = state.changelogs || [];
+  // debug 用：首次開啟時印出結構
+  if (rawLogs.length > 0) console.log('[Changelog] entry keys:', Object.keys(rawLogs[0]));
+  const newEntries = rawLogs.map(log => {
+      // 尋找全物件字串中是否有 ISO 8601 時間格式 (Notion 產生的標題或時間常見格式)
+      let timeStr = null;
+      const isoRegex = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)/;
+      
+      for (const key of Object.keys(log)) {
+          if (typeof log[key] === 'string') {
+              const match = log[key].match(isoRegex);
+              if (match) {
+                  timeStr = match[1];
+                  break;
+              }
+          }
+      }
 
-  // 兼容設定資料庫中的舊版公告
+      let time = timeStr || log.created_time || log.createdTime || log.created_at ||
+          log.last_edited_time || log.lastEditedTime || log.updated_at ||
+          log.timestamp || log.date || null;
+          
+      // 超級備援：查內文有無 YYYY/MM/DD
+      if (!time && log.content) {
+          const backupMatch = log.content.match(/(\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/);
+          if (backupMatch) time = backupMatch[1];
+      }
+
+      return {
+          content: log.content,
+          time: time
+      };
+  });
+
+  // 兼容設定資料庫中的舊版公告（無時間戳）
   const legacyEntries = Object.keys(state.config)
     .filter(k => k.startsWith('changelog_entry_'))
     .sort()
     .reverse()
-    .map(k => state.config[k]);
+    .map(k => ({ content: state.config[k], time: null }));
 
   if (state.config['changelog_md']) {
-    legacyEntries.push(state.config['changelog_md']);
+    legacyEntries.push({ content: state.config['changelog_md'], time: null });
   }
 
-  // 合併
+  // 合併並渲染每條公告（各自解析確保時間戳位置正確）
   const allEntries = [...newEntries, ...legacyEntries];
-  const mdContent = allEntries.join('\n\n') || '目前沒有最新公告。';
 
-  const htmlContent = typeof marked !== 'undefined' ? marked.parse(mdContent) : `<pre style="white-space:pre-wrap;font-family:inherit;">${mdContent}</pre>`;
+  function formatTime(isoStr) {
+    if (!isoStr) return null;
+    try {
+      const d = new Date(isoStr);
+      if (isNaN(d)) return null;
+      const pad = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())} 更新`;
+    } catch { return null; }
+  }
+
+  const tsStyle = 'font-size:11px;color:rgba(165,180,252,0.55);margin:-2px 0 8px 2px;font-weight:400;letter-spacing:0.5px;display:block;';
+
+  let combinedHTML = '';
+  if (typeof marked !== 'undefined') {
+    for (const entry of allEntries) {
+      // 逐篇解析 markdown
+      let html = marked.parse(entry.content || '');
+      // 在第一個 h2/h3 標籤之後插入時間戳
+      const timeLabel = formatTime(entry.time);
+      if (timeLabel) {
+        html = html.replace(
+          /(<\/h[23]>)/,
+          `$1<span style="${tsStyle}">🕐 ${timeLabel}</span>`
+        );
+      }
+      combinedHTML += html;
+    }
+  } else {
+    combinedHTML = `<pre style="white-space:pre-wrap;font-family:inherit;">${allEntries.map(e => e.content).join('\n\n')}</pre>`;
+  }
+
+  if (!combinedHTML.trim()) combinedHTML = '<p>目前沒有最新公告。</p>';
 
   const contentEl = document.getElementById('changelog-content');
-  contentEl.innerHTML = htmlContent;
+  contentEl.innerHTML = combinedHTML;
 
   if (typeof marked !== 'undefined') {
-    // 建立折疊邏輯
+    // 建立折疊邏輯：將 h3 (每個版本) 轉換為可以平滑展開/收疊的 accordion
     const headings = contentEl.querySelectorAll('h3');
     headings.forEach((h3, i) => {
       const wrapper = document.createElement('div');
-      wrapper.style.display = i === 0 ? 'block' : 'none'; // 預設展開最新的
+      
       wrapper.style.paddingLeft = '12px';
       wrapper.style.borderLeft = '2px solid rgba(255,255,255,0.1)';
       wrapper.style.marginLeft = '4px';
       wrapper.style.marginTop = '8px';
       wrapper.style.marginBottom = '20px';
-
+      wrapper.style.overflow = 'hidden'; // 為動畫準備
+      
       let nextNode = h3.nextElementSibling;
       while (nextNode && nextNode.tagName !== 'H3' && nextNode.tagName !== 'H2' && nextNode.tagName !== 'H1') {
         const toMove = nextNode;
@@ -261,19 +406,68 @@ function openChangelogModal() {
       h3.style.borderRadius = '8px';
       h3.style.marginTop = '0';
       h3.style.marginBottom = '0';
+      h3.style.userSelect = 'none';
 
       // 添加箭頭
       const chevron = document.createElement('span');
-      chevron.innerHTML = i === 0 ? '▲' : '▼';
+      chevron.innerHTML = '▼';
       chevron.style.fontSize = '12px';
       chevron.style.color = 'var(--dim)';
-      chevron.style.transition = 'transform 0.2s';
+      chevron.style.transition = 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
       h3.appendChild(chevron);
 
+      // 動態高度開關標記
+      let isOpen = false;
+
+      // 預設展開第一個
+      if (i === 0) {
+        isOpen = true;
+        chevron.style.transform = 'rotate(-180deg)';
+        // 初始狀態保持原樣，不設 height 以因應響應式
+      } else {
+        wrapper.style.height = '0px';
+        wrapper.style.opacity = '0';
+        wrapper.style.margin = '0'; // 隱藏時收掉 margin
+        wrapper.style.padding = '0 0 0 12px'; // 保留左側邊框但不留上下空間
+      }
+
       h3.onclick = () => {
-        const isHidden = wrapper.style.display === 'none';
-        wrapper.style.display = isHidden ? 'block' : 'none';
-        chevron.innerHTML = isHidden ? '▲' : '▼';
+        if (!isOpen) {
+          // 展開動畫
+          isOpen = true;
+          chevron.style.transform = 'rotate(-180deg)';
+          
+          wrapper.style.margin = '8px 0 20px 4px';
+          wrapper.style.padding = '0 0 0 12px';
+          
+          // 取得目標高度
+          const targetHeight = wrapper.scrollHeight + 'px';
+          
+          // 啟動過渡
+          wrapper.style.transition = 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+          wrapper.style.height = targetHeight;
+          wrapper.style.opacity = '1';
+          
+          setTimeout(() => {
+            if (isOpen) {
+              wrapper.style.height = ''; // 解除死綁定以因應重新排版
+            }
+          }, 300);
+        } else {
+          // 收拢動畫
+          isOpen = false;
+          chevron.style.transform = 'rotate(0deg)';
+          
+          // 將目前自動的高度鎖住
+          wrapper.style.height = wrapper.scrollHeight + 'px';
+          wrapper.offsetHeight; // force reflow
+          
+          wrapper.style.transition = 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+          wrapper.style.height = '0px';
+          wrapper.style.opacity = '0';
+          wrapper.style.margin = '0';
+          wrapper.style.padding = '0 0 0 12px';
+        }
       };
     });
   }
@@ -513,10 +707,12 @@ function enterSquad(squadId) {
 }
 
 function enterManagement(roleId, title) {
-  // 自動進入需密碼的驗證程序 (6位數要求由 maxlength="6" 配合 Notion pin_${roleId} 提供)
+  // 自動進入需密碼的驗證程序
   showPinDialog(roleId, () => {
-    showToast(`歡迎進入，${title}！專屬功能建置中...`, 'success');
-    // 未來擴充：navigateTo('president_dashboard');
+    playClickSound('dev_unlock');
+    showToast(`歡迎進入，${title}！`, 'success');
+    document.getElementById('mgt-title').textContent = title;
+    navigateTo('management');
   }, `🔐 ${title} 身分驗證`);
 }
 
@@ -632,6 +828,11 @@ function toggleStatus(pageId) {
   const next = { '✓': '◎', '◎': '✘', '✘': '✓', '△': '✓' }[cur] || '✓';
   s.attendance[state.currentDate] = next;
 
+  // 點名按鈕音效：切換到「請假」是黄色音，「缺席」是紅色队音，「到」是清脆白色音
+  if (next === '✓') playClickSound('roll_in');
+  else if (next === '◎') playClickSound('roll_leave');
+  else playClickSound('roll_absent');
+
   // 保留在 changes 以供提交按鈕使用
   const idx = state.changes.findIndex(c => c.pageId === pageId && c.date === state.currentDate);
   const change = { pageId, date: state.currentDate, value: next };
@@ -727,6 +928,11 @@ async function toggleSquadConfirm() {
     state.config['confirm_' + today] = targetSquads.join(',');
 
     showToast(isCurrentlyConfirmed ? '已取消回報' : '✅ 點名回報成功！已即時同步至總表', 'success');
+
+    // 確認點名後永遠播放 Do-Mi-Sol 三連音
+    if (!isCurrentlyConfirmed) {
+      setTimeout(() => playClickSound('all_present'), 100);
+    }
   } catch (e) {
     console.error('儲存確認狀態失敗', e);
     showToast('信號不穩定，回報失敗，請重試', 'error');
@@ -1324,9 +1530,6 @@ function applyRoomRules() {
   }
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// 導覽列自訂圖示
-// ═════════════════════════════════════════════════════════════════════════════
 const NAV_PAGES = [
   { page: 'home', emoji: '🏠', label: '點名' },
   { page: 'summary', emoji: '📊', label: '總表' },
@@ -1334,87 +1537,29 @@ const NAV_PAGES = [
   { page: 'settings', emoji: '⚙️', label: '設定' },
 ];
 
+// 導覽列 ICON 硬編碼映射（已定案不再支援上傳）
+const NAV_ICON_MAP = {
+  home: './Lp/ICON/HOME.svg',
+  summary: './Lp/ICON/PAGE2.svg',
+  history: './Lp/ICON/HISTORY.svg',
+  settings: './Lp/ICON/SETTIN.svg',
+};
+
 function applyNavIcons() {
   const items = document.querySelectorAll('.nav-item');
   items.forEach(item => {
     const page = item.dataset.page;
-    const saved = localStorage.getItem('nav_icon_' + page);
     const iconEl = item.querySelector('.nav-icon');
     if (!iconEl) return;
-    if (saved) {
-      iconEl.innerHTML = `<img class="nav-icon-img" src="${saved}" alt="${page}">`;
+    const src = NAV_ICON_MAP[page];
+    if (src) {
+      iconEl.innerHTML = `<img class="nav-icon-img" src="${src}" alt="${page}" style="width:24px;height:24px;object-fit:contain;">`;
     } else {
       const def = NAV_PAGES.find(n => n.page === page);
       if (def) iconEl.textContent = def.emoji;
     }
   });
 }
-
-function renderNavIconUpload() {
-  const grid = document.getElementById('nav-icon-upload-grid');
-  if (!grid) return;
-  grid.innerHTML = NAV_PAGES.map(n => {
-    const saved = localStorage.getItem('nav_icon_' + n.page);
-    const previewContent = saved
-      ? `<img src="${saved}" alt="${n.label}">`
-      : n.emoji;
-    const removeBtn = saved
-      ? `<button class="icon-upload-btn remove" onclick="removeNavIcon('${n.page}')">✕</button>`
-      : '';
-    return `
-      <div class="icon-upload-item">
-        <div class="icon-upload-preview">${previewContent}</div>
-        <div class="icon-upload-info">
-          <div class="label">${n.label}</div>
-          <div class="icon-upload-actions">
-            <button class="icon-upload-btn" onclick="pickNavIcon('${n.page}')">上傳</button>
-            ${removeBtn}
-          </div>
-        </div>
-      </div>`;
-  }).join('');
-}
-
-let _pendingNavIconPage = null;
-
-function pickNavIcon(page) {
-  _pendingNavIconPage = page;
-  const input = document.getElementById('nav-icon-file-input');
-  input.value = '';
-  input.onchange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      // 壓縮圖片到 64x64 再存入 localStorage
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 64; canvas.height = 64;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, 64, 64);
-        const dataUrl = canvas.toDataURL('image/png');
-        localStorage.setItem('nav_icon_' + _pendingNavIconPage, dataUrl);
-        applyNavIcons();
-        renderNavIconUpload();
-        showToast('圖示已更新', 'success');
-      };
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
-  };
-  input.click();
-}
-
-function removeNavIcon(page) {
-  localStorage.removeItem('nav_icon_' + page);
-  applyNavIcons();
-  renderNavIconUpload();
-  showToast('已恢復預設圖示', 'info');
-}
-
-window.pickNavIcon = pickNavIcon;
-window.removeNavIcon = removeNavIcon;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 開發者調適區（6 位密碼保護）
@@ -1454,14 +1599,18 @@ function openDevAuth() {
 
   const tryUnlock = () => {
     if (input.value === DEV_PASSWORD) {
-      devUnlocked = true;
-      overlay.classList.remove('visible');
-      setTimeout(() => overlay.remove(), 300);
-      panel.classList.add('open');
-      renderNavIconUpload();
-      initDevChangelog();
-      showToast('🔓 開發者模式已解鎖', 'success');
+      // 提前 0.2 秒播放解鎖音效，讓音效搶先視覺一步
+      playClickSound('dev_unlock');
+      setTimeout(() => {
+        devUnlocked = true;
+        overlay.classList.remove('visible');
+        setTimeout(() => overlay.remove(), 300);
+        panel.classList.add('open');
+        initDevChangelog();
+        showToast('🔓 開發者模式已解鎖', 'success');
+      }, 200);
     } else {
+      playClickSound('dev_error'); // 錯誤密碼播放「錯誤音」而非成功音
       input.classList.add('shake');
       setTimeout(() => input.classList.remove('shake'), 500);
       showToast('密碼錯誤', 'error');

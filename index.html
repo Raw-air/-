@@ -101,7 +101,7 @@
           allLines.push('[' + new Date().toTimeString().slice(0, 8) + '] ' + logs[Math.floor(Math.random() * logs.length)]);
           bg.textContent = allLines.join('\n');
           bg.scrollTop = bg.scrollHeight;
-          
+
           // 模擬終端機載入時的一卡一卡頓挫感
           const nextDelay = Math.random() < 0.15 ? Math.random() * 600 + 300 : Math.random() * 60 + 20;
           setTimeout(loopLogs, nextDelay);
@@ -142,6 +142,22 @@
 
     <p class="section-label" style="margin-top:24px;">幹部專區</p>
     <div id="management-grid" style="display:flex;flex-direction:column;gap:12px;position:relative;z-index:1;"></div>
+  </div>
+
+  <!-- ═══════════ 幹部管理 ═══════════ -->
+  <div id="page-management" class="page">
+    <h1 id="mgt-title" class="page-title" style="text-align: center; margin-top: 16px;">幹部專區</h1>
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60vh; text-align: center;">
+      <div style="font-size: 80px; filter: drop-shadow(0 0 20px rgba(245, 158, 11, 0.4)); animation: constructionBounce 2s infinite ease-in-out;">🚧</div>
+      <h2 style="font-size: 24px; font-weight: 800; margin-top: 24px; letter-spacing: 2px;">正在施工...</h2>
+      <p style="color: var(--dim); margin-top: 8px; font-size: 14px; max-width: 80%;">這個專屬管理頁面正在如火如荼的建置中，敬請期待後續更新！</p>
+    </div>
+    <style>
+      @keyframes constructionBounce {
+        0%, 100% { transform: translateY(0) rotate(-5deg); }
+        50% { transform: translateY(-15px) rotate(5deg); }
+      }
+    </style>
   </div>
 
   <!-- ═══════════ 點名 ═══════════ -->
@@ -342,7 +358,7 @@
           }
           const names = await caches.keys();
           await Promise.all(names.map(name => caches.delete(name)));
-        } catch(e) {
+        } catch (e) {
           console.error('Clear cache error:', e);
         }
         window.location.reload(true);
@@ -399,54 +415,49 @@
 
         <div style="display:flex;flex-direction:column;gap:12px;">
           <!-- 社長 -->
-          <div style="padding:12px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.25);border-radius:12px;">
+          <div
+            style="padding:12px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.25);border-radius:12px;">
             <div style="font-size:12px;color:rgba(245,158,11,0.7);font-weight:700;margin-bottom:10px;">😒 社長</div>
             <div style="display:flex;gap:8px;margin-bottom:8px;">
-              <input type="text" id="dev-icon-president" class="dev-input"
-                placeholder="EMOJI" maxlength="4"
+              <input type="text" id="dev-icon-president" class="dev-input" placeholder="EMOJI" maxlength="4"
                 style="width:56px;text-align:center;font-size:22px;padding:6px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(245,158,11,0.4);">
-              <input type="text" id="dev-label-president" class="dev-input"
-                placeholder="按鈕名稱"
+              <input type="text" id="dev-label-president" class="dev-input" placeholder="按鈕名稱"
                 style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(245,158,11,0.4);">
-              <button class="action-btn" style="padding:8px 12px;font-size:12px;" onclick="saveRoleAppearance('president')">🎨</button>
+              <button class="action-btn" style="padding:8px 12px;font-size:12px;"
+                onclick="saveRoleAppearance('president')">🎨</button>
             </div>
             <div style="display:flex;gap:8px;">
               <input type="password" id="cfg-pin-president" class="dev-input" maxlength="6" inputmode="numeric"
                 placeholder="6 位數登入密碼"
                 style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(245,158,11,0.4);letter-spacing:4px;">
-              <button class="action-btn" style="padding:8px 12px;font-size:12px;" onclick="saveRolePIN('president', 'cfg-pin-president')">🔐</button>
+              <button class="action-btn" style="padding:8px 12px;font-size:12px;"
+                onclick="saveRolePIN('president', 'cfg-pin-president')">🔐</button>
             </div>
           </div>
 
           <!-- 副社長 -->
-          <div style="padding:12px;background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.25);border-radius:12px;">
+          <div
+            style="padding:12px;background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.25);border-radius:12px;">
             <div style="font-size:12px;color:rgba(16,185,129,0.7);font-weight:700;margin-bottom:10px;">🥝 副社長</div>
             <div style="display:flex;gap:8px;margin-bottom:8px;">
-              <input type="text" id="dev-icon-vice-president" class="dev-input"
-                placeholder="EMOJI" maxlength="4"
+              <input type="text" id="dev-icon-vice-president" class="dev-input" placeholder="EMOJI" maxlength="4"
                 style="width:56px;text-align:center;font-size:22px;padding:6px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(16,185,129,0.4);">
-              <input type="text" id="dev-label-vice-president" class="dev-input"
-                placeholder="按鈕名稱"
+              <input type="text" id="dev-label-vice-president" class="dev-input" placeholder="按鈕名稱"
                 style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(16,185,129,0.4);">
-              <button class="action-btn" style="padding:8px 12px;font-size:12px;" onclick="saveRoleAppearance('vice_president')">🎨</button>
+              <button class="action-btn" style="padding:8px 12px;font-size:12px;"
+                onclick="saveRoleAppearance('vice_president')">🎨</button>
             </div>
             <div style="display:flex;gap:8px;">
               <input type="password" id="cfg-pin-vice-president" class="dev-input" maxlength="6" inputmode="numeric"
                 placeholder="6 位數登入密碼"
                 style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(16,185,129,0.4);letter-spacing:4px;">
-              <button class="action-btn" style="padding:8px 12px;font-size:12px;" onclick="saveRolePIN('vice_president', 'cfg-pin-vice-president')">🔐</button>
+              <button class="action-btn" style="padding:8px 12px;font-size:12px;"
+                onclick="saveRolePIN('vice_president', 'cfg-pin-vice-president')">🔐</button>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- 導覽列圖示上傳 -->
-      <div class="dev-card" style="margin-top:16px;">
-        <div class="dev-card-header">🎨 導覽列圖示</div>
-        <p class="dev-card-hint">為底部導覽列的每個頁面上傳自訂圖示（取代 EMOJI）</p>
-        <div class="icon-upload-grid" id="nav-icon-upload-grid"></div>
-        <input type="file" id="nav-icon-file-input" accept="image/*" style="display:none">
-      </div>
 
       <!-- 背景影片 (伺服器 URL) -->
       <div class="dev-card" style="margin-top:16px;">
@@ -542,9 +553,9 @@
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=46"></script>
-  <script src="api.js?v=46"></script>
-  <script src="app.js?v=46"></script>
+  <script src="config.js?v=52"></script>
+  <script src="api.js?v=52"></script>
+  <script src="app.js?v=52"></script>
 </body>
 
 </html>
