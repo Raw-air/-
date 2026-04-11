@@ -107,10 +107,11 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
 
 /* ─ Pages ─ */
 .page{display:none;padding:calc(16px + var(--safe-t)) 16px 16px;max-width:440px;margin:0 auto;position:relative}
-.page.active{display:block;animation:fadeUp .28s cubic-bezier(0.16,1,0.3,1)}
-/* fadeUp 用純 transform 不動 opacity，避免父層 opacity<1 導致 backdrop-filter 閃透明 bug */
-@keyframes fadeUp{from{transform:translateY(16px)}to{transform:none}}
-@keyframes pageExit{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-10px)}}
+.page.active{display:block;animation:fadeUp .3s cubic-bezier(0.16,1,0.3,1)}
+/* 頁面進入時恢復微微從下浮起 */
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+/* 頁面切換離開時如裝置藝術一般，往下掉落離開 */
+@keyframes pageExit{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(50px)}}
 /* 首頁透明，讓極光球背景窿透；其他頁面用不透明背景蓋住動畫 */
 #page-home{background:transparent}
 #page-rollcall,#page-summary,#page-history,#page-settings{background:var(--bg)}
@@ -237,6 +238,34 @@ body{font-family:'Noto Sans TC',-apple-system,sans-serif;background:var(--bg);co
   transition:all .35s cubic-bezier(.175,.885,.32,1.275);
   user-select:none;position:relative;overflow:hidden;
   box-shadow:0 8px 32px rgba(0,0,0,.15),inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+/* 首次載入的超 Q 彈動畫 */
+.sq-card.pop-initial {
+  animation: sq-pop-bounce 0.9s linear backwards; /* 改用 linear，內部有貝茲曲線分段 */
+}
+
+/* 切換分頁回來的「撞到頂部」動畫 */
+.sq-card.pop-return {
+  animation: sq-return-ceiling 0.6s linear backwards;
+}
+
+@keyframes sq-pop-bounce {
+  0%, 20%, 40%, 60%, 80%, 100% { animation-timing-function: cubic-bezier(0.215, 0.610, 0.355, 1.000); }
+  0%   { transform: scale3d(0.3, 0.3, 0.3) translateY(60px); opacity: 0; }
+  20%  { transform: scale3d(1.12, 1.12, 1.12) translateY(-12px); opacity: 1; }
+  40%  { transform: scale3d(0.9, 0.9, 0.9) translateY(8px); }
+  60%  { transform: scale3d(1.04, 1.04, 1.04) translateY(-4px); }
+  80%  { transform: scale3d(0.97, 0.97, 0.97) translateY(2px); }
+  100% { transform: scale3d(1, 1, 1) translateY(0); opacity: 1; }
+}
+
+@keyframes sq-return-ceiling {
+  0%   { transform: translateY(80px); opacity: 0; animation-timing-function: cubic-bezier(0.175, 0.885, 0.32, 1.275); } 
+  45%  { transform: translateY(-4px); opacity: 1; animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1); } 
+  65%  { transform: translateY(8px); animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1); } 
+  85%  { transform: translateY(-2px); animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
+  100% { transform: translateY(0); opacity: 1; }
 }
 .sq-card::before{
   content:'';position:absolute;inset:0;

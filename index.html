@@ -139,6 +139,9 @@
     </div>
     <p class="section-label">選擇你的中隊</p>
     <div id="squad-grid" class="squad-grid-3col"></div>
+
+    <p class="section-label" style="margin-top:24px;">幹部專區</p>
+    <div id="management-grid" style="display:flex;flex-direction:column;gap:12px;position:relative;z-index:1;"></div>
   </div>
 
   <!-- ═══════════ 點名 ═══════════ -->
@@ -380,6 +383,7 @@
       <button class="action-btn wide" onclick="loadData()">🔄 重新從 Notion 載入</button>
     </div>
 
+
     <!-- 開發者調適區入口 -->
     <div class="dev-trigger" onclick="openDevAuth()">
       <span class="dev-trigger-icon">🔧</span>
@@ -388,8 +392,56 @@
 
     <!-- 開發者面板（需要密碼） -->
     <div id="dev-panel" class="dev-panel">
-      <!-- 導覽列圖示上傳 -->
+      <!-- 幹部按鈕自訂 + 密碼 -->
       <div class="dev-card">
+        <div class="dev-card-header">👑 幹部專區設定</div>
+        <p class="dev-card-hint">設定首頁幹部按鈕的 EMOJI、名稱與登入密碼，儲存後即時同步至雲端。</p>
+
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <!-- 社長 -->
+          <div style="padding:12px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.25);border-radius:12px;">
+            <div style="font-size:12px;color:rgba(245,158,11,0.7);font-weight:700;margin-bottom:10px;">😒 社長</div>
+            <div style="display:flex;gap:8px;margin-bottom:8px;">
+              <input type="text" id="dev-icon-president" class="dev-input"
+                placeholder="EMOJI" maxlength="4"
+                style="width:56px;text-align:center;font-size:22px;padding:6px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(245,158,11,0.4);">
+              <input type="text" id="dev-label-president" class="dev-input"
+                placeholder="按鈕名稱"
+                style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(245,158,11,0.4);">
+              <button class="action-btn" style="padding:8px 12px;font-size:12px;" onclick="saveRoleAppearance('president')">🎨</button>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <input type="password" id="cfg-pin-president" class="dev-input" maxlength="6" inputmode="numeric"
+                placeholder="6 位數登入密碼"
+                style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(245,158,11,0.4);letter-spacing:4px;">
+              <button class="action-btn" style="padding:8px 12px;font-size:12px;" onclick="saveRolePIN('president', 'cfg-pin-president')">🔐</button>
+            </div>
+          </div>
+
+          <!-- 副社長 -->
+          <div style="padding:12px;background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.25);border-radius:12px;">
+            <div style="font-size:12px;color:rgba(16,185,129,0.7);font-weight:700;margin-bottom:10px;">🥝 副社長</div>
+            <div style="display:flex;gap:8px;margin-bottom:8px;">
+              <input type="text" id="dev-icon-vice-president" class="dev-input"
+                placeholder="EMOJI" maxlength="4"
+                style="width:56px;text-align:center;font-size:22px;padding:6px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(16,185,129,0.4);">
+              <input type="text" id="dev-label-vice-president" class="dev-input"
+                placeholder="按鈕名稱"
+                style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(16,185,129,0.4);">
+              <button class="action-btn" style="padding:8px 12px;font-size:12px;" onclick="saveRoleAppearance('vice_president')">🎨</button>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <input type="password" id="cfg-pin-vice-president" class="dev-input" maxlength="6" inputmode="numeric"
+                placeholder="6 位數登入密碼"
+                style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(16,185,129,0.4);letter-spacing:4px;">
+              <button class="action-btn" style="padding:8px 12px;font-size:12px;" onclick="saveRolePIN('vice_president', 'cfg-pin-vice-president')">🔐</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 導覽列圖示上傳 -->
+      <div class="dev-card" style="margin-top:16px;">
         <div class="dev-card-header">🎨 導覽列圖示</div>
         <p class="dev-card-hint">為底部導覽列的每個頁面上傳自訂圖示（取代 EMOJI）</p>
         <div class="icon-upload-grid" id="nav-icon-upload-grid"></div>
@@ -490,9 +542,9 @@
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=42"></script>
-  <script src="api.js?v=42"></script>
-  <script src="app.js?v=42"></script>
+  <script src="config.js?v=46"></script>
+  <script src="api.js?v=46"></script>
+  <script src="app.js?v=46"></script>
 </body>
 
 </html>
