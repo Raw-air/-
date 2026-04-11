@@ -288,9 +288,10 @@ body {
 }
 
 /* ─ Pages ─ */
+/* ─ Pages ─ */
 .page {
   display: none;
-  padding: calc(8px + var(--safe-t)) 16px 16px;
+  padding: calc(4px + var(--safe-t)) 16px 16px;
   max-width: 440px;
   margin: 0 auto;
   position: relative
@@ -540,9 +541,10 @@ body {
 }
 
 /* ── 頂級質感的首頁 Hero 區塊 ── */
+/* ─ 首頁特屬 Hero 區塊 ─ */
 .home-hero {
   text-align: center;
-  padding: 32px 0 24px;
+  padding: 8px 0 20px;
   position: relative;
 }
 

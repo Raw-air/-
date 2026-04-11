@@ -1553,7 +1553,9 @@ function applyNavIcons() {
     if (!iconEl) return;
     const src = NAV_ICON_MAP[page];
     if (src) {
-      iconEl.innerHTML = `<img class="nav-icon-img" src="${src}" alt="${page}" style="width:24px;height:24px;object-fit:contain;">`;
+      // 加上 onerror 備援機制，如果發生錯誤就 fallback 回 emoji
+      const defEmoji = NAV_PAGES.find(n => n.page === page)?.emoji || '⚙️';
+      iconEl.innerHTML = `<img class="nav-icon-img" src="${src}" alt="${page}" style="width:24px;height:24px;object-fit:contain;" onerror="this.outerHTML='${defEmoji}'">`;
     } else {
       const def = NAV_PAGES.find(n => n.page === page);
       if (def) iconEl.textContent = def.emoji;
