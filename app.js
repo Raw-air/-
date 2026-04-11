@@ -208,28 +208,61 @@ function checkChangelogDot() {
 
 // ── 最新公告與日誌 (Changelog) ──
 function openChangelogModal() {
-  // 從獨立資料庫取得的新版公告
-  const newEntries = (state.changelogs || []).map(log => log.content);
+  // 從獨立資料庫取得的新版公告（附帶時間戳）
+  const newEntries = (state.changelogs || []).map(log => ({
+    content: log.content,
+    time: log.created_time || log.last_edited_time || null
+  }));
 
-  // 兼容設定資料庫中的舊版公告
+  // 兼容設定資料庫中的舊版公告（無時間戳）
   const legacyEntries = Object.keys(state.config)
     .filter(k => k.startsWith('changelog_entry_'))
     .sort()
     .reverse()
-    .map(k => state.config[k]);
+    .map(k => ({ content: state.config[k], time: null }));
 
   if (state.config['changelog_md']) {
-    legacyEntries.push(state.config['changelog_md']);
+    legacyEntries.push({ content: state.config['changelog_md'], time: null });
   }
 
-  // 合併
+  // 合併並渲染每條公告（各自解析確保時間戳位置正確）
   const allEntries = [...newEntries, ...legacyEntries];
-  const mdContent = allEntries.join('\n\n') || '目前沒有最新公告。';
 
-  const htmlContent = typeof marked !== 'undefined' ? marked.parse(mdContent) : `<pre style="white-space:pre-wrap;font-family:inherit;">${mdContent}</pre>`;
+  function formatTime(isoStr) {
+    if (!isoStr) return null;
+    try {
+      const d = new Date(isoStr);
+      if (isNaN(d)) return null;
+      const pad = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())} 更新`;
+    } catch { return null; }
+  }
+
+  const tsStyle = 'font-size:11px;color:rgba(165,180,252,0.55);margin:-2px 0 8px 2px;font-weight:400;letter-spacing:0.5px;display:block;';
+
+  let combinedHTML = '';
+  if (typeof marked !== 'undefined') {
+    for (const entry of allEntries) {
+      // 逐篇解析 markdown
+      let html = marked.parse(entry.content || '');
+      // 在第一個 h2/h3 標籤之後插入時間戳
+      const timeLabel = formatTime(entry.time);
+      if (timeLabel) {
+        html = html.replace(
+          /(<\/h[23]>)/,
+          `$1<span style="${tsStyle}">🕐 ${timeLabel}</span>`
+        );
+      }
+      combinedHTML += html;
+    }
+  } else {
+    combinedHTML = `<pre style="white-space:pre-wrap;font-family:inherit;">${allEntries.map(e => e.content).join('\n\n')}</pre>`;
+  }
+
+  if (!combinedHTML.trim()) combinedHTML = '<p>目前沒有最新公告。</p>';
 
   const contentEl = document.getElementById('changelog-content');
-  contentEl.innerHTML = htmlContent;
+  contentEl.innerHTML = combinedHTML;
 
   if (typeof marked !== 'undefined') {
     // 建立折疊邏輯
