@@ -2060,7 +2060,7 @@ function openCounterLeaveModal() {
   document.getElementById('cl-end-date').value = today;
   
   document.getElementById('cl-target').innerHTML = '<option value="">請先搜尋上方欄位...</option>';
-  openModal('counter-leave-modal');
+  document.getElementById('counter-leave-modal').classList.add('visible');
 }
 
 function handleCounterLeaveSearch() {
