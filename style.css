@@ -2059,7 +2059,7 @@ body {
   margin: 8px 0 4px
 }
 
-.styled-select {
+.styled-select, .styled-input {
   width: 100%;
   padding: 12px;
   background: rgba(255, 255, 255, .06);
@@ -2069,10 +2069,11 @@ body {
   font-size: 14px;
   outline: none;
   appearance: none;
-  -webkit-appearance: none
+  -webkit-appearance: none;
+  box-sizing: border-box;
 }
 
-.styled-select:focus {
+.styled-select:focus, .styled-input:focus {
   border-color: var(--purple)
 }
 

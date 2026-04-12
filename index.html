@@ -147,17 +147,22 @@
   <!-- ═══════════ 幹部管理 ═══════════ -->
   <div id="page-management" class="page">
     <h1 id="mgt-title" class="page-title" style="text-align: center; margin-top: 16px;">幹部專區</h1>
-    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60vh; text-align: center;">
-      <div style="font-size: 80px; filter: drop-shadow(0 0 20px rgba(245, 158, 11, 0.4)); animation: constructionBounce 2s infinite ease-in-out;">🚧</div>
-      <h2 style="font-size: 24px; font-weight: 800; margin-top: 24px; letter-spacing: 2px;">正在施工...</h2>
-      <p style="color: var(--dim); margin-top: 8px; font-size: 14px; max-width: 80%;">這個專屬管理頁面正在如火如荼的建置中，敬請期待後續更新！</p>
+    
+    <div style="padding: 16px;">
+      <button class="empty-bed-action" style="border-left: 4px solid var(--orange);" onclick="renderResidentReviewList()">
+        <span class="eb-icon">📝</span>
+        <div class="eb-content">
+          <span class="eb-title" style="color:var(--orange)">住宿生新增進總表審核</span>
+          <span class="eb-desc">審核最新提出之住宿生新增申請</span>
+        </div>
+        <span class="eb-arrow">›</span>
+      </button>
+
+      <!-- 審核清單區域 -->
+      <div id="management-review-list" style="margin-top: 20px; display: none;">
+        <!-- Javascript 會注入這區的內容 -->
+      </div>
     </div>
-    <style>
-      @keyframes constructionBounce {
-        0%, 100% { transform: translateY(0) rotate(-5deg); }
-        50% { transform: translateY(-15px) rotate(5deg); }
-      }
-    </style>
   </div>
 
   <!-- ═══════════ 點名 ═══════════ -->
@@ -255,6 +260,38 @@
     </div>
   </div>
 
+  <!-- 新增住宿生 Modal -->
+  <div id="add-resident-modal" class="modal-overlay">
+    <div class="modal-card">
+      <h3>👤 新增住宿生</h3>
+      <p class="modal-desc">選擇空床並填首新生資料以送出審核</p>
+      <div class="bed-selector">
+        <label>目標房間</label>
+        <select id="ar-room" class="styled-select" onchange="updateAddResidentBeds()"></select>
+        <label>目標空床位</label>
+        <select id="ar-bed" class="styled-select"></select>
+        
+        <label style="margin-top: 12px;">姓名</label>
+        <input type="text" id="ar-name" class="styled-input" placeholder="例如：王小明" autocomplete="off">
+        
+        <label style="margin-top: 12px;">班別</label>
+        <input type="text" id="ar-class" class="styled-input" placeholder="例如：四漫一A 或 越南華語專班" oninput="checkForeignStudentClass()" autocomplete="off">
+        
+        <label style="margin-top: 12px;">學號</label>
+        <input type="text" id="ar-studentid" class="styled-input" placeholder="例如：D14551333" autocomplete="off">
+        
+        <label style="margin-top: 12px; display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="ar-is-foreign" style="width:16px;height:16px;accent-color:var(--green)">
+          <span>是否為外籍生</span>
+        </label>
+      </div>
+      <div class="modal-actions" style="margin-top: 20px;">
+        <button class="modal-btn cancel" onclick="closeModal('add-resident-modal')">取消</button>
+        <button class="modal-btn" style="background: var(--blue); color: white; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);" onclick="submitAddResident()">送出審核</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══════════ 總表 ═══════════ -->
   <div id="page-summary" class="page">
     <div class="summary-header">
@@ -314,6 +351,16 @@
       <div class="eb-content">
         <span class="eb-title" style="color:#a78bfa">住宿生換床位</span>
         <span class="eb-desc">調整學生的房間與床位配置</span>
+      </div>
+      <span class="eb-arrow">›</span>
+    </button>
+
+    <!-- 新增住宿生按鈕 -->
+    <button class="empty-bed-action" style="border-left: 4px solid var(--blue); background: linear-gradient(90deg, rgba(59, 130, 246, 0.1), transparent);" onclick="openAddResidentModal()">
+      <span class="eb-icon">👤</span>
+      <div class="eb-content">
+        <span class="eb-title" style="color:var(--blue)">新增住宿生</span>
+        <span class="eb-desc">填寫新生資料並送出審核</span>
       </div>
       <span class="eb-arrow">›</span>
     </button>
@@ -495,6 +542,13 @@
         <button class="action-btn wide warning" style="margin-top:8px" onclick="setupChangelogDB()">⚙️
           自動建立專屬公告資料庫</button>
       </div>
+
+      <!-- 清理空床殘留資料 -->
+      <div class="dev-card" style="margin-top:16px;">
+        <div class="dev-card-header">🧹 清理空床殘留資料</div>
+        <p class="dev-card-hint">將所有標記為「空床」的床位，強制清除其殘留的學號、班級、姓名，並將所有日期的請假紀錄覆寫為「✓」，確保資料乾淨統一。</p>
+        <button class="action-btn wide warning" onclick="cleanUpEmptyBeds()">🧹 執行強制清理</button>
+      </div>
     </div>
   </div>
 
@@ -553,9 +607,9 @@
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=52"></script>
-  <script src="api.js?v=52"></script>
-  <script src="app.js?v=52"></script>
+  <script src="config.js?v=53"></script>
+  <script src="api.js?v=53"></script>
+  <script src="app.js?v=53"></script>
 </body>
 
 </html>

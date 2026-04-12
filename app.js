@@ -716,6 +716,8 @@ function enterManagement(roleId, title) {
   }, `🔐 ${title} 身分驗證`);
 }
 
+// ... skipped untouched code ... // Wait I am doing multi_replace_file_content so I'll just use two separate tools to modify app.js.
+
 // ═════════════════════════════════════════════════════════════════════════════
 // 日期選擇器
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1007,16 +1009,26 @@ async function submitEmptyBed() {
   if (student.isEmpty) { showToast('此床位已是空床', 'info'); closeModal('empty-bed-modal'); return; }
 
   try {
-    // 在 Notion 中將「空床」checkbox 設為 true
+    const datesToClear = {};
+    for (const d of state.dateColumns) datesToClear[d] = '✓'; // 預設所有空床請假紀錄一律為勾勾
+
+    // 在 Notion 中將「空床」checkbox 設為 true，並清除學生與請假資料
     await window._api.updateAttendance([{
       pageId: student.id,
       markEmpty: true,
+      clearProfile: true,
+      dates: datesToClear
     }]);
 
     // 本地更新
     student.isEmpty = true;
+    student.name = '';
+    student.class = '';
+    student.studentId = '';
+    student.isForeign = false;
+    for (const d of state.dateColumns) student.attendance[d] = '✓';
 
-    showToast(`${room} ${bed} 床已標記為空床`, 'success');
+    showToast(`${room} ${bed} 床已標記為空床並清除殘留資料`, 'success');
     closeModal('empty-bed-modal');
     renderRollCall();
     renderSummary();
@@ -1026,6 +1038,88 @@ async function submitEmptyBed() {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// 新增住宿生 (送出審核)
+// ═════════════════════════════════════════════════════════════════════════════
+function openAddResidentModal() {
+  const emptyBeds = state.students.filter(s => s.isEmpty && !s.hidden);
+  if (emptyBeds.length === 0) {
+    showToast('目前沒有可用的空床', 'info');
+    return;
+  }
+  const rooms = [...new Set(emptyBeds.map(s => s.room))].sort();
+  const sel = document.getElementById('ar-room');
+  sel.innerHTML = rooms.map(r => `<option value="${r}">${r}</option>`).join('');
+  
+  // 清空輸入框
+  document.getElementById('ar-name').value = '';
+  document.getElementById('ar-class').value = '';
+  document.getElementById('ar-studentid').value = '';
+  document.getElementById('ar-is-foreign').checked = false;
+
+  updateAddResidentBeds();
+  document.getElementById('add-resident-modal').classList.add('visible');
+}
+
+function updateAddResidentBeds() {
+  const room = document.getElementById('ar-room').value;
+  const beds = state.students.filter(s => s.room === room && s.isEmpty && !s.hidden);
+  const sel = document.getElementById('ar-bed');
+  sel.innerHTML = beds.map(s => `<option value="${s.bed}">${s.bed} 床</option>`).join('');
+}
+
+function checkForeignStudentClass() {
+  const classInput = document.getElementById('ar-class').value || '';
+  if (/越南|華語專班/.test(classInput)) {
+    document.getElementById('ar-is-foreign').checked = true;
+  }
+}
+
+async function submitAddResident() {
+  const room = document.getElementById('ar-room').value;
+  const bed = document.getElementById('ar-bed').value;
+  const name = document.getElementById('ar-name').value.trim();
+  const className = document.getElementById('ar-class').value.trim();
+  const studentId = document.getElementById('ar-studentid').value.trim();
+  const isForeign = document.getElementById('ar-is-foreign').checked;
+
+  if (!name || !className || !studentId) {
+    showToast('姓名、班別與學號為必填', 'error');
+    return;
+  }
+
+  const student = state.students.find(s => s.room === room && s.bed === bed);
+  if (!student || !student.isEmpty) {
+    showToast('此床位無法新增', 'error');
+    return;
+  }
+
+  const btn = document.querySelector('#add-resident-modal .modal-btn.confirm');
+  if (btn) { btn.disabled = true; btn.textContent = '送出中...'; }
+
+  try {
+    const reqId = 'add_req_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+    const payload = {
+      pageId: student.id,
+      room,
+      bed,
+      name,
+      class: className,
+      studentId,
+      isForeign,
+      timestamp: Date.now()
+    };
+
+    await window._api.setConfig({ [reqId]: JSON.stringify(payload) });
+
+    playClickSound('all_present');
+    showToast('該件已送出 請社長審核 或副社長審核', 'success');
+    closeModal('add-resident-modal');
+  } catch (err) {
+    showToast('送出失敗：' + err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '送出審核'; }
+  }
+}
 // 換床位
 // ═════════════════════════════════════════════════════════════════════════════
 function openSwapBedModal() {
@@ -1730,7 +1824,222 @@ async function clearBgVideo() {
   showLoading(false);
 }
 
+// 清理所有空床的殘留資料（針對過往遺留資料）
+async function cleanUpEmptyBeds() {
+  if (!confirm("確定要將所有空床的「姓名、學號、班級」清空，並「所有日期的請假紀錄」覆寫為 ✅ 嗎？此操作無法還原！")) return;
+
+  const emptyBeds = state.students.filter(s => s.isEmpty);
+  if (emptyBeds.length === 0) {
+    showToast('目前沒有任何空床', 'info');
+    return;
+  }
+
+  showLoading(true);
+  try {
+    const datesToClear = {};
+    for (const d of state.dateColumns) datesToClear[d] = '✓';
+
+    const updates = emptyBeds.map(student => {
+      // 本地同步更新
+      student.name = '';
+      student.class = '';
+      student.studentId = '';
+      student.isForeign = false;
+      for (const d of state.dateColumns) student.attendance[d] = '✓';
+      
+      return {
+        pageId: student.id,
+        markEmpty: true,
+        clearProfile: true, // 清除學號姓名等
+        dates: datesToClear // 覆寫請假紀錄為勾勾
+      };
+    });
+
+    // 分批次發出 API 請求
+    for (let i = 0; i < updates.length; i += 45) {
+      await window._api.updateAttendance(updates.slice(i, i + 45));
+    }
+
+    showToast(`成功清理了 ${emptyBeds.length} 張空床的資料，請假全數補上勾勾！`, 'success');
+    
+    // 如果剛好在點名頁或總表，重新渲染一下確保畫面同步
+    if (currentPage === 'rollcall') renderRollCall();
+    if (currentPage === 'summary') renderSummary();
+
+  } catch (err) {
+    showToast('清理失敗：' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+// 暫時按鈕：將所有空床的請假紀錄覆蓋為空床專用的勾勾
+async function fillEmptyBedsWithCheckmarks() {
+  if (!confirm("確定要將「目前所有空床」的請假紀錄全部強制補上「✓」嗎？")) return;
+
+  const emptyBeds = state.students.filter(s => s.isEmpty);
+  if (emptyBeds.length === 0) {
+    showToast('目前沒有任何空床', 'info');
+    return;
+  }
+
+  showLoading(true);
+  try {
+    const datesToClear = {};
+    for (const d of state.dateColumns) datesToClear[d] = '✓';
+
+    const updates = emptyBeds.map(student => {
+      // 本地同步更新
+      for (const d of state.dateColumns) student.attendance[d] = '✓';
+      
+      return {
+        pageId: student.id,
+        dates: datesToClear // 僅覆寫請假紀錄為勾勾
+      };
+    });
+
+    // 分批次發出 API 請求
+    for (let i = 0; i < updates.length; i += 45) {
+      await window._api.updateAttendance(updates.slice(i, i + 45));
+    }
+
+    showToast(`成功將 ${emptyBeds.length} 張空床的請假紀錄統一填上勾勾！`, 'success');
+    
+    if (currentPage === 'rollcall') renderRollCall();
+    if (currentPage === 'summary') renderSummary();
+
+  } catch (err) {
+    showToast('更新失敗：' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 住宿生新增 幹部審核邏輯
+// ═════════════════════════════════════════════════════════════════════════════
+async function renderResidentReviewList() {
+  const container = document.getElementById('management-review-list');
+  if (!container) return;
+  
+  container.style.display = 'block';
+  container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">讀取中...</div>';
+
+  try {
+    // 取得最新 config (包含所有暫存的新增請求)
+    const config = await window._api.getConfig();
+    const reqs = Object.keys(config)
+      .filter(k => k.startsWith('add_req_') && config[k])
+      .map(k => {
+        try { return { id: k, ...JSON.parse(config[k]) }; }
+        catch (e) { return null; }
+      })
+      .filter(x => x && x.name) // 過濾可用資料
+      .sort((a, b) => b.timestamp - a.timestamp); // 新的在上面
+
+    if (reqs.length === 0) {
+      container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">目前沒有任何新增住宿生申請。</div>';
+      return;
+    }
+
+    let html = '';
+    reqs.forEach(req => {
+      const timeStr = new Date(req.timestamp).toLocaleString();
+      html += `
+        <div class="dev-card" style="margin-top: 12px; border-left: 4px solid var(--blue);">
+          <div style="display:flex; justify-content:space-between; align-items:start;">
+            <div>
+              <div style="font-weight:bold; font-size:16px; color:#fff;">${req.name} <span style="color:#aaa;font-size:13px;font-weight:normal;">(${req.class} - ${req.studentId})</span></div>
+              <div style="color:#a78bfa; margin-top:4px; font-size:14px;">🛏️ 申請補入: ${req.room} ${req.bed} 床</div>
+              <div style="color:#aaa; margin-top:4px; font-size:12px;">⏰ 送出時間: ${timeStr}</div>
+              ${req.isForeign ? '<span class="status-badge status-leave" style="margin-top:8px;">🌍 外籍生</span>' : ''}
+            </div>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <button class="action-btn" style="background:var(--green); border:none;" onclick="approveResidentAddReq('${req.id}')">✅ 通過並寫入</button>
+              <button class="action-btn" style="background:var(--red); border:none;" onclick="rejectResidentAddReq('${req.id}')">❌ 駁回申請</button>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<div style="color:var(--red);text-align:center;padding:20px;">讀取失敗：${err.message}</div>`;
+  }
+}
+
+async function approveResidentAddReq(reqId) {
+  if (!confirm('確定要通過申請，將該學生正式寫入總表床位嗎？')) return;
+  showLoading(true);
+  try {
+    const config = await window._api.getConfig();
+    const reqStr = config[reqId];
+    if (!reqStr) throw new Error('找不到該申請');
+    const req = JSON.parse(reqStr);
+
+    // 檢查床位現在是否依然是空床
+    const student = state.students.find(s => s.room === req.room && s.bed === req.bed);
+    if (!student || !student.isEmpty) {
+      throw new Error(`目標床位 ${req.room} ${req.bed} 目前並非空床狀態！請先確認總表。`);
+    }
+
+    // 1. 寫入總表
+    await window._api.updateAttendance([{
+      pageId: req.pageId, // Notion 上的目標空床 PageID
+      updateProfile: {
+        name: req.name,
+        class: req.class,
+        studentId: req.studentId,
+        isForeign: req.isForeign
+      },
+      markEmpty: false // 取消空床狀態
+    }]);
+
+    // 2. 本地狀態更新
+    student.name = req.name;
+    student.class = req.class;
+    student.studentId = req.studentId;
+    student.isForeign = req.isForeign;
+    student.isEmpty = false;
+
+    // 3. 從 config 清除該筆 request
+    await window._api.setConfig({ [reqId]: '' });
+
+    showToast('核准成功！該學生已正式寫入總表。', 'success');
+    renderResidentReviewList(); // 重新讀取清單
+    state.lastFetched = 0; // 強制下一次要重新讀取確保畫面乾淨
+  } catch (err) {
+    showToast('操作失敗：' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function rejectResidentAddReq(reqId) {
+  if (!confirm('確定要駁回此申請嗎？紀錄將被刪除。')) return;
+  showLoading(true);
+  try {
+    await window._api.setConfig({ [reqId]: '' });
+    showToast('已駁回，並移除申請紀錄。', 'success');
+    renderResidentReviewList();
+  } catch (err) {
+    showToast('操作失敗：' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
 window.applyBgVideoUrl = applyBgVideoUrl;
 window.previewBgVideoStyle = previewBgVideoStyle;
 window.clearBgVideo = clearBgVideo;
+window.cleanUpEmptyBeds = cleanUpEmptyBeds;
+window.fillEmptyBedsWithCheckmarks = fillEmptyBedsWithCheckmarks;
+
+window.openAddResidentModal = openAddResidentModal;
+window.updateAddResidentBeds = updateAddResidentBeds;
+window.checkForeignStudentClass = checkForeignStudentClass;
+window.submitAddResident = submitAddResident;
+window.renderResidentReviewList = renderResidentReviewList;
+window.approveResidentAddReq = approveResidentAddReq;
+window.rejectResidentAddReq = rejectResidentAddReq;
 
