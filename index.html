@@ -147,7 +147,7 @@
   <!-- ═══════════ 幹部管理 ═══════════ -->
   <div id="page-management" class="page">
     <h1 id="mgt-title" class="page-title" style="text-align: center; margin-top: 16px;">幹部專區</h1>
-    
+
     <div style="padding: 16px;">
       <button class="empty-bed-action" style="border-left: 4px solid var(--orange);" onclick="openReviewPage()">
         <span class="eb-icon">📝</span>
@@ -163,7 +163,8 @@
   <!-- ═══════════ 審核頁面 ═══════════ -->
   <div id="page-review" class="page">
     <div style="display:flex; align-items:center; margin-bottom: 16px;">
-      <button class="back-btn" style="position:static; margin-right: 12px; margin-top: 0;" onclick="navigateTo('management')">‹ 返回幹部專區</button>
+      <button class="back-btn" style="position:static; margin-right: 12px; margin-top: 0;"
+        onclick="navigateTo('management')">‹ 返回幹部專區</button>
       <h1 class="page-title" style="margin-bottom:0;">📝 申請審核</h1>
     </div>
     <div id="management-review-list">
@@ -174,7 +175,8 @@
   <!-- ═══════════ 櫃台請假紀錄頁面 ═══════════ -->
   <div id="page-leave-records" class="page">
     <div style="display:flex; align-items:center; margin-bottom: 16px;">
-      <button class="back-btn" style="position:static; margin-right: 12px; margin-top: 0;" onclick="navigateTo('summary')">‹ 返回總表</button>
+      <button class="back-btn" style="position:static; margin-right: 12px; margin-top: 0;"
+        onclick="navigateTo('summary')">‹ 返回總表</button>
       <h1 class="page-title" style="margin-bottom:0;">📞 電話請假紀錄</h1>
     </div>
     <div id="leave-records-list">
@@ -287,16 +289,17 @@
         <select id="ar-room" class="styled-select" onchange="updateAddResidentBeds()"></select>
         <label>目標空床位</label>
         <select id="ar-bed" class="styled-select"></select>
-        
+
         <label style="margin-top: 12px;">姓名</label>
         <input type="text" id="ar-name" class="styled-input" placeholder="例如：王小明" autocomplete="off">
-        
+
         <label style="margin-top: 12px;">班別</label>
-        <input type="text" id="ar-class" class="styled-input" placeholder="例如：四漫一A 或 越南華語專班" oninput="checkForeignStudentClass()" autocomplete="off">
-        
+        <input type="text" id="ar-class" class="styled-input" placeholder="例如：四漫一A 或 越南華語專班"
+          oninput="checkForeignStudentClass()" autocomplete="off">
+
         <label style="margin-top: 12px;">學號</label>
         <input type="text" id="ar-studentid" class="styled-input" placeholder="例如：D14551333" autocomplete="off">
-        
+
         <label style="margin-top: 12px; display:flex; align-items:center; gap:8px;">
           <input type="checkbox" id="ar-is-foreign" style="width:16px;height:16px;accent-color:var(--green)">
           <span>是否為外籍生</span>
@@ -304,7 +307,9 @@
       </div>
       <div class="modal-actions" style="margin-top: 20px;">
         <button class="modal-btn cancel" onclick="closeModal('add-resident-modal')">取消</button>
-        <button class="modal-btn" style="background: var(--blue); color: white; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);" onclick="submitAddResident()">送出審核</button>
+        <button class="modal-btn"
+          style="background: var(--blue); color: white; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);"
+          onclick="submitAddResident()">送出審核</button>
       </div>
     </div>
   </div>
@@ -314,14 +319,18 @@
     <div class="modal-card">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
         <h3 style="margin:0;">📞 櫃台請假填寫</h3>
-        <button style="background:var(--dim); padding:6px 12px; border:none; border-radius:8px; color:white; font-size:12px; cursor:pointer;" onclick="closeModal('counter-leave-modal'); navigateTo('leave-records'); renderLeaveRecordsList();">📑 歷史紀錄</button>
+        <button
+          style="background:var(--dim); padding:6px 12px; border:none; border-radius:8px; color:white; font-size:12px; cursor:pointer;"
+          onclick="closeModal('counter-leave-modal'); navigateTo('leave-records'); renderLeaveRecordsList();">📑
+          歷史紀錄</button>
       </div>
       <p class="modal-desc">搜尋學生並快速設定點名表請假區間。</p>
-      
+
       <div class="bed-selector">
         <label>🔍 搜尋對象 (姓名/房號/床位)</label>
-        <input type="text" id="cl-search" class="styled-input" placeholder="例如：112 C 或 王小明" oninput="handleCounterLeaveSearch()" autocomplete="off">
-        
+        <input type="text" id="cl-search" class="styled-input" placeholder="例如：112 C 或 王小明"
+          oninput="handleCounterLeaveSearch()" autocomplete="off">
+
         <label style="margin-top: 12px;">🧑‍🎓 選擇請假學生</label>
         <select id="cl-target" class="styled-select">
           <option value="">請先搜尋上方欄位...</option>
@@ -329,7 +338,7 @@
 
         <label style="margin-top: 12px;">處理櫃檯名稱 / 幹部姓名</label>
         <input type="text" id="cl-handler" class="styled-input" placeholder="例如：110A 小明" autocomplete="off">
-        
+
         <div style="display:flex; gap:12px; margin-top:12px;">
           <div style="flex:1;">
             <label>📅 開始日期</label>
@@ -341,10 +350,12 @@
           </div>
         </div>
       </div>
-      
+
       <div class="modal-actions" style="margin-top: 20px;">
         <button class="modal-btn cancel" onclick="closeModal('counter-leave-modal')">取消</button>
-        <button class="modal-btn" style="background: var(--green); color: white; box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);" onclick="submitCounterLeave()">送出請假</button>
+        <button class="modal-btn"
+          style="background: var(--green); color: white; box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);"
+          onclick="submitCounterLeave()">送出請假</button>
       </div>
     </div>
   </div>
@@ -569,6 +580,15 @@
                 onclick="saveRolePIN('vice_president', 'cfg-pin-vice-president')">🔐</button>
             </div>
           </div>
+
+          <!-- 全域密碼開關 -->
+          <div style="padding:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;display:flex;justify-content:space-between;align-items:center;">
+             <label style="font-size:14px; color:#fff; display:flex; align-items:center; gap:8px; cursor:pointer;">
+               <input type="checkbox" id="dev-global-pin-auth" style="width:20px;height:20px;accent-color:var(--red)">
+               <span>🛡️ 啟用密碼機制 (會套用至所有幹部與點名)</span>
+             </label>
+             <button class="action-btn" style="padding:8px 12px;font-size:12px;background:var(--blue);" onclick="saveGlobalPinAuth()">💾 儲存</button>
+          </div>
         </div>
       </div>
 
@@ -641,7 +661,7 @@
         alert('發生錯誤: ' + err.message);
       }
     }
-  
+
     async function setupChangelogDB() {
       if (!confirm("這將會在 Notion 自動建立一個新的公告資料庫。確定要執行嗎？")) return;
       try {
@@ -696,9 +716,9 @@
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=53"></script>
-  <script src="api.js?v=53"></script>
-  <script src="app.js?v=53"></script>
+  <script src="config.js?v=54"></script>
+  <script src="api.js?v=54"></script>
+  <script src="app.js?v=54"></script>
 </body>
 
 </html>

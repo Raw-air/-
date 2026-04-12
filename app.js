@@ -1501,6 +1501,21 @@ async function testWorkerConnection() {
   }
 }
 
+async function saveGlobalPinAuth() {
+  const isEnabled = document.getElementById('dev-global-pin-auth').checked;
+  showLoading(true);
+  try {
+    const val = isEnabled ? 'true' : 'false';
+    await window._api.setConfig({ 'global_pin_auth': val });
+    state.config['global_pin_auth'] = val;
+    showToast('已更新全域密碼設定，將套用於所有裝置', 'success');
+  } catch (err) {
+    showToast('設定失敗：' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
 // ─── PIN ────────────────────────────────────────────────────────────────────
 let pinCallback = null, pinSquadId = null;
 
@@ -1519,6 +1534,10 @@ function setupPinDialog() {
 }
 
 function showPinDialog(squadId, callback, customTitle) {
+  if (state.config['global_pin_auth'] === 'false') {
+    if (callback) callback();
+    return;
+  }
   pinSquadId = squadId; pinCallback = callback;
   document.getElementById('pin-dialog-title').textContent = customTitle || `${squadId} 中隊點名`;
   document.getElementById('pin-input').value = '';
@@ -1668,6 +1687,10 @@ function openDevAuth() {
   // 如果已解鎖，切換顯示/隱藏
   if (devUnlocked) {
     if (!panel.classList.contains('open')) {
+      const pinAuthCheckbox = document.getElementById('dev-global-pin-auth');
+      if (pinAuthCheckbox) {
+        pinAuthCheckbox.checked = state.config['global_pin_auth'] !== 'false';
+      }
       initDevChangelog();
       panel.classList.add('open');
     } else {
@@ -1702,6 +1725,10 @@ function openDevAuth() {
         overlay.classList.remove('visible');
         setTimeout(() => overlay.remove(), 300);
         panel.classList.add('open');
+        const pinAuthCheckbox = document.getElementById('dev-global-pin-auth');
+        if (pinAuthCheckbox) {
+          pinAuthCheckbox.checked = state.config['global_pin_auth'] !== 'false';
+        }
         initDevChangelog();
         showToast('🔓 開發者模式已解鎖', 'success');
       }, 200);
@@ -1723,6 +1750,7 @@ function openDevAuth() {
 }
 
 window.openDevAuth = openDevAuth;
+window.saveGlobalPinAuth = saveGlobalPinAuth;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 伺服器自訂背景影片 (全域 Notion Config 儲存)
