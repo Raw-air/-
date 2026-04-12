@@ -25,7 +25,15 @@ window.addEventListener('unhandledrejection', (e) => {
   showLoading(false);
   showToast('未預期的錯誤: ' + (e.reason ? e.reason.message : 'Unknown'), 'error');
 });
-
+// ─── 全域座標追蹤 (用於動畫精確定位) ──────────────────────────────────────────
+let lastTapX = window.innerWidth / 2;
+let lastTapY = window.innerHeight / 2;
+window.addEventListener('pointerdown', (e) => {
+  if (e.clientX && e.clientY) {
+    lastTapX = e.clientX;
+    lastTapY = e.clientY;
+  }
+}, { passive: true });
 // ─── UI 清脆音效 (Web Audio API) ───────────────────────────────────────────
 let audioCtx = null;
 function playClickSound(type = 'default') {
@@ -215,6 +223,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.body.classList.add('light-mode');
       const whiteToggle = document.getElementById('setting-white-mode');
       if (whiteToggle) whiteToggle.checked = true;
+      if (typeof updateAllImagesToTheme === 'function') updateAllImagesToTheme();
     }
     
     // 初始狀態：靜音模式
@@ -256,6 +265,99 @@ function toggleMute(el) {
   localStorage.setItem('mute_sound', el.checked);
 }
 
+function performAppearanceChange(isLight) {
+  if (isLight) document.body.classList.add('light-mode');
+  else document.body.classList.remove('light-mode');
+  if (typeof updateAllImagesToTheme === 'function') updateAllImagesToTheme();
+}
+
+let vtStartTime = 0;
+let vtRadiusFn = null;
+
+function easeOutQuad(t) { return t * (2 - t); }
+
+function toggleWhiteMode(el, event) {
+  const isLight = el.checked;
+  localStorage.setItem('white_mode', isLight);
+  const isDark = !isLight;
+
+  let x = lastTapX;
+  let y = lastTapY;
+  
+  const endRadius = Math.hypot(
+    Math.max(x, window.innerWidth - x),
+    Math.max(y, window.innerHeight - y)
+  );
+
+  if (!document.startViewTransition) {
+    performAppearanceChange(isLight);
+    return;
+  }
+
+  // 👑 獨家防閃爍算法：推算當前畫面光圈半徑，實現「狂點完美折返」
+  let startRadius = isDark ? endRadius : 0;
+  const now = Date.now();
+  const duration = 400;
+
+  if (vtRadiusFn && (now - vtStartTime) < duration) {
+      startRadius = vtRadiusFn(now); 
+  }
+
+  const targetRadius = isDark ? 0 : endRadius;
+  vtStartTime = now;
+  
+  vtRadiusFn = (evalTime) => {
+      let t = Math.min((evalTime - vtStartTime) / duration, 1);
+      let progress = easeOutQuad(t);
+      return Math.max(0, startRadius + (targetRadius - startRadius) * progress);
+  };
+
+  if(isDark) document.documentElement.classList.add('transition-dark');
+  
+  const transition = document.startViewTransition(() => performAppearanceChange(isLight));
+
+  transition.ready.then(() => {
+    const clipPathStart = `circle(${startRadius}px at ${x}px ${y}px)`;
+    const clipPathEnd = `circle(${targetRadius}px at ${x}px ${y}px)`;
+
+    try {
+      document.documentElement.animate(
+        { clipPath: [clipPathStart, clipPathEnd] },
+        {
+          duration: duration,
+          easing: 'ease-out',
+          fill: 'forwards',
+          pseudoElement: isDark ? '::view-transition-old(root)' : '::view-transition-new(root)'
+        }
+      );
+    } catch (animErr) {
+      let fallbackStyle = document.getElementById('vt-fallback');
+      if (!fallbackStyle) {
+        fallbackStyle = document.createElement('style');
+        fallbackStyle.id = 'vt-fallback';
+        document.head.appendChild(fallbackStyle);
+      }
+      const pseudo = isDark ? '::view-transition-old(root)' : '::view-transition-new(root)';
+      const prefix = isDark ? 'html.transition-dark' : '';
+      fallbackStyle.innerHTML = `
+        @keyframes vt-circle-anim {
+          0% { clip-path: ${clipPathStart}; }
+          100% { clip-path: ${clipPathEnd}; }
+        }
+        ${prefix}${pseudo} {
+          animation: vt-circle-anim ${duration}ms ease-out forwards !important;
+        }
+      `;
+    }
+  }).catch(() => {});
+
+  transition.finished.finally(() => {
+    document.documentElement.classList.remove('transition-dark');
+    const styleEl = document.getElementById('vt-fallback');
+    if (styleEl) styleEl.remove();
+  });
+}
+
 function getIconSrc(baseName) {
   const isLight = document.body.classList.contains('light-mode');
   if (!isLight) return `./Lp/ICON/${baseName}.svg`;
@@ -266,80 +368,30 @@ function getIconSrc(baseName) {
 }
 
 function updateAllImagesToTheme() {
-  const images = document.querySelectorAll('img[src*="Lp/ICON"]');
-  images.forEach(img => {
-    let src = img.getAttribute('src');
-    if (!src) return;
-    
-    let baseName = '';
-    if (src.includes('BLACK')) {
-      baseName = src.split('/').pop().replace('_BLACK.svg', '').replace('.svg', '');
-      if (baseName === 'SETTINGS_') baseName = 'SETTIN';
-    } else {
-      baseName = src.split('/').pop().replace('.svg', '');
-    }
-    img.setAttribute('src', getIconSrc(baseName));
-  });
-  // 如果 applyNavIcons 存在則重新算一次
-  if (typeof applyNavIcons === 'function') {
-    applyNavIcons();
-  }
-}
-
-function toggleWhiteMode(el, event) {
-  const isLight = el.checked;
-  localStorage.setItem('white_mode', el.checked);
-  
-  const performAppearanceChange = () => {
-    if (isLight) document.body.classList.add('light-mode');
-    else document.body.classList.remove('light-mode');
-    updateAllImagesToTheme();
-  };
-
-  // 如果瀏覽器不支援 View Transitions，或是沒有拿到 event
-  if (!document.startViewTransition) {
-    performAppearanceChange();
-    return;
-  }
-
-  // 強制取得可見的 switch 父容器中心點 (因為 input 本身是 display: none 座標為 0)
-  const parent = el.closest('.switch') || el.parentElement;
-  const rect = parent.getBoundingClientRect();
-  const x = rect.left + rect.width / 2;
-  const y = rect.top + rect.height / 2;
-  
-  const endRadius = Math.hypot(
-    Math.max(x, innerWidth - x),
-    Math.max(y, innerHeight - y)
-  );
-
-  const isDark = !isLight;
-  if(isDark) document.documentElement.classList.add('transition-dark');
-
-  const transition = document.startViewTransition(performAppearanceChange);
-
-  transition.ready.then(() => {
-    const clipPath = [
-      `circle(0px at ${x}px ${y}px)`,
-      `circle(${endRadius}px at ${x}px ${y}px)`
-    ];
-
-    document.documentElement.animate(
-      {
-        clipPath: isDark ? [...clipPath].reverse() : clipPath
-      },
-      {
-        duration: 450,
-        easing: 'ease-in',
-        fill: 'forwards',
-        pseudoElement: isDark ? '::view-transition-old(root)' : '::view-transition-new(root)'
+  try {
+    const images = document.querySelectorAll('img[src*="Lp/ICON"]');
+    images.forEach(img => {
+      let src = img.getAttribute('src');
+      if (!src) return;
+      
+      let baseName = '';
+      if (src.includes('BLACK')) {
+        baseName = src.split('/').pop().replace('_BLACK.svg', '').replace('.svg', '');
+        if (baseName === 'SETTINGS_') baseName = 'SETTIN';
+      } else {
+        baseName = src.split('/').pop().replace('.svg', '');
       }
-    );
-  });
-
-  transition.finished.then(() => {
-    document.documentElement.classList.remove('transition-dark');
-  });
+      if (baseName) {
+        img.setAttribute('src', getIconSrc(baseName));
+      }
+    });
+    // 如果 applyNavIcons 存在則重新算一次
+    if (typeof applyNavIcons === 'function') {
+      applyNavIcons();
+    }
+  } catch (err) {
+    console.error("Theme switch error:", err);
+  }
 }
 
 async function loadData() {
@@ -2113,18 +2165,16 @@ async function renderResidentReviewList() {
     reqs.forEach(req => {
       const timeStr = new Date(req.timestamp).toLocaleString();
       html += `
-        <div class="dev-card" style="margin-top: 12px; border-left: 4px solid var(--blue);">
-          <div style="display:flex; justify-content:space-between; align-items:start;">
-            <div>
-              <div style="font-weight:bold; font-size:16px; color:#fff;">${req.name} <span style="color:#aaa;font-size:13px;font-weight:normal;">(${req.class} - ${req.studentId})</span></div>
-              <div style="color:#a78bfa; margin-top:4px; font-size:14px;">🛏️ 申請補入: ${req.room} ${req.bed} 床</div>
-              <div style="color:#aaa; margin-top:4px; font-size:12px;">⏰ 送出時間: ${timeStr}</div>
-              ${req.isForeign ? '<span class="status-badge status-leave" style="margin-top:8px;">🌍 外籍生</span>' : ''}
-            </div>
-            <div style="display:flex; flex-direction:column; gap:8px;">
-              <button class="action-btn" style="background:var(--green); border:none;" onclick="approveResidentAddReq('${req.id}')">✅ 通過並寫入</button>
-              <button class="action-btn" style="background:var(--red); border:none;" onclick="rejectResidentAddReq('${req.id}')">❌ 駁回申請</button>
-            </div>
+        <div class="review-card">
+          <div class="review-card-info">
+            <div class="review-card-name">${req.name}<span class="review-card-meta">${req.class} • ${req.studentId}</span></div>
+            <div class="review-card-bed">🛏️ 申請補入: ${req.room} ${req.bed} 床</div>
+            <div class="review-card-time">⏰ 送出時間: ${timeStr}</div>
+            ${req.isForeign ? '<div class="review-card-badge foreign">🌍 外籍生</div>' : ''}
+          </div>
+          <div class="review-card-actions">
+            <button class="review-approve-btn" onclick="approveResidentAddReq('${req.id}')">✅ 通過並寫入</button>
+            <button class="review-reject-btn" onclick="rejectResidentAddReq('${req.id}')">✕ 駁回</button>
           </div>
         </div>
       `;
@@ -2395,4 +2445,167 @@ window.submitCounterLeave = submitCounterLeave;
 window.viewLeaveRecords = viewLeaveRecords;
 window.renderLeaveRecordsList = renderLeaveRecordsList;
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// 通知報修系統
+// ═══════════════════════════════════════════════════════════════════════════════
+let repairPhotos = []; // base64 array
 
+function openRepairForm() {
+  repairPhotos = [];
+  navigateTo('repair-form');
+  const reason = document.getElementById('repair-reason');
+  if (reason) reason.value = '';
+  const grid = document.getElementById('repair-preview-grid');
+  if (grid) grid.innerHTML = '';
+}
+
+function handleRepairPhotos(input) {
+  const files = Array.from(input.files);
+  files.forEach(file => {
+    if (repairPhotos.length >= 3) return; // 最多 3 張
+    const reader = new FileReader();
+    reader.onload = e => {
+      // 壓縮圖片
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 600;
+        let w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+          else { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const compressed = canvas.toDataURL('image/jpeg', 0.6);
+        repairPhotos.push(compressed);
+        renderRepairPreviews();
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value = '';
+}
+
+function renderRepairPreviews() {
+  const grid = document.getElementById('repair-preview-grid');
+  if (!grid) return;
+  grid.innerHTML = repairPhotos.map((src, i) => `
+    <div class="repair-preview-item">
+      <img src="${src}" alt="照片${i + 1}">
+      <button class="repair-preview-remove" onclick="removeRepairPhoto(${i})">✕</button>
+    </div>
+  `).join('');
+}
+
+function removeRepairPhoto(index) {
+  repairPhotos.splice(index, 1);
+  renderRepairPreviews();
+}
+
+async function submitRepair() {
+  const reason = document.getElementById('repair-reason')?.value?.trim();
+  if (!reason) {
+    showToast('請填寫報修原因', 'error');
+    return;
+  }
+
+  showLoading(true);
+  try {
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/repair-records', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reason: reason,
+        photos: repairPhotos
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      playClickSound('all_present');
+      showToast('報修通知已送出！', 'success');
+      repairPhotos = [];
+      navigateTo('tools');
+    } else {
+      throw new Error(data.error || '送出失敗');
+    }
+  } catch (err) {
+    showToast('送出失敗：' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+function openRepairReview() {
+  navigateTo('repair-review');
+  renderRepairReviewList();
+}
+
+async function renderRepairReviewList() {
+  const container = document.getElementById('repair-review-list');
+  if (!container) return;
+  container.innerHTML = '<div style="color:var(--dim);text-align:center;padding:20px;">讀取中...</div>';
+
+  try {
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/repair-records');
+    const records = await res.json();
+
+    if (!records || records.length === 0) {
+      container.innerHTML = '<div style="color:var(--dim);text-align:center;padding:40px;">目前沒有任何報修紀錄 🎉</div>';
+      return;
+    }
+
+    let html = '';
+    records.forEach(rec => {
+      const timeStr = rec.createdAt ? new Date(rec.createdAt).toLocaleString() : '未知';
+      const photosHtml = (rec.photos || []).map(src =>
+        `<img src="${src}" alt="報修照片" onclick="window.open('${src}','_blank')">`
+      ).join('');
+
+      html += `
+        <div class="repair-record-card">
+          <div class="repair-record-reason">${rec.reason || '（無描述）'}</div>
+          ${photosHtml ? `<div class="repair-record-photos">${photosHtml}</div>` : ''}
+          <div class="repair-record-time">⏰ ${timeStr}</div>
+          <button class="repair-done-btn" onclick="markRepairDone('${rec.id}')">✅ 已回報處理</button>
+        </div>
+      `;
+    });
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<div style="color:var(--red);text-align:center;padding:20px;">讀取失敗：${err.message}</div>`;
+  }
+}
+
+async function markRepairDone(id) {
+  if (!confirm('確定此報修已經回報處理完畢？紀錄將會被刪除。')) return;
+  showLoading(true);
+  try {
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/repair-records', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('已標記為處理完畢', 'success');
+      renderRepairReviewList();
+    } else {
+      throw new Error(data.error || '操作失敗');
+    }
+  } catch (err) {
+    showToast('操作失敗：' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+window.openRepairForm = openRepairForm;
+window.handleRepairPhotos = handleRepairPhotos;
+window.removeRepairPhoto = removeRepairPhoto;
+window.submitRepair = submitRepair;
+window.openRepairReview = openRepairReview;
+window.renderRepairReviewList = renderRepairReviewList;
+window.markRepairDone = markRepairDone;

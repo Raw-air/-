@@ -2695,9 +2695,528 @@ body.light-mode .cal-badge {
   color: #000;
 }
 
+/* ── 全白模式主畫面可見度全面修復 ── */
+body.light-mode .section-label {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+body.light-mode .sq-card {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+body.light-mode .sq-name {
+  color: #1a1a1a;
+}
+
+body.light-mode .sq-desc {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+body.light-mode .page-title {
+  color: var(--text);
+}
+
+body.light-mode .settings-card {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.light-mode .settings-card-header {
+  color: var(--text);
+}
+
+body.light-mode .settings-dim {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+body.light-mode .settings-hint {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+body.light-mode .setting-row {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+body.light-mode .setting-row span {
+  color: var(--text);
+}
+
+body.light-mode .empty-bed-action {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.light-mode .empty-bed-action:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+body.light-mode .eb-desc {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+body.light-mode .eb-arrow {
+  color: rgba(0, 0, 0, 0.3);
+}
+
+body.light-mode .dev-trigger {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.light-mode .dev-trigger-text {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+body.light-mode .dev-card {
+  background: rgba(239, 68, 68, 0.04);
+  border-color: rgba(239, 68, 68, 0.15);
+}
+
+body.light-mode .dev-card-header {
+  color: rgba(220, 50, 50, 0.85);
+}
+
+body.light-mode .dev-card-hint {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+body.light-mode .changelog-btn {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: var(--text);
+}
+
+body.light-mode .conn-badge {
+  color: var(--text);
+}
+
+body.light-mode .summary-header h1 {
+  color: var(--text);
+}
+
+body.light-mode .rc-squad-name {
+  color: var(--text);
+}
+
+/* ── 問題 2：公告文字在白底模式看不清楚 ── */
+body.light-mode #changelog-modal .modal-card h3 {
+  color: #1a1a1a;
+}
+body.light-mode #changelog-modal .modal-card div[style*="border-bottom"] {
+  border-bottom-color: rgba(0, 0, 0, 0.1) !important;
+}
+body.light-mode #changelog-content {
+  color: #333;
+}
+body.light-mode #changelog-content p,
+body.light-mode #changelog-content ul,
+body.light-mode #changelog-content li {
+  color: #333 !important;
+}
+
+/* ── 問題 4：點名日期在全白模式下怪怪的 ── */
+body.light-mode .date-picker-panel {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(0, 0, 0, 0.15);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+body.light-mode .date-picker-header {
+  color: rgba(0, 0, 0, 0.5);
+  border-bottom-color: rgba(0, 0, 0, 0.1);
+}
+body.light-mode .date-item {
+  color: var(--text);
+}
+body.light-mode .date-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+body.light-mode .date-item.active {
+  background: rgba(139, 92, 246, 0.1);
+  color: var(--purple);
+}
+
+/* ── 問題 5：底下的中隊長回報框跟那條虛線在白底下都消失 ── */
+body.light-mode .rc-confirm-action {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+body.light-mode .rc-confirm-action::before {
+  background-image: radial-gradient(circle, rgba(0, 0, 0, 0.2) 1.5px, transparent 1.5px);
+}
+
+/* ========================================================= */
+/* 📝 審核卡片 UI (Premium Review Cards)                      */
+/* ========================================================= */
+
+.review-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 14px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.review-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(180deg, var(--blue), var(--purple));
+  border-radius: 4px 0 0 4px;
+}
+
+.review-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+}
+
+.review-card-info {
+  margin-bottom: 16px;
+}
+
+.review-card-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.review-card-name .review-card-meta {
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--dim);
+  margin-left: 6px;
+}
+
+.review-card-bed {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--purple);
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 6px;
+}
+
+.review-card-time {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.review-card-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.review-card-badge.foreign {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.review-card-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.review-approve-btn,
+.review-reject-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.review-approve-btn {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.3);
+}
+
+.review-approve-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
+}
+
+.review-approve-btn:active {
+  transform: scale(0.97);
+}
+
+.review-reject-btn {
+  background: transparent;
+  color: var(--red);
+  border: 1.5px solid rgba(239, 68, 68, 0.35);
+}
+
+.review-reject-btn:hover {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.review-reject-btn:active {
+  transform: scale(0.97);
+}
+
+body.light-mode .review-card {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+/* ========================================================= */
+/* 🔧 報修系統頁面樣式                                        */
+/* ========================================================= */
+
+.repair-form-group {
+  margin-bottom: 20px;
+}
+
+.repair-form-group label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+
+.repair-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.repair-textarea:focus {
+  border-color: var(--purple);
+}
+
+body.light-mode .repair-textarea {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+.repair-upload-zone {
+  border: 2px dashed rgba(255, 255, 255, 0.25);
+  border-radius: 14px;
+  padding: 28px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.repair-upload-zone:hover {
+  border-color: var(--purple);
+  background: rgba(139, 92, 246, 0.04);
+}
+
+body.light-mode .repair-upload-zone {
+  border-color: rgba(0, 0, 0, 0.15);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+body.light-mode .repair-upload-zone:hover {
+  border-color: var(--purple);
+  background: rgba(139, 92, 246, 0.06);
+}
+
+.repair-upload-icon {
+  font-size: 36px;
+  margin-bottom: 8px;
+}
+
+.repair-upload-text {
+  font-size: 13px;
+  color: var(--dim);
+}
+
+.repair-preview-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.repair-preview-item {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.repair-preview-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.repair-preview-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.85);
+  color: #fff;
+  border: none;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.repair-submit-btn {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+  transition: all 0.25s;
+  margin-top: 8px;
+}
+
+.repair-submit-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.45);
+}
+
+.repair-submit-btn:active {
+  transform: scale(0.98);
+}
+
+.repair-record-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border-left: 4px solid var(--purple);
+}
+
+body.light-mode .repair-record-card {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(0, 0, 0, 0.08);
+  border-left-color: var(--purple);
+}
+
+.repair-record-reason {
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 10px;
+  line-height: 1.6;
+}
+
+.repair-record-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.repair-record-photos img {
+  width: 72px;
+  height: 72px;
+  border-radius: 8px;
+  object-fit: cover;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  transition: transform 0.2s;
+}
+
+.repair-record-photos img:hover {
+  transform: scale(1.05);
+}
+
+.repair-record-time {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.repair-done-btn {
+  padding: 8px 20px;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #fff;
+  box-shadow: 0 3px 10px rgba(34, 197, 94, 0.3);
+  transition: all 0.2s;
+  margin-top: 8px;
+}
+
+.repair-done-btn:hover {
+  transform: translateY(-1px);
+}
+
+.repair-done-btn:active {
+  transform: scale(0.97);
+}
+
 /* ========================================================= */
 /* 🌀 VIEW TRANSITIONS API: CIRCULAR EXPAND/SHRINK EFFECT    */
 /* ========================================================= */
+
+::view-transition {
+  pointer-events: none; /* 穿透點擊，讓使用者能在動畫期間狂點按鈕 */
+}
+
+/* 獨立切割開關按鈕，防止它被全螢幕快照給凍結定格 */
+label.switch:has(#setting-white-mode) {
+  view-transition-name: theme-btn-isolate;
+}
+
+/* 移除開關自己的漸變過渡，讓它能在一瞬間完成切換，展現即時回饋感 */
+::view-transition-group(theme-btn-isolate) {
+  animation: none;
+}
+::view-transition-old(theme-btn-isolate) {
+  display: none !important; /* 殺掉舊快照 (關閉前的殘影) */
+}
+::view-transition-new(theme-btn-isolate) {
+  animation: none !important;
+  display: block !important;
+}
+
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation: none;
