@@ -10,7 +10,7 @@
   <meta name="theme-color" content="#0a0a14">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=42">
+  <link rel="stylesheet" href="style.css?v=55">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -101,7 +101,7 @@
           allLines.push('[' + new Date().toTimeString().slice(0, 8) + '] ' + logs[Math.floor(Math.random() * logs.length)]);
           bg.textContent = allLines.join('\n');
           bg.scrollTop = bg.scrollHeight;
-          
+
           // 模擬終端機載入時的一卡一卡頓挫感
           const nextDelay = Math.random() < 0.15 ? Math.random() * 600 + 300 : Math.random() * 60 + 20;
           setTimeout(loopLogs, nextDelay);
@@ -129,6 +129,7 @@
     <!-- 背景已移至外層全域 -->
     <div class="home-hero">
       <button class="changelog-btn" onclick="openChangelogModal()">
+        <img src="./Lp/ICON/NEW.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">
         <span>公告 & 日誌</span>
         <div class="changelog-dot"></div>
       </button>
@@ -142,6 +143,55 @@
 
     <p class="section-label" style="margin-top:24px;">幹部專區</p>
     <div id="management-grid" style="display:flex;flex-direction:column;gap:12px;position:relative;z-index:1;"></div>
+  </div>
+
+  <!-- ═══════════ 幹部管理 ═══════════ -->
+  <div id="page-management" class="page">
+    <h1 id="mgt-title" class="page-title" style="text-align: center; margin-top: 16px;">幹部專區</h1>
+
+    <div style="padding: 16px;">
+      <button class="empty-bed-action" style="border-left: 4px solid var(--orange);" onclick="openReviewPage()">
+        <span class="eb-icon">📝</span>
+        <div class="eb-content">
+          <span class="eb-title" style="color:var(--orange)">住宿生新增進總表審核</span>
+          <span class="eb-desc">審核最新提出之住宿生新增申請</span>
+        </div>
+        <span class="eb-arrow">›</span>
+      </button>
+
+      <button class="empty-bed-action" style="border-left: 4px solid var(--purple);" onclick="openRepairReview()">
+        <span class="eb-icon">🔧</span>
+        <div class="eb-content">
+          <span class="eb-title" style="color:var(--purple)">報修審核</span>
+          <span class="eb-desc">查看住宿生提交的設施報修紀錄</span>
+        </div>
+        <span class="eb-arrow">›</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════ 審核頁面 ═══════════ -->
+  <div id="page-review" class="page">
+    <div style="display:flex; align-items:center; margin-bottom: 16px;">
+      <button class="back-btn" style="position:static; margin-right: 12px; margin-top: 0;"
+        onclick="navigateTo('management')">‹ 返回幹部專區</button>
+      <h1 class="page-title" style="margin-bottom:0;">📝 申請審核</h1>
+    </div>
+    <div id="management-review-list">
+      <!-- Javascript 會注入這區的內容 -->
+    </div>
+  </div>
+
+  <!-- ═══════════ 櫃台請假紀錄頁面 ═══════════ -->
+  <div id="page-leave-records" class="page">
+    <div style="display:flex; align-items:center; margin-bottom: 16px;">
+      <button class="back-btn" style="position:static; margin-right: 12px; margin-top: 0;"
+        onclick="navigateTo('summary')">‹ 返回總表</button>
+      <h1 class="page-title" style="margin-bottom:0;">📞 電話請假紀錄</h1>
+    </div>
+    <div id="leave-records-list">
+      <!-- Javascript 會注入紀錄 -->
+    </div>
   </div>
 
   <!-- ═══════════ 點名 ═══════════ -->
@@ -239,6 +289,87 @@
     </div>
   </div>
 
+  <!-- 新增住宿生 Modal -->
+  <div id="add-resident-modal" class="modal-overlay">
+    <div class="modal-card">
+      <h3>👤 新增住宿生</h3>
+      <p class="modal-desc">選擇空床並填首新生資料以送出審核</p>
+      <div class="bed-selector">
+        <label>目標房間</label>
+        <select id="ar-room" class="styled-select" onchange="updateAddResidentBeds()"></select>
+        <label>目標空床位</label>
+        <select id="ar-bed" class="styled-select"></select>
+
+        <label style="margin-top: 12px;">姓名</label>
+        <input type="text" id="ar-name" class="styled-input" placeholder="例如：王小明" autocomplete="off">
+
+        <label style="margin-top: 12px;">班別</label>
+        <input type="text" id="ar-class" class="styled-input" placeholder="例如：四漫一A 或 越南華語專班"
+          oninput="checkForeignStudentClass()" autocomplete="off">
+
+        <label style="margin-top: 12px;">學號</label>
+        <input type="text" id="ar-studentid" class="styled-input" placeholder="例如：D14551333" autocomplete="off">
+
+        <label style="margin-top: 12px; display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="ar-is-foreign" style="width:16px;height:16px;accent-color:var(--green)">
+          <span>是否為外籍生</span>
+        </label>
+      </div>
+      <div class="modal-actions" style="margin-top: 20px;">
+        <button class="modal-btn cancel" onclick="closeModal('add-resident-modal')">取消</button>
+        <button class="modal-btn"
+          style="background: var(--blue); color: white; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);"
+          onclick="submitAddResident()">送出審核</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 櫃台請假 Modal -->
+  <div id="counter-leave-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 style="margin:0;">📞 櫃台請假填寫</h3>
+        <button
+          style="background:var(--dim); padding:6px 12px; border:none; border-radius:8px; color:white; font-size:12px; cursor:pointer;"
+          onclick="closeModal('counter-leave-modal'); navigateTo('leave-records'); renderLeaveRecordsList();">📑
+          歷史紀錄</button>
+      </div>
+      <p class="modal-desc">搜尋學生並快速設定點名表請假區間。</p>
+
+      <div class="bed-selector">
+        <label>🔍 搜尋對象 (姓名/房號/床位)</label>
+        <input type="text" id="cl-search" class="styled-input" placeholder="例如：112 C 或 王小明"
+          oninput="handleCounterLeaveSearch()" autocomplete="off">
+
+        <label style="margin-top: 12px;">🧑‍🎓 選擇請假學生</label>
+        <select id="cl-target" class="styled-select">
+          <option value="">請先搜尋上方欄位...</option>
+        </select>
+
+        <label style="margin-top: 12px;">處理櫃檯名稱 / 幹部姓名</label>
+        <input type="text" id="cl-handler" class="styled-input" placeholder="例如：110A 小明" autocomplete="off">
+
+        <div style="display:flex; gap:12px; margin-top:12px;">
+          <div style="flex:1;">
+            <label>📅 開始日期</label>
+            <input type="date" id="cl-start-date" class="styled-input">
+          </div>
+          <div style="flex:1;">
+            <label>📅 結束日期</label>
+            <input type="date" id="cl-end-date" class="styled-input">
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions" style="margin-top: 20px;">
+        <button class="modal-btn cancel" onclick="closeModal('counter-leave-modal')">取消</button>
+        <button class="modal-btn"
+          style="background: var(--green); color: white; box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);"
+          onclick="submitCounterLeave()">送出請假</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══════════ 總表 ═══════════ -->
   <div id="page-summary" class="page">
     <div class="summary-header">
@@ -282,6 +413,29 @@
     <!-- 各中隊 -->
     <div id="summary-squad-grid" class="squad-detail-grid"></div>
 
+    <!-- 更多選項按鈕 -->
+    <button class="empty-bed-action" style="border-left:none; justify-content:center; padding:18px;" onclick="navigateTo('tools')">
+      <span style="font-size:16px; font-weight:700; letter-spacing:1px;">更多選項</span>
+    </button>
+
+    <div class="summary-actions">
+      <button id="copy-summary-btn" class="action-btn">
+        <img src="./Lp/ICON/COPY.svg" style="width:18px;height:18px;vertical-align:middle;margin-right:6px;">複製總表
+      </button>
+      <button id="refresh-summary-btn" class="action-btn">
+        <img src="./Lp/ICON/RESET.svg" style="width:18px;height:18px;vertical-align:middle;margin-right:6px;">重新整理
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════ 工具與選項 ═══════════ -->
+  <div id="page-tools" class="page">
+    <div style="margin-bottom: 24px; display: flex; align-items: center; gap: 12px; padding-top: 8px;">
+      <button class="back-btn" style="position:static; margin-top: 0;" onclick="navigateTo('summary')">‹ 返回總表</button>
+      <h1 style="flex:1; text-align:center; font-size: 20px; font-weight: 800; letter-spacing:1px; margin:0; color: var(--text);">工具與選項</h1>
+      <div style="width: 72px;"></div>
+    </div>
+
     <!-- 空床回報按鈕 -->
     <button class="empty-bed-action" onclick="openEmptyBedModal()">
       <span class="eb-icon">🛏️</span>
@@ -302,9 +456,70 @@
       <span class="eb-arrow">›</span>
     </button>
 
-    <div class="summary-actions">
-      <button id="copy-summary-btn" class="action-btn">📋 複製總表</button>
-      <button id="refresh-summary-btn" class="action-btn">🔄 重新整理</button>
+    <!-- 新增住宿生按鈕 -->
+    <button class="empty-bed-action" onclick="openAddResidentModal()">
+      <span class="eb-icon">👤</span>
+      <div class="eb-content">
+        <span class="eb-title">新增住宿生</span>
+        <span class="eb-desc">填寫新生資料並送出審核</span>
+      </div>
+      <span class="eb-arrow">›</span>
+    </button>
+
+    <!-- 櫃台請假按鈕 -->
+    <button class="empty-bed-action" style="border-left: 4px solid var(--green);" onclick="openCounterLeaveModal()">
+      <span class="eb-icon">📞</span>
+      <div class="eb-content">
+        <span class="eb-title" style="color:var(--green)">櫃台請假填寫</span>
+        <span class="eb-desc">電話通報請假，自動更新總表紀錄</span>
+      </div>
+      <span class="eb-arrow">›</span>
+    </button>
+
+    <!-- 通知報修按鈕 -->
+    <button class="empty-bed-action" style="border-left: 4px solid var(--purple);" onclick="openRepairForm()">
+      <span class="eb-icon">🔧</span>
+      <div class="eb-content">
+        <span class="eb-title" style="color:var(--purple)">通知報修</span>
+        <span class="eb-desc">回報宿舍設施損壞，上傳照片送出通知</span>
+      </div>
+      <span class="eb-arrow">›</span>
+    </button>
+  </div>
+
+  <!-- ═══════════ 報修填寫頁面 ═══════════ -->
+  <div id="page-repair-form" class="page">
+    <div style="display:flex; align-items:center; gap: 12px; margin-bottom: 20px; padding-top: 8px;">
+      <button class="back-btn" style="position:static; margin-top: 0;" onclick="navigateTo('tools')">‹ 返回</button>
+      <h1 style="flex:1; font-size: 20px; font-weight: 800; margin:0; color: var(--text);">🔧 通知報修</h1>
+    </div>
+
+    <div class="repair-form-group">
+      <label>📝 報修原因</label>
+      <textarea id="repair-reason" class="repair-textarea" placeholder="請描述設施損壞的位置與狀況..."></textarea>
+    </div>
+
+    <div class="repair-form-group">
+      <label>📷 狀況照片</label>
+      <div class="repair-upload-zone" id="repair-upload-zone" onclick="document.getElementById('repair-file-input').click()">
+        <div class="repair-upload-icon">📸</div>
+        <div class="repair-upload-text">點擊上傳照片 或 直接拍照</div>
+      </div>
+      <input type="file" id="repair-file-input" accept="image/*" multiple capture="environment" style="display:none" onchange="handleRepairPhotos(this)">
+      <div id="repair-preview-grid" class="repair-preview-grid"></div>
+    </div>
+
+    <button class="repair-submit-btn" onclick="submitRepair()">📤 送出報修通知</button>
+  </div>
+
+  <!-- ═══════════ 報修審核頁面 ═══════════ -->
+  <div id="page-repair-review" class="page">
+    <div style="display:flex; align-items:center; gap: 12px; margin-bottom: 20px; padding-top: 8px;">
+      <button class="back-btn" style="position:static; margin-top: 0;" onclick="navigateTo('management')">‹ 返回幹部專區</button>
+      <h1 style="flex:1; font-size: 20px; font-weight: 800; margin:0; color: var(--text);">🔧 報修審核</h1>
+    </div>
+    <div id="repair-review-list">
+      <!-- Javascript 會注入這區的內容 -->
     </div>
   </div>
 
@@ -322,14 +537,64 @@
 
   <!-- ═══════════ 設定 ═══════════ -->
   <div id="page-settings" class="page">
-    <h1 class="page-title">⚙️ 系統設定</h1>
+    <h1 class="page-title"><img src="./Lp/ICON/SETTIN.svg" style="width:28px;height:28px;vertical-align:middle;margin-right:12px;margin-bottom:6px;">系統設定</h1>
 
     <div class="settings-card">
-      <div class="settings-card-header">📡 連線狀態</div>
+      <div class="settings-card-header">✨ 個人化設定</div>
+      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 4px 0;">
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <span>音效靜音模式</span>
+          <span style="color:var(--dim); font-size:11px;">關閉系統的觸發音效</span>
+        </div>
+        <label class="switch">
+            <input id="setting-mute" type="checkbox" onchange="toggleMute(this)">
+            <div class="slider">
+                <div class="circle">
+                    <svg class="cross" xml:space="preserve" style="enable-background:new 0 0 512 512" viewBox="0 0 365.696 365.696" y="0" x="0" height="6" width="6" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                        <g>
+                            <path data-original="#000000" fill="currentColor" d="M243.188 182.86 356.32 69.726c12.5-12.5 12.5-32.766 0-45.247L341.238 9.398c-12.504-12.503-32.77-12.503-45.25 0L182.86 122.528 69.727 9.374c-12.5-12.5-32.766-12.5-45.247 0L9.375 24.457c-12.5 12.504-12.5 32.77 0 45.25l113.152 113.152L9.398 295.99c-12.503 12.503-12.503 32.769 0 45.25L24.48 356.32c12.5 12.5 32.766 12.5 45.247 0l113.132-113.132L295.99 356.32c12.503 12.5 32.769 12.5 45.25 0l15.081-15.082c12.5-12.504 12.5-32.77 0-45.25zm0 0"></path>
+                        </g>
+                    </svg>
+                    <svg class="checkmark" xml:space="preserve" style="enable-background:new 0 0 512 512" viewBox="0 0 24 24" y="0" x="0" height="10" width="10" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                        <g>
+                            <path class="" data-original="#000000" fill="currentColor" d="M9.707 19.121a.997.997 0 0 1-1.414 0l-5.646-5.647a1.5 1.5 0 0 1 0-2.121l.707-.707a1.5 1.5 0 0 1 2.121 0L9 14.171l9.525-9.525a1.5 1.5 0 0 1 2.121 0l.707.707a1.5 1.5 0 0 1 0 2.121z"></path>
+                        </g>
+                    </svg>
+                </div>
+            </div>
+        </label>
+      </div>
+      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 4px 0;">
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <span>全白模式</span>
+          <span style="color:var(--dim); font-size:11px;">切換為亮色外觀主題</span>
+        </div>
+        <label class="switch">
+            <input id="setting-white-mode" type="checkbox" onchange="toggleWhiteMode(this, event)">
+            <div class="slider">
+                <div class="circle">
+                    <svg class="cross" xml:space="preserve" style="enable-background:new 0 0 512 512" viewBox="0 0 365.696 365.696" y="0" x="0" height="6" width="6" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                        <g>
+                            <path data-original="#000000" fill="currentColor" d="M243.188 182.86 356.32 69.726c12.5-12.5 12.5-32.766 0-45.247L341.238 9.398c-12.504-12.503-32.77-12.503-45.25 0L182.86 122.528 69.727 9.374c-12.5-12.5-32.766-12.5-45.247 0L9.375 24.457c-12.5 12.504-12.5 32.77 0 45.25l113.152 113.152L9.398 295.99c-12.503 12.503-12.503 32.769 0 45.25L24.48 356.32c12.5 12.5 32.766 12.5 45.247 0l113.132-113.132L295.99 356.32c12.503 12.5 32.769 12.5 45.25 0l15.081-15.082c12.5-12.504 12.5-32.77 0-45.25zm0 0"></path>
+                        </g>
+                    </svg>
+                    <svg class="checkmark" xml:space="preserve" style="enable-background:new 0 0 512 512" viewBox="0 0 24 24" y="0" x="0" height="10" width="10" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                        <g>
+                            <path class="" data-original="#000000" fill="currentColor" d="M9.707 19.121a.997.997 0 0 1-1.414 0l-5.646-5.647a1.5 1.5 0 0 1 0-2.121l.707-.707a1.5 1.5 0 0 1 2.121 0L9 14.171l9.525-9.525a1.5 1.5 0 0 1 2.121 0l.707.707a1.5 1.5 0 0 1 0 2.121z"></path>
+                        </g>
+                    </svg>
+                </div>
+            </div>
+        </label>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <div class="settings-card-header">連線狀態</div>
       <div id="conn-status" class="conn-badge">檢查中...</div>
       <div id="settings-info" class="settings-dim"></div>
       <button class="action-btn wide warning" style="margin-top:12px;font-size:12px;padding:8px"
-        onclick="clearSystemCache()">🗑️ 強制清除快取 (解Bug專用)</button>
+        onclick="clearSystemCache()"><img src="./Lp/ICON/RESET.svg" style="width:14px;height:14px;vertical-align:middle;margin-right:6px;">強制清除快取 (解Bug專用)</button>
     </div>
 
     <script>
@@ -342,7 +607,7 @@
           }
           const names = await caches.keys();
           await Promise.all(names.map(name => caches.delete(name)));
-        } catch(e) {
+        } catch (e) {
           console.error('Clear cache error:', e);
         }
         window.location.reload(true);
@@ -350,7 +615,7 @@
     </script>
 
     <div class="settings-card">
-      <div class="settings-card-header">🏠 宿舍參數</div>
+      <div class="settings-card-header"><img src="./Lp/ICON/HOME.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">宿舍參數</div>
       <div class="setting-row">
         <span>總床數</span>
         <div class="stepper">
@@ -370,17 +635,17 @@
       <p class="settings-hint">💡 空床修正值用於微調全部空床數量</p>
       <div class="setting-divider"></div>
       <p class="settings-hint">⚠️ 118/120/122/124/126 為雙人房（自動屏蔽 C/D 床）<br>⚠️ 128 為儲藏室（自動隱藏）</p>
-      <button class="action-btn wide save-btn" onclick="saveDormSettings()">💾 儲存宿舍參數</button>
+      <button class="action-btn wide save-btn" onclick="saveDormSettings()">儲存宿舍參數</button>
     </div>
 
     <div class="settings-card">
-      <div class="settings-card-header">📤 匯出 Excel</div>
+      <div class="settings-card-header"><img src="./Lp/ICON/COPY.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">匯出 Excel</div>
       <button id="export-btn" class="action-btn wide" onclick="exportExcel()">📥 匯出完整 Excel</button>
     </div>
 
     <div class="settings-card">
-      <div class="settings-card-header">🔄 資料操作</div>
-      <button class="action-btn wide" onclick="loadData()">🔄 重新從 Notion 載入</button>
+      <div class="settings-card-header"><img src="./Lp/ICON/RESET.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">資料操作</div>
+      <button class="action-btn wide" onclick="loadData()"><img src="./Lp/ICON/RESET.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">重新從 Notion 載入</button>
     </div>
 
 
@@ -399,54 +664,58 @@
 
         <div style="display:flex;flex-direction:column;gap:12px;">
           <!-- 社長 -->
-          <div style="padding:12px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.25);border-radius:12px;">
+          <div
+            style="padding:12px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.25);border-radius:12px;">
             <div style="font-size:12px;color:rgba(245,158,11,0.7);font-weight:700;margin-bottom:10px;">😒 社長</div>
             <div style="display:flex;gap:8px;margin-bottom:8px;">
-              <input type="text" id="dev-icon-president" class="dev-input"
-                placeholder="EMOJI" maxlength="4"
+              <input type="text" id="dev-icon-president" class="dev-input" placeholder="EMOJI" maxlength="4"
                 style="width:56px;text-align:center;font-size:22px;padding:6px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(245,158,11,0.4);">
-              <input type="text" id="dev-label-president" class="dev-input"
-                placeholder="按鈕名稱"
+              <input type="text" id="dev-label-president" class="dev-input" placeholder="按鈕名稱"
                 style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(245,158,11,0.4);">
-              <button class="action-btn" style="padding:8px 12px;font-size:12px;" onclick="saveRoleAppearance('president')">🎨</button>
+              <button class="action-btn" style="padding:8px 12px;font-size:12px;"
+                onclick="saveRoleAppearance('president')">🎨</button>
             </div>
             <div style="display:flex;gap:8px;">
               <input type="password" id="cfg-pin-president" class="dev-input" maxlength="6" inputmode="numeric"
                 placeholder="6 位數登入密碼"
                 style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(245,158,11,0.4);letter-spacing:4px;">
-              <button class="action-btn" style="padding:8px 12px;font-size:12px;" onclick="saveRolePIN('president', 'cfg-pin-president')">🔐</button>
+              <button class="action-btn" style="padding:8px 12px;font-size:12px;"
+                onclick="saveRolePIN('president', 'cfg-pin-president')">🔐</button>
             </div>
           </div>
 
           <!-- 副社長 -->
-          <div style="padding:12px;background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.25);border-radius:12px;">
+          <div
+            style="padding:12px;background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.25);border-radius:12px;">
             <div style="font-size:12px;color:rgba(16,185,129,0.7);font-weight:700;margin-bottom:10px;">🥝 副社長</div>
             <div style="display:flex;gap:8px;margin-bottom:8px;">
-              <input type="text" id="dev-icon-vice-president" class="dev-input"
-                placeholder="EMOJI" maxlength="4"
+              <input type="text" id="dev-icon-vice-president" class="dev-input" placeholder="EMOJI" maxlength="4"
                 style="width:56px;text-align:center;font-size:22px;padding:6px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(16,185,129,0.4);">
-              <input type="text" id="dev-label-vice-president" class="dev-input"
-                placeholder="按鈕名稱"
+              <input type="text" id="dev-label-vice-president" class="dev-input" placeholder="按鈕名稱"
                 style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(16,185,129,0.4);">
-              <button class="action-btn" style="padding:8px 12px;font-size:12px;" onclick="saveRoleAppearance('vice_president')">🎨</button>
+              <button class="action-btn" style="padding:8px 12px;font-size:12px;"
+                onclick="saveRoleAppearance('vice_president')">🎨</button>
             </div>
             <div style="display:flex;gap:8px;">
               <input type="password" id="cfg-pin-vice-president" class="dev-input" maxlength="6" inputmode="numeric"
                 placeholder="6 位數登入密碼"
                 style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(16,185,129,0.4);letter-spacing:4px;">
-              <button class="action-btn" style="padding:8px 12px;font-size:12px;" onclick="saveRolePIN('vice_president', 'cfg-pin-vice-president')">🔐</button>
+              <button class="action-btn" style="padding:8px 12px;font-size:12px;"
+                onclick="saveRolePIN('vice_president', 'cfg-pin-vice-president')">🔐</button>
             </div>
+          </div>
+
+          <!-- 全域密碼開關 -->
+          <div style="padding:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;display:flex;justify-content:space-between;align-items:center;">
+             <label style="font-size:14px; color:#fff; display:flex; align-items:center; gap:8px; cursor:pointer;">
+               <input type="checkbox" id="dev-global-pin-auth" style="width:20px;height:20px;accent-color:var(--red)">
+               <span>🛡️ 啟用密碼機制 (會套用至所有幹部與點名)</span>
+             </label>
+             <button class="action-btn" style="padding:8px 12px;font-size:12px;background:var(--blue);" onclick="saveGlobalPinAuth()">💾 儲存</button>
           </div>
         </div>
       </div>
 
-      <!-- 導覽列圖示上傳 -->
-      <div class="dev-card" style="margin-top:16px;">
-        <div class="dev-card-header">🎨 導覽列圖示</div>
-        <p class="dev-card-hint">為底部導覽列的每個頁面上傳自訂圖示（取代 EMOJI）</p>
-        <div class="icon-upload-grid" id="nav-icon-upload-grid"></div>
-        <input type="file" id="nav-icon-file-input" accept="image/*" style="display:none">
-      </div>
 
       <!-- 背景影片 (伺服器 URL) -->
       <div class="dev-card" style="margin-top:16px;">
@@ -484,10 +753,46 @@
         <button class="action-btn wide warning" style="margin-top:8px" onclick="setupChangelogDB()">⚙️
           自動建立專屬公告資料庫</button>
       </div>
+
+      <!-- 清理空床殘留資料 -->
+      <div class="dev-card" style="margin-top:16px;">
+        <div class="dev-card-header">🧹 清理空床殘留資料</div>
+        <p class="dev-card-hint">將所有標記為「空床」的床位，強制清除其殘留的學號、班級、姓名，並將所有日期的請假紀錄覆寫為「✓」，確保資料乾淨統一。</p>
+        <button class="action-btn wide warning" onclick="cleanUpEmptyBeds()">🧹 執行強制清理</button>
+      </div>
+
+      <!-- 電話請假紀錄系統設定 -->
+      <div class="dev-card" style="margin-top:16px;">
+        <div class="dev-card-header">📞 電話請假輔助資料庫設定</div>
+        <p class="dev-card-hint">設定「電話請假紀錄」的獨立專屬 Notion 資料庫以存放請假名單與歷程。</p>
+        <button class="action-btn wide warning" onclick="setupLeaveDB()">⚙️ 自動建立電話請假紀錄資料庫</button>
+      </div>
+
+      <!-- 報修紀錄系統設定 -->
+      <div class="dev-card" style="margin-top:16px;">
+        <div class="dev-card-header">🔧 報修通知資料庫設定</div>
+        <p class="dev-card-hint">設定「報修紀錄」的獨立專屬 Notion 資料庫，住宿生可透過此功能上報設施損壞。</p>
+        <button class="action-btn wide warning" onclick="setupRepairDB()">⚙️ 自動建立報修紀錄資料庫</button>
+      </div>
     </div>
   </div>
 
   <script>
+    async function setupLeaveDB() {
+      if (!confirm("這將會在 Notion 自動建立一個新的電話請假紀錄資料庫。確定要執行嗎？")) return;
+      try {
+        const res = await fetch(window.CONFIG.WORKER_URL + '/api/setup-leave-db', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          prompt('🎉 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 LEAVE_DB_ID：', data.LEAVE_DB_ID);
+        } else {
+          alert('建立失敗: ' + data.error);
+        }
+      } catch (err) {
+        alert('發生錯誤: ' + err.message);
+      }
+    }
+
     async function setupChangelogDB() {
       if (!confirm("這將會在 Notion 自動建立一個新的公告資料庫。確定要執行嗎？")) return;
       try {
@@ -495,6 +800,21 @@
         const data = await res.json();
         if (data.success) {
           prompt('🎉 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 CHANGELOG_DB_ID：', data.CHANGELOG_DB_ID);
+        } else {
+          alert('建立失敗: ' + data.error);
+        }
+      } catch (err) {
+        alert('發生錯誤: ' + err.message);
+      }
+    }
+
+    async function setupRepairDB() {
+      if (!confirm("這將會在 Notion 自動建立一個新的報修紀錄資料庫。確定要執行嗎？")) return;
+      try {
+        const res = await fetch(window.CONFIG.WORKER_URL + '/api/setup-repair-db', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          prompt('🎉 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 REPAIR_DB_ID：', data.REPAIR_DB_ID);
         } else {
           alert('建立失敗: ' + data.error);
         }
@@ -542,9 +862,9 @@
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=47"></script>
-  <script src="api.js?v=47"></script>
-  <script src="app.js?v=47"></script>
+  <script src="config.js?v=55"></script>
+  <script src="api.js?v=55"></script>
+  <script src="app.js?v=55"></script>
 </body>
 
 </html>

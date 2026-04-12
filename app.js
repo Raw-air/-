@@ -25,13 +25,22 @@ window.addEventListener('unhandledrejection', (e) => {
   showLoading(false);
   showToast('未預期的錯誤: ' + (e.reason ? e.reason.message : 'Unknown'), 'error');
 });
-
+// ─── 全域座標追蹤 (用於動畫精確定位) ──────────────────────────────────────────
+let lastTapX = window.innerWidth / 2;
+let lastTapY = window.innerHeight / 2;
+window.addEventListener('pointerdown', (e) => {
+  if (e.clientX && e.clientY) {
+    lastTapX = e.clientX;
+    lastTapY = e.clientY;
+  }
+}, { passive: true });
 // ─── UI 清脆音效 (Web Audio API) ───────────────────────────────────────────
 let audioCtx = null;
 function playClickSound(type = 'default') {
+  if (localStorage.getItem('mute_sound') === 'true') return;
   try {
+    // dev_unlock 用 MP3，提前 0.2s 播放（瀏覽器限制，最快就是 0s delay）
     if (type === 'dev_unlock') {
-      // 開放者解鎖改採用指定 MP3
       const audio = new Audio('./Lp/6aa77c5e3bd7d98779628b82589dcb77.mp3');
       audio.volume = 0.8;
       audio.play().catch(() => { });
@@ -40,24 +49,101 @@ function playClickSound(type = 'default') {
 
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
-
     const time = audioCtx.currentTime;
+
+    // ── 打密碼音效：白噪音高頻短爆 + 低頻點擊疊加 ──
+    if (type === 'pin') {
+      const bufferSize = audioCtx.sampleRate * 0.04;
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1);
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      const noiseGain = audioCtx.createGain();
+      noiseGain.gain.setValueAtTime(0.035, time);
+      noiseGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.04);
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 2200;
+      filter.Q.value = 1.5;
+      source.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(audioCtx.destination);
+      source.start(time);
+      // 低頻點擊疊加「咔」質感
+      const clickOsc = audioCtx.createOscillator();
+      const clickGain = audioCtx.createGain();
+      clickOsc.type = 'square';
+      clickOsc.frequency.setValueAtTime(180, time);
+      clickGain.gain.setValueAtTime(0.06, time);
+      clickGain.gain.exponentialRampToValueAtTime(0.0001, time + 0.025);
+      clickOsc.connect(clickGain);
+      clickGain.connect(audioCtx.destination);
+      clickOsc.start(time); clickOsc.stop(time + 0.03);
+      return;
+    }
+
+    // ── 點名專用音效 ──
+    if (type === 'roll_in') {
+      // 到齊：清脆高頻上揚 ⬆️
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.connect(g); g.connect(audioCtx.destination);
+      o.type = 'sine';
+      o.frequency.setValueAtTime(1200, time);
+      o.frequency.exponentialRampToValueAtTime(1600, time + 0.04);
+      g.gain.setValueAtTime(0.1, time);
+      g.gain.exponentialRampToValueAtTime(0.001, time + 0.06);
+      o.start(time); o.stop(time + 0.07);
+      return;
+    }
+    if (type === 'roll_leave') {
+      // 請假/課外：溫和中頻下滑 🟡
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.connect(g); g.connect(audioCtx.destination);
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(880, time);
+      o.frequency.exponentialRampToValueAtTime(600, time + 0.08);
+      g.gain.setValueAtTime(0.1, time);
+      g.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+      o.start(time); o.stop(time + 0.11);
+      return;
+    }
+    if (type === 'roll_absent') {
+      // 缺席：低沉鍛擊雙擊 🔴
+      [0, 0.07].forEach(delay => {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.connect(g); g.connect(audioCtx.destination);
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(220, time + delay);
+        o.frequency.exponentialRampToValueAtTime(160, time + delay + 0.06);
+        g.gain.setValueAtTime(0.08, time + delay);
+        g.gain.exponentialRampToValueAtTime(0.001, time + delay + 0.07);
+        o.start(time + delay); o.stop(time + delay + 0.08);
+      });
+      return;
+    }
+    if (type === 'all_present') {
+      // 全員到齊慶祝三連音 Do-Mi-Sol (C5-E5-G5)
+      [523.25, 659.25, 783.99].forEach((freq, i) => {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.connect(g); g.connect(audioCtx.destination);
+        o.type = 'triangle';
+        const t = time + i * 0.1;
+        o.frequency.setValueAtTime(freq, t);
+        g.gain.setValueAtTime(0.12, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+        o.start(t); o.stop(t + 0.14);
+      });
+      return;
+    }
+
+    // ── 一般音效（使用共用 osc + gain）──
     const osc = audioCtx.createOscillator();
     const gainNode = audioCtx.createGain();
-
     osc.connect(gainNode);
     gainNode.connect(audioCtx.destination);
 
-    if (type === 'pin') {
-      // 短促低沉的「卡卡」聲 (類似機械鍵盤打字)
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(120, time); // 低頻產生悶響敲擊感
-      gainNode.gain.setValueAtTime(0.08, time);
-      // 極短時間內急速衰減，製造清脆斷音
-      gainNode.gain.setTargetAtTime(0.001, time, 0.003);
-      osc.start(time); osc.stop(time + 0.02);
-    } else if (type === 'back') {
-      // 返回/關閉退出的下沉音
+    if (type === 'back') {
       osc.type = 'sine';
       osc.frequency.setValueAtTime(500, time);
       osc.frequency.exponentialRampToValueAtTime(200, time + 0.06);
@@ -65,21 +151,27 @@ function playClickSound(type = 'default') {
       gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.06);
       osc.start(time); osc.stop(time + 0.07);
     } else if (type === 'unlock') {
-      // 解鎖的短促「喀啦」清脆聲 (快速雙音頻)
       osc.type = 'square';
       osc.frequency.setValueAtTime(600, time);
-      osc.frequency.setValueAtTime(1000, time + 0.02); // 第二下喀聲的短促高音
+      osc.frequency.setValueAtTime(1000, time + 0.02);
       gainNode.gain.setValueAtTime(0.08, time);
       gainNode.gain.setTargetAtTime(0.001, time, 0.005);
       osc.start(time); osc.stop(time + 0.05);
     } else if (type === 'confirm') {
-      // 確認/提交的明亮雙音感
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(600, time);
       osc.frequency.exponentialRampToValueAtTime(1200, time + 0.08);
       gainNode.gain.setValueAtTime(0.08, time);
       gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.08);
       osc.start(time); osc.stop(time + 0.1);
+    } else if (type === 'dev_error') {
+      // 開發者密碼錯誤：低沉鋸齒下沉音
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(320, time);
+      osc.frequency.exponentialRampToValueAtTime(140, time + 0.12);
+      gainNode.gain.setValueAtTime(0.1, time);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.14);
+      osc.start(time); osc.stop(time + 0.15);
     } else {
       // 預設清脆滴聲
       osc.type = 'sine';
@@ -100,15 +192,14 @@ window.addEventListener('click', (e) => {
     } else if (target.id === 'pin-confirm') {
       playClickSound('unlock'); // 解鎖中隊專屬的喀啦聲
     } else if (target.id === 'dev-pin-confirm') {
-      playClickSound('dev_unlock'); // 開發者解鎖專屬科技音
+      // 開發者確認按鈕：音效由 tryUnlock 邏輯控制，這裡不重複播放
     } else if (target.classList.contains('confirm') || target.id === 'submit-btn' || target.id === 'rc-confirm-btn') {
       playClickSound('confirm');
     } else if (target.closest('.sq-card')) {
       playClickSound('default');
     } else {
-      // 除了點擊 modal 背板外，其他互動都發預設音效
       if (!target.classList.contains('modal-overlay') || e.target === target) {
-        if (e.target.closest('.modal-card')) return; // ignore clicks inside modal empty areas
+        if (e.target.closest('.modal-card')) return;
         if (target.classList.contains('modal-overlay')) playClickSound('back');
         else playClickSound('default');
       }
@@ -127,6 +218,20 @@ document.addEventListener('input', (e) => {
 
 document.addEventListener('DOMContentLoaded', async () => {
   try {
+    // 初始狀態：全白模式
+    if (localStorage.getItem('white_mode') === 'true') {
+      document.body.classList.add('light-mode');
+      const whiteToggle = document.getElementById('setting-white-mode');
+      if (whiteToggle) whiteToggle.checked = true;
+      if (typeof updateAllImagesToTheme === 'function') updateAllImagesToTheme();
+    }
+    
+    // 初始狀態：靜音模式
+    if (localStorage.getItem('mute_sound') === 'true') {
+      const muteToggle = document.getElementById('setting-mute');
+      if (muteToggle) muteToggle.checked = true;
+    }
+
     state.currentDate = getTodayColumnName();
     setupNav();
     setupPinDialog();
@@ -154,6 +259,140 @@ document.addEventListener('DOMContentLoaded', async () => {
     showToast('初始化嚴重錯誤：' + err.message, 'error');
   }
 });
+
+// 個人化設定 Toggle
+function toggleMute(el) {
+  localStorage.setItem('mute_sound', el.checked);
+}
+
+function performAppearanceChange(isLight) {
+  if (isLight) document.body.classList.add('light-mode');
+  else document.body.classList.remove('light-mode');
+  if (typeof updateAllImagesToTheme === 'function') updateAllImagesToTheme();
+}
+
+let vtStartTime = 0;
+let vtRadiusFn = null;
+
+function easeOutQuad(t) { return t * (2 - t); }
+
+function toggleWhiteMode(el, event) {
+  const isLight = el.checked;
+  localStorage.setItem('white_mode', isLight);
+  const isDark = !isLight;
+
+  let x = lastTapX;
+  let y = lastTapY;
+  
+  const endRadius = Math.hypot(
+    Math.max(x, window.innerWidth - x),
+    Math.max(y, window.innerHeight - y)
+  );
+
+  if (!document.startViewTransition) {
+    performAppearanceChange(isLight);
+    return;
+  }
+
+  // 👑 獨家防閃爍算法：推算當前畫面光圈半徑，實現「狂點完美折返」
+  let startRadius = isDark ? endRadius : 0;
+  const now = Date.now();
+  const duration = 400;
+
+  if (vtRadiusFn && (now - vtStartTime) < duration) {
+      startRadius = vtRadiusFn(now); 
+  }
+
+  const targetRadius = isDark ? 0 : endRadius;
+  vtStartTime = now;
+  
+  vtRadiusFn = (evalTime) => {
+      let t = Math.min((evalTime - vtStartTime) / duration, 1);
+      let progress = easeOutQuad(t);
+      return Math.max(0, startRadius + (targetRadius - startRadius) * progress);
+  };
+
+  if(isDark) document.documentElement.classList.add('transition-dark');
+  
+  const transition = document.startViewTransition(() => performAppearanceChange(isLight));
+
+  transition.ready.then(() => {
+    const clipPathStart = `circle(${startRadius}px at ${x}px ${y}px)`;
+    const clipPathEnd = `circle(${targetRadius}px at ${x}px ${y}px)`;
+
+    try {
+      document.documentElement.animate(
+        { clipPath: [clipPathStart, clipPathEnd] },
+        {
+          duration: duration,
+          easing: 'ease-out',
+          fill: 'forwards',
+          pseudoElement: isDark ? '::view-transition-old(root)' : '::view-transition-new(root)'
+        }
+      );
+    } catch (animErr) {
+      let fallbackStyle = document.getElementById('vt-fallback');
+      if (!fallbackStyle) {
+        fallbackStyle = document.createElement('style');
+        fallbackStyle.id = 'vt-fallback';
+        document.head.appendChild(fallbackStyle);
+      }
+      const pseudo = isDark ? '::view-transition-old(root)' : '::view-transition-new(root)';
+      const prefix = isDark ? 'html.transition-dark' : '';
+      fallbackStyle.innerHTML = `
+        @keyframes vt-circle-anim {
+          0% { clip-path: ${clipPathStart}; }
+          100% { clip-path: ${clipPathEnd}; }
+        }
+        ${prefix}${pseudo} {
+          animation: vt-circle-anim ${duration}ms ease-out forwards !important;
+        }
+      `;
+    }
+  }).catch(() => {});
+
+  transition.finished.finally(() => {
+    document.documentElement.classList.remove('transition-dark');
+    const styleEl = document.getElementById('vt-fallback');
+    if (styleEl) styleEl.remove();
+  });
+}
+
+function getIconSrc(baseName) {
+  const isLight = document.body.classList.contains('light-mode');
+  if (!isLight) return `./Lp/ICON/${baseName}.svg`;
+  
+  if (baseName === 'SETTIN') return './Lp/ICON/BLACK/SETTINGS__BLACK.svg';
+  if (baseName === 'SAVE') return './Lp/ICON/BLACK/SAVE.svg';
+  return `./Lp/ICON/BLACK/${baseName}_BLACK.svg`;
+}
+
+function updateAllImagesToTheme() {
+  try {
+    const images = document.querySelectorAll('img[src*="Lp/ICON"]');
+    images.forEach(img => {
+      let src = img.getAttribute('src');
+      if (!src) return;
+      
+      let baseName = '';
+      if (src.includes('BLACK')) {
+        baseName = src.split('/').pop().replace('_BLACK.svg', '').replace('.svg', '');
+        if (baseName === 'SETTINGS_') baseName = 'SETTIN';
+      } else {
+        baseName = src.split('/').pop().replace('.svg', '');
+      }
+      if (baseName) {
+        img.setAttribute('src', getIconSrc(baseName));
+      }
+    });
+    // 如果 applyNavIcons 存在則重新算一次
+    if (typeof applyNavIcons === 'function') {
+      applyNavIcons();
+    }
+  } catch (err) {
+    console.error("Theme switch error:", err);
+  }
+}
 
 async function loadData() {
   try {
@@ -209,10 +448,39 @@ function checkChangelogDot() {
 // ── 最新公告與日誌 (Changelog) ──
 function openChangelogModal() {
   // 從獨立資料庫取得的新版公告（附帶時間戳）
-  const newEntries = (state.changelogs || []).map(log => ({
-    content: log.content,
-    time: log.created_time || log.last_edited_time || null
-  }));
+  const rawLogs = state.changelogs || [];
+  // debug 用：首次開啟時印出結構
+  if (rawLogs.length > 0) console.log('[Changelog] entry keys:', Object.keys(rawLogs[0]));
+  const newEntries = rawLogs.map(log => {
+      // 尋找全物件字串中是否有 ISO 8601 時間格式 (Notion 產生的標題或時間常見格式)
+      let timeStr = null;
+      const isoRegex = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)/;
+      
+      for (const key of Object.keys(log)) {
+          if (typeof log[key] === 'string') {
+              const match = log[key].match(isoRegex);
+              if (match) {
+                  timeStr = match[1];
+                  break;
+              }
+          }
+      }
+
+      let time = timeStr || log.created_time || log.createdTime || log.created_at ||
+          log.last_edited_time || log.lastEditedTime || log.updated_at ||
+          log.timestamp || log.date || null;
+          
+      // 超級備援：查內文有無 YYYY/MM/DD
+      if (!time && log.content) {
+          const backupMatch = log.content.match(/(\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/);
+          if (backupMatch) time = backupMatch[1];
+      }
+
+      return {
+          content: log.content,
+          time: time
+      };
+  });
 
   // 兼容設定資料庫中的舊版公告（無時間戳）
   const legacyEntries = Object.keys(state.config)
@@ -234,7 +502,7 @@ function openChangelogModal() {
       const d = new Date(isoStr);
       if (isNaN(d)) return null;
       const pad = n => String(n).padStart(2, '0');
-      return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())} 更新`;
+      return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())} 更新`;
     } catch { return null; }
   }
 
@@ -265,17 +533,18 @@ function openChangelogModal() {
   contentEl.innerHTML = combinedHTML;
 
   if (typeof marked !== 'undefined') {
-    // 建立折疊邏輯
+    // 建立折疊邏輯：將 h3 (每個版本) 轉換為可以平滑展開/收疊的 accordion
     const headings = contentEl.querySelectorAll('h3');
     headings.forEach((h3, i) => {
       const wrapper = document.createElement('div');
-      wrapper.style.display = i === 0 ? 'block' : 'none'; // 預設展開最新的
+      
       wrapper.style.paddingLeft = '12px';
       wrapper.style.borderLeft = '2px solid rgba(255,255,255,0.1)';
       wrapper.style.marginLeft = '4px';
       wrapper.style.marginTop = '8px';
       wrapper.style.marginBottom = '20px';
-
+      wrapper.style.overflow = 'hidden'; // 為動畫準備
+      
       let nextNode = h3.nextElementSibling;
       while (nextNode && nextNode.tagName !== 'H3' && nextNode.tagName !== 'H2' && nextNode.tagName !== 'H1') {
         const toMove = nextNode;
@@ -294,19 +563,68 @@ function openChangelogModal() {
       h3.style.borderRadius = '8px';
       h3.style.marginTop = '0';
       h3.style.marginBottom = '0';
+      h3.style.userSelect = 'none';
 
       // 添加箭頭
       const chevron = document.createElement('span');
-      chevron.innerHTML = i === 0 ? '▲' : '▼';
+      chevron.innerHTML = '▼';
       chevron.style.fontSize = '12px';
       chevron.style.color = 'var(--dim)';
-      chevron.style.transition = 'transform 0.2s';
+      chevron.style.transition = 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
       h3.appendChild(chevron);
 
+      // 動態高度開關標記
+      let isOpen = false;
+
+      // 預設展開第一個
+      if (i === 0) {
+        isOpen = true;
+        chevron.style.transform = 'rotate(-180deg)';
+        // 初始狀態保持原樣，不設 height 以因應響應式
+      } else {
+        wrapper.style.height = '0px';
+        wrapper.style.opacity = '0';
+        wrapper.style.margin = '0'; // 隱藏時收掉 margin
+        wrapper.style.padding = '0 0 0 12px'; // 保留左側邊框但不留上下空間
+      }
+
       h3.onclick = () => {
-        const isHidden = wrapper.style.display === 'none';
-        wrapper.style.display = isHidden ? 'block' : 'none';
-        chevron.innerHTML = isHidden ? '▲' : '▼';
+        if (!isOpen) {
+          // 展開動畫
+          isOpen = true;
+          chevron.style.transform = 'rotate(-180deg)';
+          
+          wrapper.style.margin = '8px 0 20px 4px';
+          wrapper.style.padding = '0 0 0 12px';
+          
+          // 取得目標高度
+          const targetHeight = wrapper.scrollHeight + 'px';
+          
+          // 啟動過渡
+          wrapper.style.transition = 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+          wrapper.style.height = targetHeight;
+          wrapper.style.opacity = '1';
+          
+          setTimeout(() => {
+            if (isOpen) {
+              wrapper.style.height = ''; // 解除死綁定以因應重新排版
+            }
+          }, 300);
+        } else {
+          // 收拢動畫
+          isOpen = false;
+          chevron.style.transform = 'rotate(0deg)';
+          
+          // 將目前自動的高度鎖住
+          wrapper.style.height = wrapper.scrollHeight + 'px';
+          wrapper.offsetHeight; // force reflow
+          
+          wrapper.style.transition = 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+          wrapper.style.height = '0px';
+          wrapper.style.opacity = '0';
+          wrapper.style.margin = '0';
+          wrapper.style.padding = '0 0 0 12px';
+        }
       };
     });
   }
@@ -421,9 +739,11 @@ function renderCurrentPage() {
 function renderHome() {
   // 日期
   const dateEl = document.getElementById('home-date');
-  const now = new Date();
-  const weekDay = ['日', '一', '二', '三', '四', '五', '六'][now.getDay()];
-  dateEl.textContent = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 星期${weekDay}`;
+  if (dateEl) {
+    const now = new Date();
+    const weekDay = ['日', '一', '二', '三', '四', '五', '六'][now.getDay()];
+    dateEl.textContent = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 星期${weekDay}`;
+  }
 
   // ── 斜線球體動畫 ──
   const animBg = document.querySelector('.home-anim-bg');
@@ -546,10 +866,12 @@ function enterSquad(squadId) {
 }
 
 function enterManagement(roleId, title) {
-  // 自動進入需密碼的驗證程序 (6位數要求由 maxlength="6" 配合 Notion pin_${roleId} 提供)
+  // 自動進入需密碼的驗證程序
   showPinDialog(roleId, () => {
-    showToast(`歡迎進入，${title}！專屬功能建置中...`, 'success');
-    // 未來擴充：navigateTo('president_dashboard');
+    playClickSound('dev_unlock');
+    showToast(`歡迎進入，${title}！`, 'success');
+    document.getElementById('mgt-title').textContent = title;
+    navigateTo('management');
   }, `🔐 ${title} 身分驗證`);
 }
 
@@ -665,6 +987,11 @@ function toggleStatus(pageId) {
   const next = { '✓': '◎', '◎': '✘', '✘': '✓', '△': '✓' }[cur] || '✓';
   s.attendance[state.currentDate] = next;
 
+  // 點名按鈕音效：切換到「請假」是黄色音，「缺席」是紅色队音，「到」是清脆白色音
+  if (next === '✓') playClickSound('roll_in');
+  else if (next === '◎') playClickSound('roll_leave');
+  else playClickSound('roll_absent');
+
   // 保留在 changes 以供提交按鈕使用
   const idx = state.changes.findIndex(c => c.pageId === pageId && c.date === state.currentDate);
   const change = { pageId, date: state.currentDate, value: next };
@@ -760,6 +1087,11 @@ async function toggleSquadConfirm() {
     state.config['confirm_' + today] = targetSquads.join(',');
 
     showToast(isCurrentlyConfirmed ? '已取消回報' : '✅ 點名回報成功！已即時同步至總表', 'success');
+
+    // 確認點名後永遠播放 Do-Mi-Sol 三連音
+    if (!isCurrentlyConfirmed) {
+      setTimeout(() => playClickSound('all_present'), 100);
+    }
   } catch (e) {
     console.error('儲存確認狀態失敗', e);
     showToast('信號不穩定，回報失敗，請重試', 'error');
@@ -834,16 +1166,26 @@ async function submitEmptyBed() {
   if (student.isEmpty) { showToast('此床位已是空床', 'info'); closeModal('empty-bed-modal'); return; }
 
   try {
-    // 在 Notion 中將「空床」checkbox 設為 true
+    const datesToClear = {};
+    for (const d of state.dateColumns) datesToClear[d] = '✓'; // 預設所有空床請假紀錄一律為勾勾
+
+    // 在 Notion 中將「空床」checkbox 設為 true，並清除學生與請假資料
     await window._api.updateAttendance([{
       pageId: student.id,
       markEmpty: true,
+      clearProfile: true,
+      dates: datesToClear
     }]);
 
     // 本地更新
     student.isEmpty = true;
+    student.name = '';
+    student.class = '';
+    student.studentId = '';
+    student.isForeign = false;
+    for (const d of state.dateColumns) student.attendance[d] = '✓';
 
-    showToast(`${room} ${bed} 床已標記為空床`, 'success');
+    showToast(`${room} ${bed} 床已標記為空床並清除殘留資料`, 'success');
     closeModal('empty-bed-modal');
     renderRollCall();
     renderSummary();
@@ -853,6 +1195,90 @@ async function submitEmptyBed() {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// 新增住宿生 (送出審核)
+// ═════════════════════════════════════════════════════════════════════════════
+function openAddResidentModal() {
+  const emptyBeds = state.students.filter(s => s.isEmpty && !s.hidden);
+  if (emptyBeds.length === 0) {
+    showToast('目前沒有可用的空床', 'info');
+    return;
+  }
+  const rooms = [...new Set(emptyBeds.map(s => s.room))].sort();
+  const sel = document.getElementById('ar-room');
+  sel.innerHTML = rooms.map(r => `<option value="${r}">${r}</option>`).join('');
+  
+  // 清空輸入框
+  document.getElementById('ar-name').value = '';
+  document.getElementById('ar-class').value = '';
+  document.getElementById('ar-studentid').value = '';
+  document.getElementById('ar-is-foreign').checked = false;
+
+  updateAddResidentBeds();
+  document.getElementById('add-resident-modal').classList.add('visible');
+}
+
+function updateAddResidentBeds() {
+  const room = document.getElementById('ar-room').value;
+  const beds = state.students.filter(s => s.room === room && s.isEmpty && !s.hidden);
+  const sel = document.getElementById('ar-bed');
+  sel.innerHTML = beds.map(s => `<option value="${s.bed}">${s.bed} 床</option>`).join('');
+}
+
+function checkForeignStudentClass() {
+  const classInput = document.getElementById('ar-class').value || '';
+  if (/越南|華語專班/.test(classInput)) {
+    document.getElementById('ar-is-foreign').checked = true;
+  }
+}
+
+async function submitAddResident() {
+  const room = document.getElementById('ar-room').value;
+  const bed = document.getElementById('ar-bed').value;
+  const name = document.getElementById('ar-name').value.trim();
+  const className = document.getElementById('ar-class').value.trim();
+  const studentId = document.getElementById('ar-studentid').value.trim();
+  const isForeign = document.getElementById('ar-is-foreign').checked;
+
+  if (!name || !className || !studentId) {
+    playClickSound('dev_error');
+    showToast('姓名、班別與學號為必填', 'error');
+    return;
+  }
+
+  const student = state.students.find(s => s.room === room && s.bed === bed);
+  if (!student || !student.isEmpty) {
+    playClickSound('dev_error');
+    showToast('此床位無法新增', 'error');
+    return;
+  }
+
+  const btn = document.querySelector('#add-resident-modal .modal-btn.confirm');
+  if (btn) { btn.disabled = true; btn.textContent = '送出中...'; }
+
+  try {
+    const reqId = 'add_req_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+    const payload = {
+      pageId: student.id,
+      room,
+      bed,
+      name,
+      class: className,
+      studentId,
+      isForeign,
+      timestamp: Date.now()
+    };
+
+    await window._api.setConfig({ [reqId]: JSON.stringify(payload) });
+
+    playClickSound('all_present');
+    showToast('該件已送出 請社長審核 或副社長審核', 'success');
+    closeModal('add-resident-modal');
+  } catch (err) {
+    showToast('送出失敗：' + err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '送出審核'; }
+  }
+}
 // 換床位
 // ═════════════════════════════════════════════════════════════════════════════
 function openSwapBedModal() {
@@ -958,6 +1384,17 @@ function closeModal(id) {
  * 計算某日的全域統計資料（一個函數，renderSummary 和 copySummary 共用）
  */
 function computeDailyStats(date) {
+  const todayStr = getTodayColumnName();
+  if (date !== todayStr) {
+    const snap = state.config['snapshot_' + date];
+    if (snap) {
+      try {
+        const cachedSt = JSON.parse(snap);
+        if (cachedSt && typeof cachedSt === 'object') return cachedSt;
+      } catch(e) { console.error('Failed to parse snapshot', e); }
+    }
+  }
+
   const totalBeds = parseInt(state.config['total_beds']) || state.students.filter(s => !s.hidden).length;
   const bedOffset = parseInt(state.config['bed_offset']) || 0;
 
@@ -1019,9 +1456,25 @@ function computeDailyStats(date) {
 
 function renderSummary() {
   const date = state.currentDate || getTodayColumnName();
-  document.getElementById('summary-date').textContent = date;
-
+  const todayStr = getTodayColumnName();
   const st = computeDailyStats(date);
+
+  if (date !== todayStr && state.config['snapshot_' + date]) {
+    document.getElementById('summary-date').textContent = date + ' 🔒';
+  } else {
+    document.getElementById('summary-date').textContent = date;
+  }
+
+  // 核心功能：當觀看的是「今天」的總表時，背景自動紀錄快照。
+  // 這確保 11 點鐘他們拉開來看數字回報時，系統就會自動存下那瞬間的結果。
+  if (date === todayStr) {
+    const snapshotStr = JSON.stringify(st);
+    if (state.config['snapshot_' + date] !== snapshotStr) {
+      state.config['snapshot_' + date] = snapshotStr;
+      // 靜默儲存到 Notion DB 的設定表裡
+      window._api.setConfig({ ['snapshot_' + date]: snapshotStr }).catch(e => console.error('Auto snapshot failed', e));
+    }
+  }
 
   // 1-3: 上排大數字
   document.getElementById('total-beds').textContent = st.totalBeds;
@@ -1234,6 +1687,21 @@ async function testWorkerConnection() {
   }
 }
 
+async function saveGlobalPinAuth() {
+  const isEnabled = document.getElementById('dev-global-pin-auth').checked;
+  showLoading(true);
+  try {
+    const val = isEnabled ? 'true' : 'false';
+    await window._api.setConfig({ 'global_pin_auth': val });
+    state.config['global_pin_auth'] = val;
+    showToast('已更新全域密碼設定，將套用於所有裝置', 'success');
+  } catch (err) {
+    showToast('設定失敗：' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
 // ─── PIN ────────────────────────────────────────────────────────────────────
 let pinCallback = null, pinSquadId = null;
 
@@ -1252,6 +1720,10 @@ function setupPinDialog() {
 }
 
 function showPinDialog(squadId, callback, customTitle) {
+  if (state.config['global_pin_auth'] === 'false') {
+    if (callback) callback();
+    return;
+  }
   pinSquadId = squadId; pinCallback = callback;
   document.getElementById('pin-dialog-title').textContent = customTitle || `${squadId} 中隊點名`;
   document.getElementById('pin-input').value = '';
@@ -1357,9 +1829,6 @@ function applyRoomRules() {
   }
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// 導覽列自訂圖示
-// ═════════════════════════════════════════════════════════════════════════════
 const NAV_PAGES = [
   { page: 'home', emoji: '🏠', label: '點名' },
   { page: 'summary', emoji: '📊', label: '總表' },
@@ -1367,87 +1836,32 @@ const NAV_PAGES = [
   { page: 'settings', emoji: '⚙️', label: '設定' },
 ];
 
+// 導覽列 ICON 硬編碼映射
+const NAV_ICON_MAP = {
+  home: 'HOME',
+  summary: 'PAGE2',
+  history: 'HISTORY',
+  settings: 'SETTIN',
+};
+
 function applyNavIcons() {
   const items = document.querySelectorAll('.nav-item');
   items.forEach(item => {
     const page = item.dataset.page;
-    const saved = localStorage.getItem('nav_icon_' + page);
     const iconEl = item.querySelector('.nav-icon');
     if (!iconEl) return;
-    if (saved) {
-      iconEl.innerHTML = `<img class="nav-icon-img" src="${saved}" alt="${page}">`;
+    const srcBase = NAV_ICON_MAP[page];
+    if (srcBase) {
+      const src = getIconSrc(srcBase);
+      // 加上 onerror 備援機制，如果發生錯誤就 fallback 回 emoji
+      const defEmoji = NAV_PAGES.find(n => n.page === page)?.emoji || '⚙️';
+      iconEl.innerHTML = `<img class="nav-icon-img" src="${src}" alt="${page}" style="width:28px;height:28px;object-fit:contain;margin-bottom:2px;" onerror="this.outerHTML='${defEmoji}'">`;
     } else {
       const def = NAV_PAGES.find(n => n.page === page);
       if (def) iconEl.textContent = def.emoji;
     }
   });
 }
-
-function renderNavIconUpload() {
-  const grid = document.getElementById('nav-icon-upload-grid');
-  if (!grid) return;
-  grid.innerHTML = NAV_PAGES.map(n => {
-    const saved = localStorage.getItem('nav_icon_' + n.page);
-    const previewContent = saved
-      ? `<img src="${saved}" alt="${n.label}">`
-      : n.emoji;
-    const removeBtn = saved
-      ? `<button class="icon-upload-btn remove" onclick="removeNavIcon('${n.page}')">✕</button>`
-      : '';
-    return `
-      <div class="icon-upload-item">
-        <div class="icon-upload-preview">${previewContent}</div>
-        <div class="icon-upload-info">
-          <div class="label">${n.label}</div>
-          <div class="icon-upload-actions">
-            <button class="icon-upload-btn" onclick="pickNavIcon('${n.page}')">上傳</button>
-            ${removeBtn}
-          </div>
-        </div>
-      </div>`;
-  }).join('');
-}
-
-let _pendingNavIconPage = null;
-
-function pickNavIcon(page) {
-  _pendingNavIconPage = page;
-  const input = document.getElementById('nav-icon-file-input');
-  input.value = '';
-  input.onchange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      // 壓縮圖片到 64x64 再存入 localStorage
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 64; canvas.height = 64;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, 64, 64);
-        const dataUrl = canvas.toDataURL('image/png');
-        localStorage.setItem('nav_icon_' + _pendingNavIconPage, dataUrl);
-        applyNavIcons();
-        renderNavIconUpload();
-        showToast('圖示已更新', 'success');
-      };
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
-  };
-  input.click();
-}
-
-function removeNavIcon(page) {
-  localStorage.removeItem('nav_icon_' + page);
-  applyNavIcons();
-  renderNavIconUpload();
-  showToast('已恢復預設圖示', 'info');
-}
-
-window.pickNavIcon = pickNavIcon;
-window.removeNavIcon = removeNavIcon;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 開發者調適區（6 位密碼保護）
@@ -1460,6 +1874,10 @@ function openDevAuth() {
   // 如果已解鎖，切換顯示/隱藏
   if (devUnlocked) {
     if (!panel.classList.contains('open')) {
+      const pinAuthCheckbox = document.getElementById('dev-global-pin-auth');
+      if (pinAuthCheckbox) {
+        pinAuthCheckbox.checked = state.config['global_pin_auth'] !== 'false';
+      }
       initDevChangelog();
       panel.classList.add('open');
     } else {
@@ -1487,14 +1905,22 @@ function openDevAuth() {
 
   const tryUnlock = () => {
     if (input.value === DEV_PASSWORD) {
-      devUnlocked = true;
-      overlay.classList.remove('visible');
-      setTimeout(() => overlay.remove(), 300);
-      panel.classList.add('open');
-      renderNavIconUpload();
-      initDevChangelog();
-      showToast('🔓 開發者模式已解鎖', 'success');
+      // 提前 0.2 秒播放解鎖音效，讓音效搶先視覺一步
+      playClickSound('dev_unlock');
+      setTimeout(() => {
+        devUnlocked = true;
+        overlay.classList.remove('visible');
+        setTimeout(() => overlay.remove(), 300);
+        panel.classList.add('open');
+        const pinAuthCheckbox = document.getElementById('dev-global-pin-auth');
+        if (pinAuthCheckbox) {
+          pinAuthCheckbox.checked = state.config['global_pin_auth'] !== 'false';
+        }
+        initDevChangelog();
+        showToast('🔓 開發者模式已解鎖', 'success');
+      }, 200);
     } else {
+      playClickSound('dev_error'); // 錯誤密碼播放「錯誤音」而非成功音
       input.classList.add('shake');
       setTimeout(() => input.classList.remove('shake'), 500);
       showToast('密碼錯誤', 'error');
@@ -1511,6 +1937,7 @@ function openDevAuth() {
 }
 
 window.openDevAuth = openDevAuth;
+window.saveGlobalPinAuth = saveGlobalPinAuth;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 伺服器自訂背景影片 (全域 Notion Config 儲存)
@@ -1612,7 +2039,572 @@ async function clearBgVideo() {
   showLoading(false);
 }
 
+// 清理所有空床的殘留資料（針對過往遺留資料）
+async function cleanUpEmptyBeds() {
+  if (!confirm("確定要將所有空床的「姓名、學號、班級」清空，並「所有日期的請假紀錄」覆寫為 ✅ 嗎？此操作無法還原！")) return;
+
+  const emptyBeds = state.students.filter(s => s.isEmpty);
+  if (emptyBeds.length === 0) {
+    showToast('目前沒有任何空床', 'info');
+    return;
+  }
+
+  showLoading(true);
+  try {
+    const datesToClear = {};
+    for (const d of state.dateColumns) datesToClear[d] = '✓';
+
+    const updates = emptyBeds.map(student => {
+      // 本地同步更新
+      student.name = '';
+      student.class = '';
+      student.studentId = '';
+      student.isForeign = false;
+      for (const d of state.dateColumns) student.attendance[d] = '✓';
+      
+      return {
+        pageId: student.id,
+        markEmpty: true,
+        clearProfile: true, // 清除學號姓名等
+        dates: datesToClear // 覆寫請假紀錄為勾勾
+      };
+    });
+
+    // 分批次發出 API 請求
+    for (let i = 0; i < updates.length; i += 45) {
+      await window._api.updateAttendance(updates.slice(i, i + 45));
+    }
+
+    showToast(`成功清理了 ${emptyBeds.length} 張空床的資料，請假全數補上勾勾！`, 'success');
+    
+    // 如果剛好在點名頁或總表，重新渲染一下確保畫面同步
+    if (currentPage === 'rollcall') renderRollCall();
+    if (currentPage === 'summary') renderSummary();
+
+  } catch (err) {
+    showToast('清理失敗：' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+// 暫時按鈕：將所有空床的請假紀錄覆蓋為空床專用的勾勾
+async function fillEmptyBedsWithCheckmarks() {
+  if (!confirm("確定要將「目前所有空床」的請假紀錄全部強制補上「✓」嗎？")) return;
+
+  const emptyBeds = state.students.filter(s => s.isEmpty);
+  if (emptyBeds.length === 0) {
+    showToast('目前沒有任何空床', 'info');
+    return;
+  }
+
+  showLoading(true);
+  try {
+    const datesToClear = {};
+    for (const d of state.dateColumns) datesToClear[d] = '✓';
+
+    const updates = emptyBeds.map(student => {
+      // 本地同步更新
+      for (const d of state.dateColumns) student.attendance[d] = '✓';
+      
+      return {
+        pageId: student.id,
+        dates: datesToClear // 僅覆寫請假紀錄為勾勾
+      };
+    });
+
+    // 分批次發出 API 請求
+    for (let i = 0; i < updates.length; i += 45) {
+      await window._api.updateAttendance(updates.slice(i, i + 45));
+    }
+
+    showToast(`成功將 ${emptyBeds.length} 張空床的請假紀錄統一填上勾勾！`, 'success');
+    
+    if (currentPage === 'rollcall') renderRollCall();
+    if (currentPage === 'summary') renderSummary();
+
+  } catch (err) {
+    showToast('更新失敗：' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 住宿生新增 幹部審核邏輯
+// ═════════════════════════════════════════════════════════════════════════════
+function openReviewPage() {
+  navigateTo('review');
+  renderResidentReviewList();
+}
+
+async function renderResidentReviewList() {
+  const container = document.getElementById('management-review-list');
+  if (!container) return;
+  
+  container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">讀取中...</div>';
+
+  try {
+    // 取得最新 config (包含所有暫存的新增請求)
+    const config = await window._api.getConfig();
+    const reqs = Object.keys(config)
+      .filter(k => k.startsWith('add_req_') && config[k])
+      .map(k => {
+        try { return { id: k, ...JSON.parse(config[k]) }; }
+        catch (e) { return null; }
+      })
+      .filter(x => x && x.name) // 過濾可用資料
+      .sort((a, b) => b.timestamp - a.timestamp); // 新的在上面
+
+    if (reqs.length === 0) {
+      container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">目前沒有任何新增住宿生申請。</div>';
+      return;
+    }
+
+    let html = '';
+    reqs.forEach(req => {
+      const timeStr = new Date(req.timestamp).toLocaleString();
+      html += `
+        <div class="review-card">
+          <div class="review-card-info">
+            <div class="review-card-name">${req.name}<span class="review-card-meta">${req.class} • ${req.studentId}</span></div>
+            <div class="review-card-bed">🛏️ 申請補入: ${req.room} ${req.bed} 床</div>
+            <div class="review-card-time">⏰ 送出時間: ${timeStr}</div>
+            ${req.isForeign ? '<div class="review-card-badge foreign">🌍 外籍生</div>' : ''}
+          </div>
+          <div class="review-card-actions">
+            <button class="review-approve-btn" onclick="approveResidentAddReq('${req.id}')">✅ 通過並寫入</button>
+            <button class="review-reject-btn" onclick="rejectResidentAddReq('${req.id}')">✕ 駁回</button>
+          </div>
+        </div>
+      `;
+    });
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<div style="color:var(--red);text-align:center;padding:20px;">讀取失敗：${err.message}</div>`;
+  }
+}
+
+async function approveResidentAddReq(reqId) {
+  if (!confirm('確定要通過申請，將該學生正式寫入總表床位嗎？')) return;
+  showLoading(true);
+  try {
+    const config = await window._api.getConfig();
+    const reqStr = config[reqId];
+    if (!reqStr) throw new Error('找不到該申請');
+    const req = JSON.parse(reqStr);
+
+    // 檢查床位現在是否依然是空床
+    const student = state.students.find(s => s.room === req.room && s.bed === req.bed);
+    if (!student || !student.isEmpty) {
+      throw new Error(`目標床位 ${req.room} ${req.bed} 目前並非空床狀態！請先確認總表。`);
+    }
+
+    // 1. 寫入總表
+    await window._api.updateAttendance([{
+      pageId: req.pageId, // Notion 上的目標空床 PageID
+      updateProfile: {
+        name: req.name,
+        class: req.class,
+        studentId: req.studentId,
+        isForeign: req.isForeign
+      },
+      markEmpty: false // 取消空床狀態
+    }]);
+
+    // 2. 本地狀態更新
+    student.name = req.name;
+    student.class = req.class;
+    student.studentId = req.studentId;
+    student.isForeign = req.isForeign;
+    student.isEmpty = false;
+
+    // 3. 從 config 清除該筆 request
+    await window._api.setConfig({ [reqId]: '' });
+
+    showToast('核准成功！該學生已正式寫入總表。', 'success');
+    renderResidentReviewList(); // 重新讀取清單
+    state.lastFetched = 0; // 強制下一次要重新讀取確保畫面乾淨
+  } catch (err) {
+    showToast('操作失敗：' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function rejectResidentAddReq(reqId) {
+  if (!confirm('確定要駁回此申請嗎？紀錄將被刪除。')) return;
+  showLoading(true);
+  try {
+    await window._api.setConfig({ [reqId]: '' });
+    showToast('已駁回，並移除申請紀錄。', 'success');
+    renderResidentReviewList();
+  } catch (err) {
+    showToast('操作失敗：' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
 window.applyBgVideoUrl = applyBgVideoUrl;
 window.previewBgVideoStyle = previewBgVideoStyle;
 window.clearBgVideo = clearBgVideo;
+window.cleanUpEmptyBeds = cleanUpEmptyBeds;
+window.fillEmptyBedsWithCheckmarks = fillEmptyBedsWithCheckmarks;
 
+window.openAddResidentModal = openAddResidentModal;
+window.updateAddResidentBeds = updateAddResidentBeds;
+window.checkForeignStudentClass = checkForeignStudentClass;
+window.submitAddResident = submitAddResident;
+window.openReviewPage = openReviewPage;
+window.renderResidentReviewList = renderResidentReviewList;
+window.approveResidentAddReq = approveResidentAddReq;
+window.rejectResidentAddReq = rejectResidentAddReq;
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 櫃台請假與電話請假紀錄
+// ═════════════════════════════════════════════════════════════════════════════
+function openCounterLeaveModal() {
+  document.getElementById('cl-search').value = '';
+  document.getElementById('cl-handler').value = '';
+  
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('cl-start-date').value = today;
+  document.getElementById('cl-end-date').value = today;
+  
+  document.getElementById('cl-target').innerHTML = '<option value="">請先搜尋上方欄位...</option>';
+  document.getElementById('counter-leave-modal').classList.add('visible');
+}
+
+function handleCounterLeaveSearch() {
+  const query = document.getElementById('cl-search').value.trim().toLowerCase();
+  const select = document.getElementById('cl-target');
+  
+  if (!query) {
+    select.innerHTML = '<option value="">請先搜尋上方欄位...</option>';
+    return;
+  }
+  
+  // 模糊過濾
+  const matches = state.students.filter(s => {
+    if (s.isEmpty) return false;
+    const txt = `${s.name} ${s.room} ${s.bed} ${s.studentId}`.toLowerCase();
+    return txt.includes(query);
+  }).slice(0, 50); // 最多 50 筆
+  
+  if (matches.length === 0) {
+    select.innerHTML = '<option value="">找不到符合的學生</option>';
+  } else {
+    select.innerHTML = matches.map(s => 
+      `<option value="${s.id}">${s.room} ${s.bed} - ${s.name}</option>`
+    ).join('');
+  }
+}
+
+function viewLeaveRecords() {
+  closeModal('counter-leave-modal');
+  navigateTo('leave-records');
+  renderLeaveRecordsList();
+}
+
+async function renderLeaveRecordsList() {
+  const container = document.getElementById('leave-records-list');
+  if (!container) return;
+  
+  container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">讀取中...</div>';
+  
+  try {
+    const res = await fetch(CONFIG.WORKER_URL + '/api/leave-records');
+    if (!res.ok) throw new Error('API 回應錯誤');
+    const records = await res.json();
+    
+    if (!records || records.length === 0) {
+      container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">目前沒有任何電話請假紀錄。<br><br><small style="color:var(--red);">若您確定有新增過，可能是 Cloudflare 中尚未設定 LEAVE_DB_ID，請至開發者區初始化資料庫並將 ID 填入 Cloudflare 環境變數。</small></div>';
+      return;
+    }
+    
+    container.innerHTML = records.map(r => `
+      <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);padding:16px;border-radius:12px;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;">
+          <div style="font-size:16px;font-weight:bold;color:var(--text);">${r.title}</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.5);">${new Date(r.createdAt).toLocaleString()}</div>
+        </div>
+        <div style="font-size:14px;color:var(--dim);margin-bottom:4px;">🧑‍🎓 ${r.roomBed} ${r.name}</div>
+        <div style="font-size:14px;color:var(--dim);margin-bottom:4px;">📅 ${r.dateStart} ~ ${r.dateEnd}</div>
+        <div style="font-size:14px;color:var(--dim);">👤 處理人：${r.handler || '未填寫'}</div>
+      </div>
+    `).join('');
+  } catch (err) {
+    container.innerHTML = `<div style="color:#f87171;text-align:center;padding:20px;">載入失敗：${err.message}</div>`;
+  }
+}
+
+async function submitCounterLeave() {
+  const targetId = document.getElementById('cl-target').value;
+  const startDateStr = document.getElementById('cl-start-date').value;
+  const endDateStr = document.getElementById('cl-end-date').value;
+  const handler = document.getElementById('cl-handler').value.trim();
+  
+  if (!targetId) {
+    playClickSound('dev_error');
+    showToast('請先搜尋並選擇要請假的學生！', 'error');
+    return;
+  }
+  
+  if (!startDateStr || !endDateStr) {
+    playClickSound('dev_error');
+    showToast('請填寫完整請假日期區間！', 'error');
+    return;
+  }
+  
+  if (startDateStr > endDateStr) {
+    playClickSound('dev_error');
+    showToast('結束日期不能早於開始日期！', 'error');
+    return;
+  }
+  
+  const student = state.students.find(s => s.id === targetId);
+  if (!student) return;
+  
+  const btn = document.querySelector('#counter-leave-modal .modal-btn:last-child');
+  if (btn) { btn.disabled = true; btn.textContent = '處理中...'; }
+  showLoading(true);
+  
+  try {
+    // 1. 找出區間對應的 state.dateColumns (點名表的欄位)
+    // 我們需要將 Date string "YYYY-MM-DD" 與 dateColumns "X月Y日" 配對
+    const updates = [];
+    const localStart = new Date(startDateStr);
+    const localEnd = new Date(endDateStr);
+    
+    // 產生期間內所有日期的 X月Y日
+    const targetDates = [];
+    let cur = new Date(startDateStr);
+    while (cur <= localEnd) {
+      const m = cur.getMonth() + 1;
+      const d = cur.getDate();
+      targetDates.push(`${m}月${d}日`);
+      cur.setDate(cur.getDate() + 1);
+    }
+    
+    // 篩選出總表確實存在的欄位
+    const matchedCols = state.dateColumns.filter(c => targetDates.includes(c));
+    if (matchedCols.length > 0) {
+      const pageUpdate = { pageId: student.id, dates: {} };
+      for (const c of matchedCols) {
+        pageUpdate.dates[c] = '◎'; // 強制覆寫為請假
+        student.attendance[c] = '◎'; // 本地更新
+      }
+      updates.push(pageUpdate);
+      
+      // 送出至總表 (分批每45筆)
+      for (let i = 0; i < updates.length; i += 45) {
+        await window._api.updateAttendance(updates.slice(i, i + 45));
+      }
+    } else {
+      showToast('警告：選擇的請假範圍未涵蓋目前點名表的任何一天！將只記錄歷史，不修改總表。', 'info');
+    }
+    
+    // 2. 紀錄至電話請假紀錄 DB
+    const leaveAddRes = await fetch(CONFIG.WORKER_URL + '/api/leave-records', {
+       method: 'POST',
+       headers: {'Content-Type': 'application/json'},
+       body: JSON.stringify({
+         name: student.name,
+         roomBed: `${student.room} - ${student.bed}`,
+         dateStart: startDateStr,
+         dateEnd: endDateStr,
+         handler: handler
+       })
+    });
+    
+    // 若 worker 回傳 500 表示可能未設定環境變數
+    if (!leaveAddRes.ok) {
+       console.warn('電話紀錄寫入失敗，可能未配置 LEAVE_DB_ID。');
+       showToast('總表已更新◎，但歷史紀錄寫入失敗 (請確認 Cloudflare 已設定 LEAVE_DB_ID)', 'info');
+    } else {
+       playClickSound('all_present');
+       showToast(`已經為 ${student.name} 完成起迄請假設定並寫入紀錄！`, 'success');
+    }
+    
+    if (currentPage === 'summary') renderSummary();
+    if (currentPage === 'rollcall') renderRollCall();
+    
+    closeModal('counter-leave-modal');
+  } catch (err) {
+    showToast('更新失敗：' + err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '送出請假'; }
+    showLoading(false);
+  }
+}
+
+window.openCounterLeaveModal = openCounterLeaveModal;
+window.handleCounterLeaveSearch = handleCounterLeaveSearch;
+window.submitCounterLeave = submitCounterLeave;
+window.viewLeaveRecords = viewLeaveRecords;
+window.renderLeaveRecordsList = renderLeaveRecordsList;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 通知報修系統
+// ═══════════════════════════════════════════════════════════════════════════════
+let repairPhotos = []; // base64 array
+
+function openRepairForm() {
+  repairPhotos = [];
+  navigateTo('repair-form');
+  const reason = document.getElementById('repair-reason');
+  if (reason) reason.value = '';
+  const grid = document.getElementById('repair-preview-grid');
+  if (grid) grid.innerHTML = '';
+}
+
+function handleRepairPhotos(input) {
+  const files = Array.from(input.files);
+  files.forEach(file => {
+    if (repairPhotos.length >= 3) return; // 最多 3 張
+    const reader = new FileReader();
+    reader.onload = e => {
+      // 壓縮圖片
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 600;
+        let w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+          else { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const compressed = canvas.toDataURL('image/jpeg', 0.6);
+        repairPhotos.push(compressed);
+        renderRepairPreviews();
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value = '';
+}
+
+function renderRepairPreviews() {
+  const grid = document.getElementById('repair-preview-grid');
+  if (!grid) return;
+  grid.innerHTML = repairPhotos.map((src, i) => `
+    <div class="repair-preview-item">
+      <img src="${src}" alt="照片${i + 1}">
+      <button class="repair-preview-remove" onclick="removeRepairPhoto(${i})">✕</button>
+    </div>
+  `).join('');
+}
+
+function removeRepairPhoto(index) {
+  repairPhotos.splice(index, 1);
+  renderRepairPreviews();
+}
+
+async function submitRepair() {
+  const reason = document.getElementById('repair-reason')?.value?.trim();
+  if (!reason) {
+    showToast('請填寫報修原因', 'error');
+    return;
+  }
+
+  showLoading(true);
+  try {
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/repair-records', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reason: reason,
+        photos: repairPhotos
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('報修通知已送出！', 'success');
+      repairPhotos = [];
+      navigateTo('tools');
+    } else {
+      throw new Error(data.error || '送出失敗');
+    }
+  } catch (err) {
+    showToast('送出失敗：' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+function openRepairReview() {
+  navigateTo('repair-review');
+  renderRepairReviewList();
+}
+
+async function renderRepairReviewList() {
+  const container = document.getElementById('repair-review-list');
+  if (!container) return;
+  container.innerHTML = '<div style="color:var(--dim);text-align:center;padding:20px;">讀取中...</div>';
+
+  try {
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/repair-records');
+    const records = await res.json();
+
+    if (!records || records.length === 0) {
+      container.innerHTML = '<div style="color:var(--dim);text-align:center;padding:40px;">目前沒有任何報修紀錄 🎉</div>';
+      return;
+    }
+
+    let html = '';
+    records.forEach(rec => {
+      const timeStr = rec.createdAt ? new Date(rec.createdAt).toLocaleString() : '未知';
+      const photosHtml = (rec.photos || []).map(src =>
+        `<img src="${src}" alt="報修照片" onclick="window.open('${src}','_blank')">`
+      ).join('');
+
+      html += `
+        <div class="repair-record-card">
+          <div class="repair-record-reason">${rec.reason || '（無描述）'}</div>
+          ${photosHtml ? `<div class="repair-record-photos">${photosHtml}</div>` : ''}
+          <div class="repair-record-time">⏰ ${timeStr}</div>
+          <button class="repair-done-btn" onclick="markRepairDone('${rec.id}')">✅ 已回報處理</button>
+        </div>
+      `;
+    });
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<div style="color:var(--red);text-align:center;padding:20px;">讀取失敗：${err.message}</div>`;
+  }
+}
+
+async function markRepairDone(id) {
+  if (!confirm('確定此報修已經回報處理完畢？紀錄將會被刪除。')) return;
+  showLoading(true);
+  try {
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/repair-records', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('已標記為處理完畢', 'success');
+      renderRepairReviewList();
+    } else {
+      throw new Error(data.error || '操作失敗');
+    }
+  } catch (err) {
+    showToast('操作失敗：' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+window.openRepairForm = openRepairForm;
+window.handleRepairPhotos = handleRepairPhotos;
+window.removeRepairPhoto = removeRepairPhoto;
+window.submitRepair = submitRepair;
+window.openRepairReview = openRepairReview;
+window.renderRepairReviewList = renderRepairReviewList;
+window.markRepairDone = markRepairDone;
