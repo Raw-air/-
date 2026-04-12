@@ -29,6 +29,7 @@ window.addEventListener('unhandledrejection', (e) => {
 // ─── UI 清脆音效 (Web Audio API) ───────────────────────────────────────────
 let audioCtx = null;
 function playClickSound(type = 'default') {
+  if (localStorage.getItem('mute_sound') === 'true') return;
   try {
     // dev_unlock 用 MP3，提前 0.2s 播放（瀏覽器限制，最快就是 0s delay）
     if (type === 'dev_unlock') {
@@ -209,6 +210,19 @@ document.addEventListener('input', (e) => {
 
 document.addEventListener('DOMContentLoaded', async () => {
   try {
+    // 初始狀態：全白模式
+    if (localStorage.getItem('white_mode') === 'true') {
+      document.body.classList.add('light-mode');
+      const whiteToggle = document.getElementById('setting-white-mode');
+      if (whiteToggle) whiteToggle.checked = true;
+    }
+    
+    // 初始狀態：靜音模式
+    if (localStorage.getItem('mute_sound') === 'true') {
+      const muteToggle = document.getElementById('setting-mute');
+      if (muteToggle) muteToggle.checked = true;
+    }
+
     state.currentDate = getTodayColumnName();
     setupNav();
     setupPinDialog();
@@ -236,6 +250,97 @@ document.addEventListener('DOMContentLoaded', async () => {
     showToast('初始化嚴重錯誤：' + err.message, 'error');
   }
 });
+
+// 個人化設定 Toggle
+function toggleMute(el) {
+  localStorage.setItem('mute_sound', el.checked);
+}
+
+function getIconSrc(baseName) {
+  const isLight = document.body.classList.contains('light-mode');
+  if (!isLight) return `./Lp/ICON/${baseName}.svg`;
+  
+  if (baseName === 'SETTIN') return './Lp/ICON/BLACK/SETTINGS__BLACK.svg';
+  if (baseName === 'SAVE') return './Lp/ICON/BLACK/SAVE.svg';
+  return `./Lp/ICON/BLACK/${baseName}_BLACK.svg`;
+}
+
+function updateAllImagesToTheme() {
+  const images = document.querySelectorAll('img[src*="Lp/ICON"]');
+  images.forEach(img => {
+    let src = img.getAttribute('src');
+    if (!src) return;
+    
+    let baseName = '';
+    if (src.includes('BLACK')) {
+      baseName = src.split('/').pop().replace('_BLACK.svg', '').replace('.svg', '');
+      if (baseName === 'SETTINGS_') baseName = 'SETTIN';
+    } else {
+      baseName = src.split('/').pop().replace('.svg', '');
+    }
+    img.setAttribute('src', getIconSrc(baseName));
+  });
+  // 如果 applyNavIcons 存在則重新算一次
+  if (typeof applyNavIcons === 'function') {
+    applyNavIcons();
+  }
+}
+
+function toggleWhiteMode(el, event) {
+  const isLight = el.checked;
+  localStorage.setItem('white_mode', el.checked);
+  
+  const performAppearanceChange = () => {
+    if (isLight) document.body.classList.add('light-mode');
+    else document.body.classList.remove('light-mode');
+    updateAllImagesToTheme();
+  };
+
+  // 如果瀏覽器不支援 View Transitions，或是沒有拿到 event
+  if (!document.startViewTransition) {
+    performAppearanceChange();
+    return;
+  }
+
+  // 強制取得可見的 switch 父容器中心點 (因為 input 本身是 display: none 座標為 0)
+  const parent = el.closest('.switch') || el.parentElement;
+  const rect = parent.getBoundingClientRect();
+  const x = rect.left + rect.width / 2;
+  const y = rect.top + rect.height / 2;
+  
+  const endRadius = Math.hypot(
+    Math.max(x, innerWidth - x),
+    Math.max(y, innerHeight - y)
+  );
+
+  const isDark = !isLight;
+  if(isDark) document.documentElement.classList.add('transition-dark');
+
+  const transition = document.startViewTransition(performAppearanceChange);
+
+  transition.ready.then(() => {
+    const clipPath = [
+      `circle(0px at ${x}px ${y}px)`,
+      `circle(${endRadius}px at ${x}px ${y}px)`
+    ];
+
+    document.documentElement.animate(
+      {
+        clipPath: isDark ? [...clipPath].reverse() : clipPath
+      },
+      {
+        duration: 450,
+        easing: 'ease-in',
+        fill: 'forwards',
+        pseudoElement: isDark ? '::view-transition-old(root)' : '::view-transition-new(root)'
+      }
+    );
+  });
+
+  transition.finished.then(() => {
+    document.documentElement.classList.remove('transition-dark');
+  });
+}
 
 async function loadData() {
   try {
@@ -1679,12 +1784,12 @@ const NAV_PAGES = [
   { page: 'settings', emoji: '⚙️', label: '設定' },
 ];
 
-// 導覽列 ICON 硬編碼映射（已定案不再支援上傳）
+// 導覽列 ICON 硬編碼映射
 const NAV_ICON_MAP = {
-  home: './Lp/ICON/HOME.svg',
-  summary: './Lp/ICON/PAGE2.svg',
-  history: './Lp/ICON/HISTORY.svg',
-  settings: './Lp/ICON/SETTIN.svg',
+  home: 'HOME',
+  summary: 'PAGE2',
+  history: 'HISTORY',
+  settings: 'SETTIN',
 };
 
 function applyNavIcons() {
@@ -1693,8 +1798,9 @@ function applyNavIcons() {
     const page = item.dataset.page;
     const iconEl = item.querySelector('.nav-icon');
     if (!iconEl) return;
-    const src = NAV_ICON_MAP[page];
-    if (src) {
+    const srcBase = NAV_ICON_MAP[page];
+    if (srcBase) {
+      const src = getIconSrc(srcBase);
       // 加上 onerror 備援機制，如果發生錯誤就 fallback 回 emoji
       const defEmoji = NAV_PAGES.find(n => n.page === page)?.emoji || '⚙️';
       iconEl.innerHTML = `<img class="nav-icon-img" src="${src}" alt="${page}" style="width:28px;height:28px;object-fit:contain;margin-bottom:2px;" onerror="this.outerHTML='${defEmoji}'">`;
