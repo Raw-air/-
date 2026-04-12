@@ -336,7 +336,9 @@ body {
 #page-rollcall,
 #page-summary,
 #page-history,
-#page-settings {
+#page-settings,
+#page-management,
+#page-review {
   background: var(--bg)
 }
 

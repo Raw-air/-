@@ -149,7 +149,7 @@
     <h1 id="mgt-title" class="page-title" style="text-align: center; margin-top: 16px;">幹部專區</h1>
     
     <div style="padding: 16px;">
-      <button class="empty-bed-action" style="border-left: 4px solid var(--orange);" onclick="renderResidentReviewList()">
+      <button class="empty-bed-action" style="border-left: 4px solid var(--orange);" onclick="openReviewPage()">
         <span class="eb-icon">📝</span>
         <div class="eb-content">
           <span class="eb-title" style="color:var(--orange)">住宿生新增進總表審核</span>
@@ -157,11 +157,28 @@
         </div>
         <span class="eb-arrow">›</span>
       </button>
+    </div>
+  </div>
 
-      <!-- 審核清單區域 -->
-      <div id="management-review-list" style="margin-top: 20px; display: none;">
-        <!-- Javascript 會注入這區的內容 -->
-      </div>
+  <!-- ═══════════ 審核頁面 ═══════════ -->
+  <div id="page-review" class="page">
+    <div style="display:flex; align-items:center; margin-bottom: 16px;">
+      <button class="back-btn" style="position:static; margin-right: 12px; margin-top: 0;" onclick="navigateTo('management')">‹ 返回幹部專區</button>
+      <h1 class="page-title" style="margin-bottom:0;">📝 申請審核</h1>
+    </div>
+    <div id="management-review-list">
+      <!-- Javascript 會注入這區的內容 -->
+    </div>
+  </div>
+
+  <!-- ═══════════ 櫃台請假紀錄頁面 ═══════════ -->
+  <div id="page-leave-records" class="page">
+    <div style="display:flex; align-items:center; margin-bottom: 16px;">
+      <button class="back-btn" style="position:static; margin-right: 12px; margin-top: 0;" onclick="navigateTo('summary')">‹ 返回總表</button>
+      <h1 class="page-title" style="margin-bottom:0;">📞 電話請假紀錄</h1>
+    </div>
+    <div id="leave-records-list">
+      <!-- Javascript 會注入紀錄 -->
     </div>
   </div>
 
@@ -292,6 +309,46 @@
     </div>
   </div>
 
+  <!-- 櫃台請假 Modal -->
+  <div id="counter-leave-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 style="margin:0;">📞 櫃台請假填寫</h3>
+        <button class="modal-btn" style="background:var(--dim); padding:6px 12px; margin:0;" onclick="closeModal('counter-leave-modal'); navigateTo('leave-records'); renderLeaveRecordsList();">📑 歷史紀錄</button>
+      </div>
+      <p class="modal-desc">搜尋學生並快速設定點名表請假區間。</p>
+      
+      <div class="bed-selector">
+        <label>🔍 搜尋對象 (姓名/房號/床位)</label>
+        <input type="text" id="cl-search" class="styled-input" placeholder="例如：112 C 或 王小明" oninput="handleCounterLeaveSearch()" autocomplete="off">
+        
+        <label style="margin-top: 12px;">🧑‍🎓 選擇請假學生</label>
+        <select id="cl-target" class="styled-select">
+          <option value="">請先搜尋上方欄位...</option>
+        </select>
+
+        <label style="margin-top: 12px;">處理櫃檯名稱 / 幹部姓名</label>
+        <input type="text" id="cl-handler" class="styled-input" placeholder="例如：110A 小明" autocomplete="off">
+        
+        <div style="display:flex; gap:12px; margin-top:12px;">
+          <div style="flex:1;">
+            <label>📅 開始日期</label>
+            <input type="date" id="cl-start-date" class="styled-input">
+          </div>
+          <div style="flex:1;">
+            <label>📅 結束日期</label>
+            <input type="date" id="cl-end-date" class="styled-input">
+          </div>
+        </div>
+      </div>
+      
+      <div class="modal-actions" style="margin-top: 20px;">
+        <button class="modal-btn cancel" onclick="closeModal('counter-leave-modal')">取消</button>
+        <button class="modal-btn" style="background: var(--green); color: white; box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);" onclick="submitCounterLeave()">送出請假</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══════════ 總表 ═══════════ -->
   <div id="page-summary" class="page">
     <div class="summary-header">
@@ -356,11 +413,21 @@
     </button>
 
     <!-- 新增住宿生按鈕 -->
-    <button class="empty-bed-action" style="border-left: 4px solid var(--blue); background: linear-gradient(90deg, rgba(59, 130, 246, 0.1), transparent);" onclick="openAddResidentModal()">
+    <button class="empty-bed-action" onclick="openAddResidentModal()">
       <span class="eb-icon">👤</span>
       <div class="eb-content">
-        <span class="eb-title" style="color:var(--blue)">新增住宿生</span>
+        <span class="eb-title">新增住宿生</span>
         <span class="eb-desc">填寫新生資料並送出審核</span>
+      </div>
+      <span class="eb-arrow">›</span>
+    </button>
+
+    <!-- 櫃台請假按鈕 -->
+    <button class="empty-bed-action" style="border-left: 4px solid var(--green);" onclick="openCounterLeaveModal()">
+      <span class="eb-icon">📞</span>
+      <div class="eb-content">
+        <span class="eb-title" style="color:var(--green)">櫃台請假通報</span>
+        <span class="eb-desc">電話通報請假，自動更新總表紀錄</span>
       </div>
       <span class="eb-arrow">›</span>
     </button>
@@ -549,10 +616,32 @@
         <p class="dev-card-hint">將所有標記為「空床」的床位，強制清除其殘留的學號、班級、姓名，並將所有日期的請假紀錄覆寫為「✓」，確保資料乾淨統一。</p>
         <button class="action-btn wide warning" onclick="cleanUpEmptyBeds()">🧹 執行強制清理</button>
       </div>
+
+      <!-- 電話請假紀錄系統設定 -->
+      <div class="dev-card" style="margin-top:16px;">
+        <div class="dev-card-header">📞 電話請假輔助資料庫設定</div>
+        <p class="dev-card-hint">設定「電話請假紀錄」的獨立專屬 Notion 資料庫以存放請假名單與歷程。</p>
+        <button class="action-btn wide warning" onclick="setupLeaveDB()">⚙️ 自動建立電話請假紀錄資料庫</button>
+      </div>
     </div>
   </div>
 
   <script>
+    async function setupLeaveDB() {
+      if (!confirm("這將會在 Notion 自動建立一個新的電話請假紀錄資料庫。確定要執行嗎？")) return;
+      try {
+        const res = await fetch(window.CONFIG.WORKER_URL + '/api/setup-leave-db', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          prompt('🎉 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 LEAVE_DB_ID：', data.LEAVE_DB_ID);
+        } else {
+          alert('建立失敗: ' + data.error);
+        }
+      } catch (err) {
+        alert('發生錯誤: ' + err.message);
+      }
+    }
+  
     async function setupChangelogDB() {
       if (!confirm("這將會在 Notion 自動建立一個新的公告資料庫。確定要執行嗎？")) return;
       try {

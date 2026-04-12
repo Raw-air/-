@@ -716,8 +716,6 @@ function enterManagement(roleId, title) {
   }, `🔐 ${title} 身分驗證`);
 }
 
-// ... skipped untouched code ... // Wait I am doing multi_replace_file_content so I'll just use two separate tools to modify app.js.
-
 // ═════════════════════════════════════════════════════════════════════════════
 // 日期選擇器
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1083,12 +1081,14 @@ async function submitAddResident() {
   const isForeign = document.getElementById('ar-is-foreign').checked;
 
   if (!name || !className || !studentId) {
+    playClickSound('dev_error');
     showToast('姓名、班別與學號為必填', 'error');
     return;
   }
 
   const student = state.students.find(s => s.room === room && s.bed === bed);
   if (!student || !student.isEmpty) {
+    playClickSound('dev_error');
     showToast('此床位無法新增', 'error');
     return;
   }
@@ -1918,11 +1918,15 @@ async function fillEmptyBedsWithCheckmarks() {
 // ═════════════════════════════════════════════════════════════════════════════
 // 住宿生新增 幹部審核邏輯
 // ═════════════════════════════════════════════════════════════════════════════
+function openReviewPage() {
+  navigateTo('review');
+  renderResidentReviewList();
+}
+
 async function renderResidentReviewList() {
   const container = document.getElementById('management-review-list');
   if (!container) return;
   
-  container.style.display = 'block';
   container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">讀取中...</div>';
 
   try {
@@ -2039,7 +2043,196 @@ window.openAddResidentModal = openAddResidentModal;
 window.updateAddResidentBeds = updateAddResidentBeds;
 window.checkForeignStudentClass = checkForeignStudentClass;
 window.submitAddResident = submitAddResident;
+window.openReviewPage = openReviewPage;
 window.renderResidentReviewList = renderResidentReviewList;
 window.approveResidentAddReq = approveResidentAddReq;
 window.rejectResidentAddReq = rejectResidentAddReq;
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 櫃台請假與電話請假紀錄
+// ═════════════════════════════════════════════════════════════════════════════
+function openCounterLeaveModal() {
+  document.getElementById('cl-search').value = '';
+  document.getElementById('cl-handler').value = '';
+  
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('cl-start-date').value = today;
+  document.getElementById('cl-end-date').value = today;
+  
+  document.getElementById('cl-target').innerHTML = '<option value="">請先搜尋上方欄位...</option>';
+  openModal('counter-leave-modal');
+}
+
+function handleCounterLeaveSearch() {
+  const query = document.getElementById('cl-search').value.trim().toLowerCase();
+  const select = document.getElementById('cl-target');
+  
+  if (!query) {
+    select.innerHTML = '<option value="">請先搜尋上方欄位...</option>';
+    return;
+  }
+  
+  // 模糊過濾
+  const matches = state.students.filter(s => {
+    if (s.isEmpty) return false;
+    const txt = `${s.name} ${s.room} ${s.bed} ${s.studentId}`.toLowerCase();
+    return txt.includes(query);
+  }).slice(0, 50); // 最多 50 筆
+  
+  if (matches.length === 0) {
+    select.innerHTML = '<option value="">找不到符合的學生</option>';
+  } else {
+    select.innerHTML = matches.map(s => 
+      `<option value="${s.id}">${s.room} ${s.bed} - ${s.name}</option>`
+    ).join('');
+  }
+}
+
+function viewLeaveRecords() {
+  closeModal('counter-leave-modal');
+  navigateTo('leave-records');
+  renderLeaveRecordsList();
+}
+
+async function renderLeaveRecordsList() {
+  const container = document.getElementById('leave-records-list');
+  if (!container) return;
+  
+  container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">讀取中...</div>';
+  const dbId = state.config['LEAVE_DB_ID'];
+  if (!dbId) {
+    container.innerHTML = '<div style="color:#ef4444;text-align:center;padding:20px;">尚未設定電話請假紀錄資料庫<br>請至設定 > 開發者調適區初始化 DB。</div>';
+    return;
+  }
+  
+  try {
+    const res = await fetch(CONFIG.WORKER_URL + '/api/leave-records?dbId=' + dbId);
+    if (!res.ok) throw new Error('API 回應錯誤');
+    const records = await res.json();
+    
+    if (!records || records.length === 0) {
+      container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">目前沒有任何電話請假紀錄。</div>';
+      return;
+    }
+    
+    container.innerHTML = records.map(r => `
+      <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);padding:16px;border-radius:12px;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;">
+          <div style="font-size:16px;font-weight:bold;color:var(--text);">${r.title}</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.5);">${new Date(r.createdAt).toLocaleString()}</div>
+        </div>
+        <div style="font-size:14px;color:var(--dim);margin-bottom:4px;">🧑‍🎓 ${r.roomBed} ${r.name}</div>
+        <div style="font-size:14px;color:var(--dim);margin-bottom:4px;">📅 ${r.dateStart} ~ ${r.dateEnd}</div>
+        <div style="font-size:14px;color:var(--dim);">👤 處理人：${r.handler || '未填寫'}</div>
+      </div>
+    `).join('');
+  } catch (err) {
+    container.innerHTML = `<div style="color:#f87171;text-align:center;padding:20px;">載入失敗：${err.message}</div>`;
+  }
+}
+
+async function submitCounterLeave() {
+  const targetId = document.getElementById('cl-target').value;
+  const startDateStr = document.getElementById('cl-start-date').value;
+  const endDateStr = document.getElementById('cl-end-date').value;
+  const handler = document.getElementById('cl-handler').value.trim();
+  
+  if (!targetId) {
+    playClickSound('dev_error');
+    showToast('請先搜尋並選擇要請假的學生！', 'error');
+    return;
+  }
+  
+  if (!startDateStr || !endDateStr) {
+    playClickSound('dev_error');
+    showToast('請填寫完整請假日期區間！', 'error');
+    return;
+  }
+  
+  if (startDateStr > endDateStr) {
+    playClickSound('dev_error');
+    showToast('結束日期不能早於開始日期！', 'error');
+    return;
+  }
+  
+  const student = state.students.find(s => s.id === targetId);
+  if (!student) return;
+  
+  const btn = document.querySelector('#counter-leave-modal .modal-btn:last-child');
+  if (btn) { btn.disabled = true; btn.textContent = '處理中...'; }
+  showLoading(true);
+  
+  try {
+    // 1. 找出區間對應的 state.dateColumns (點名表的欄位)
+    // 我們需要將 Date string "YYYY-MM-DD" 與 dateColumns "MM/DD" (例如 "02/10") 配對
+    const updates = [];
+    const localStart = new Date(startDateStr);
+    const localEnd = new Date(endDateStr);
+    
+    // 產生期間內所有日期的 MM/DD
+    const targetDates = [];
+    let cur = new Date(startDateStr);
+    while (cur <= localEnd) {
+      const m = String(cur.getMonth() + 1).padStart(2, '0');
+      const d = String(cur.getDate()).padStart(2, '0');
+      targetDates.push(`${m}/${d}`);
+      cur.setDate(cur.getDate() + 1);
+    }
+    
+    // 篩選出總表確實存在的欄位
+    const matchedCols = state.dateColumns.filter(c => targetDates.includes(c));
+    if (matchedCols.length > 0) {
+      const pageUpdate = { pageId: student.id, changes: {} };
+      for (const c of matchedCols) {
+        pageUpdate.changes[c] = '◎'; // 強制覆寫為請假
+        student.attendance[c] = '◎'; // 本地更新
+      }
+      updates.push(pageUpdate);
+      
+      // 送出至總表 (分批每45筆)
+      for (let i = 0; i < updates.length; i += 45) {
+        await window._api.updateAttendance(updates.slice(i, i + 45));
+      }
+    }
+    
+    // 2. 紀錄至電話請假紀錄 DB
+    const dbId = state.config['LEAVE_DB_ID'];
+    if (dbId) {
+       await fetch(CONFIG.WORKER_URL + '/api/leave-records', {
+         method: 'POST',
+         headers: {'Content-Type': 'application/json'},
+         body: JSON.stringify({
+           dbId: dbId,
+           name: student.name,
+           roomBed: `${student.room} - ${student.bed}`,
+           dateStart: startDateStr,
+           dateEnd: endDateStr,
+           handler: handler
+         })
+       });
+    } else {
+       showToast('注意：電話請假紀錄未配置，僅更新總表', 'info');
+    }
+    
+    playClickSound('all_present');
+    showToast(`已經為 ${student.name} 完成起迄請假設定！`, 'success');
+    
+    if (currentPage === 'summary') renderSummary();
+    if (currentPage === 'rollcall') renderRollCall();
+    
+    closeModal('counter-leave-modal');
+  } catch (err) {
+    showToast('更新失敗：' + err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '送出請假'; }
+    showLoading(false);
+  }
+}
+
+window.openCounterLeaveModal = openCounterLeaveModal;
+window.handleCounterLeaveSearch = handleCounterLeaveSearch;
+window.submitCounterLeave = submitCounterLeave;
+window.viewLeaveRecords = viewLeaveRecords;
+window.renderLeaveRecordsList = renderLeaveRecordsList;
+
 
