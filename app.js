@@ -1957,7 +1957,11 @@ function loadGlobalBgVideo() {
   const animBg = document.querySelector('.home-anim-bg');
 
   if (url) {
-    container.innerHTML = `<video src="${url}" autoplay loop muted playsinline style="--target-scale: ${scale}; --target-opacity: ${opacity}; opacity: 0; animation: fadeInVideo 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;"></video>`;
+    container.innerHTML = `<video src="${url}" autoplay loop muted playsinline style="--target-scale: ${scale}; --target-opacity: ${opacity}; opacity: 0;"></video>`;
+    const vid = container.querySelector('video');
+    vid.addEventListener('loadeddata', () => {
+      vid.style.animation = 'fadeInVideo 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards';
+    }, { once: true });
     if (animBg) animBg.style.display = 'none'; // 隱藏預設動畫
 
     // 同步到 UI (如果在設定頁)
