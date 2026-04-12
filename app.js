@@ -2177,9 +2177,9 @@ async function submitCounterLeave() {
     // 篩選出總表確實存在的欄位
     const matchedCols = state.dateColumns.filter(c => targetDates.includes(c));
     if (matchedCols.length > 0) {
-      const pageUpdate = { pageId: student.id, changes: {} };
+      const pageUpdate = { pageId: student.id, dates: {} };
       for (const c of matchedCols) {
-        pageUpdate.changes[c] = '◎'; // 強制覆寫為請假
+        pageUpdate.dates[c] = '◎'; // 強制覆寫為請假
         student.attendance[c] = '◎'; // 本地更新
       }
       updates.push(pageUpdate);
