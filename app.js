@@ -518,7 +518,7 @@ function openChangelogModal() {
       if (timeLabel) {
         html = html.replace(
           /(<\/h[23]>)/,
-          `$1<span style="${tsStyle}">🕐 ${timeLabel}</span>`
+          `$1<span class="changelog-time" style="font-size:11px;margin:-2px 0 8px 2px;font-weight:400;letter-spacing:0.5px;display:block;">🕐 ${timeLabel}</span>`
         );
       }
       combinedHTML += html;
@@ -871,6 +871,13 @@ function enterManagement(roleId, title) {
     playClickSound('dev_unlock');
     showToast(`歡迎進入，${title}！`, 'success');
     document.getElementById('mgt-title').textContent = title;
+
+    // 權限控制：報修審核只有副社長可見
+    const repairBtn = document.getElementById('manage-repair-btn');
+    if (repairBtn) {
+      repairBtn.style.display = (roleId === 'vice_president') ? 'flex' : 'none';
+    }
+
     navigateTo('management');
   }, `🔐 ${title} 身分驗證`);
 }
@@ -1601,8 +1608,6 @@ function renderSettings() {
   document.getElementById('cfg-total-beds').value = totalBeds;
   document.getElementById('cfg-bed-offset').value = bedOffset;
 
-  // 導覽列圖示（僅開發者模式解鎖後才渲染）
-  if (devUnlocked) renderNavIconUpload();
 }
 
 function adjustSetting(key, delta) {
@@ -1855,7 +1860,7 @@ function applyNavIcons() {
       const src = getIconSrc(srcBase);
       // 加上 onerror 備援機制，如果發生錯誤就 fallback 回 emoji
       const defEmoji = NAV_PAGES.find(n => n.page === page)?.emoji || '⚙️';
-      iconEl.innerHTML = `<img class="nav-icon-img" src="${src}" alt="${page}" style="width:28px;height:28px;object-fit:contain;margin-bottom:2px;" onerror="this.outerHTML='${defEmoji}'">`;
+      iconEl.innerHTML = `<img class="nav-icon-img" src="${src}" alt="${page}" style="width:28px;height:28px;object-fit:contain;margin-bottom:-2px;" onerror="this.outerHTML='${defEmoji}'">`;
     } else {
       const def = NAV_PAGES.find(n => n.page === page);
       if (def) iconEl.textContent = def.emoji;
@@ -1952,7 +1957,7 @@ function loadGlobalBgVideo() {
   const animBg = document.querySelector('.home-anim-bg');
 
   if (url) {
-    container.innerHTML = `<video src="${url}" autoplay loop muted playsinline style="transform: scale(${scale}); opacity: ${opacity};"></video>`;
+    container.innerHTML = `<video src="${url}" autoplay loop muted playsinline style="--target-scale: ${scale}; --target-opacity: ${opacity}; opacity: 0; animation: fadeInVideo 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;"></video>`;
     if (animBg) animBg.style.display = 'none'; // 隱藏預設動畫
 
     // 同步到 UI (如果在設定頁)

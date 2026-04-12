@@ -10,7 +10,7 @@
   <meta name="theme-color" content="#0a0a14">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=56">
+  <link rel="stylesheet" href="style.css?v=59">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -147,7 +147,10 @@
 
   <!-- ═══════════ 幹部管理 ═══════════ -->
   <div id="page-management" class="page">
-    <h1 id="mgt-title" class="page-title" style="text-align: center; margin-top: 16px;">幹部專區</h1>
+    <div style="position: relative; display: flex; justify-content: center; align-items: center; margin-bottom: 16px; padding-top: 8px;">
+      <button class="back-btn" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin-top: 0;" onclick="navigateTo('home')">‹ 返回首頁</button>
+      <h1 id="mgt-title" class="page-title" style="margin: 0;">幹部專區</h1>
+    </div>
 
     <div style="padding: 16px;">
       <button class="empty-bed-action" style="border-left: 4px solid var(--orange);" onclick="openReviewPage()">
@@ -159,7 +162,7 @@
         <span class="eb-arrow">›</span>
       </button>
 
-      <button class="empty-bed-action" style="border-left: 4px solid var(--purple);" onclick="openRepairReview()">
+      <button id="manage-repair-btn" class="empty-bed-action" style="border-left: 4px solid var(--purple);" onclick="openRepairReview()">
         <span class="eb-icon">🔧</span>
         <div class="eb-content">
           <span class="eb-title" style="color:var(--purple)">報修審核</span>
@@ -431,7 +434,7 @@
   <!-- ═══════════ 工具與選項 ═══════════ -->
   <div id="page-tools" class="page">
     <div style="position: relative; margin-bottom: 24px; display: flex; justify-content: center; align-items: center; padding-top: 8px;">
-      <button class="back-btn" style="position: absolute; left: 0; margin-top: 0; top: 0;" onclick="navigateTo('summary')">‹ 返回總表</button>
+      <button class="back-btn" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin-top: 0;" onclick="navigateTo('summary')">‹ 返回總表</button>
       <h1 style="font-size: 20px; font-weight: 800; letter-spacing:1px; margin:0; color: var(--text);">工具與選項</h1>
     </div>
 
@@ -489,7 +492,7 @@
   <!-- ═══════════ 報修填寫頁面 ═══════════ -->
   <div id="page-repair-form" class="page">
     <div style="position: relative; display: flex; justify-content: center; align-items: center; margin-bottom: 20px; padding-top: 8px;">
-      <button class="back-btn" style="position: absolute; left: 0; margin-top: 0; top: 0;" onclick="navigateTo('tools')">‹ 返回</button>
+      <button class="back-btn" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin-top: 0;" onclick="navigateTo('tools')">‹ 返回</button>
       <h1 style="font-size: 20px; font-weight: 800; margin:0; color: var(--text);">🔧 通知報修</h1>
     </div>
 
@@ -514,7 +517,7 @@
   <!-- ═══════════ 報修審核頁面 ═══════════ -->
   <div id="page-repair-review" class="page">
     <div style="position: relative; display: flex; justify-content: center; align-items: center; margin-bottom: 20px; padding-top: 8px;">
-      <button class="back-btn" style="position: absolute; left: 0; margin-top: 0; top: 0;" onclick="navigateTo('management')">‹ 返回幹部專區</button>
+      <button class="back-btn" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin-top: 0;" onclick="navigateTo('management')">‹ 返回幹部專區</button>
       <h1 style="font-size: 20px; font-weight: 800; margin:0; color: var(--text);">🔧 報修審核</h1>
     </div>
     <div id="repair-review-list">
@@ -861,9 +864,9 @@
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=56"></script>
-  <script src="api.js?v=56"></script>
-  <script src="app.js?v=56"></script>
+  <script src="config.js?v=59"></script>
+  <script src="api.js?v=59"></script>
+  <script src="app.js?v=59"></script>
 </body>
 
 </html>
