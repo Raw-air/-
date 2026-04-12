@@ -2099,19 +2099,14 @@ async function renderLeaveRecordsList() {
   if (!container) return;
   
   container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">讀取中...</div>';
-  const dbId = state.config['LEAVE_DB_ID'];
-  if (!dbId) {
-    container.innerHTML = '<div style="color:#ef4444;text-align:center;padding:20px;">尚未設定電話請假紀錄資料庫<br>請至設定 > 開發者調適區初始化 DB。</div>';
-    return;
-  }
   
   try {
-    const res = await fetch(CONFIG.WORKER_URL + '/api/leave-records?dbId=' + dbId);
+    const res = await fetch(CONFIG.WORKER_URL + '/api/leave-records');
     if (!res.ok) throw new Error('API 回應錯誤');
     const records = await res.json();
     
     if (!records || records.length === 0) {
-      container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">目前沒有任何電話請假紀錄。</div>';
+      container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">目前沒有任何電話請假紀錄。<br><br><small style="color:var(--red);">若您確定有新增過，可能是 Cloudflare 中尚未設定 LEAVE_DB_ID，請至開發者區初始化資料庫並將 ID 填入 Cloudflare 環境變數。</small></div>';
       return;
     }
     
@@ -2164,18 +2159,18 @@ async function submitCounterLeave() {
   
   try {
     // 1. 找出區間對應的 state.dateColumns (點名表的欄位)
-    // 我們需要將 Date string "YYYY-MM-DD" 與 dateColumns "MM/DD" (例如 "02/10") 配對
+    // 我們需要將 Date string "YYYY-MM-DD" 與 dateColumns "X月Y日" 配對
     const updates = [];
     const localStart = new Date(startDateStr);
     const localEnd = new Date(endDateStr);
     
-    // 產生期間內所有日期的 MM/DD
+    // 產生期間內所有日期的 X月Y日
     const targetDates = [];
     let cur = new Date(startDateStr);
     while (cur <= localEnd) {
-      const m = String(cur.getMonth() + 1).padStart(2, '0');
-      const d = String(cur.getDate()).padStart(2, '0');
-      targetDates.push(`${m}/${d}`);
+      const m = cur.getMonth() + 1;
+      const d = cur.getDate();
+      targetDates.push(`${m}月${d}日`);
       cur.setDate(cur.getDate() + 1);
     }
     
@@ -2193,29 +2188,31 @@ async function submitCounterLeave() {
       for (let i = 0; i < updates.length; i += 45) {
         await window._api.updateAttendance(updates.slice(i, i + 45));
       }
+    } else {
+      showToast('警告：選擇的請假範圍未涵蓋目前點名表的任何一天！將只記錄歷史，不修改總表。', 'info');
     }
     
     // 2. 紀錄至電話請假紀錄 DB
-    const dbId = state.config['LEAVE_DB_ID'];
-    if (dbId) {
-       await fetch(CONFIG.WORKER_URL + '/api/leave-records', {
-         method: 'POST',
-         headers: {'Content-Type': 'application/json'},
-         body: JSON.stringify({
-           dbId: dbId,
-           name: student.name,
-           roomBed: `${student.room} - ${student.bed}`,
-           dateStart: startDateStr,
-           dateEnd: endDateStr,
-           handler: handler
-         })
-       });
-    } else {
-       showToast('注意：電話請假紀錄未配置，僅更新總表', 'info');
-    }
+    const leaveAddRes = await fetch(CONFIG.WORKER_URL + '/api/leave-records', {
+       method: 'POST',
+       headers: {'Content-Type': 'application/json'},
+       body: JSON.stringify({
+         name: student.name,
+         roomBed: `${student.room} - ${student.bed}`,
+         dateStart: startDateStr,
+         dateEnd: endDateStr,
+         handler: handler
+       })
+    });
     
-    playClickSound('all_present');
-    showToast(`已經為 ${student.name} 完成起迄請假設定！`, 'success');
+    // 若 worker 回傳 500 表示可能未設定環境變數
+    if (!leaveAddRes.ok) {
+       console.warn('電話紀錄寫入失敗，可能未配置 LEAVE_DB_ID。');
+       showToast('總表已更新◎，但歷史紀錄寫入失敗 (請確認 Cloudflare 已設定 LEAVE_DB_ID)', 'info');
+    } else {
+       playClickSound('all_present');
+       showToast(`已經為 ${student.name} 完成起迄請假設定並寫入紀錄！`, 'success');
+    }
     
     if (currentPage === 'summary') renderSummary();
     if (currentPage === 'rollcall') renderRollCall();
