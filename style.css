@@ -9,23 +9,30 @@
 }
 
 :root {
-  --bg: #000000;
-  --bg2: #1c1c1e;
-  --card: rgba(28, 28, 30, 0.6);
-  --card-h: rgba(44, 44, 46, 0.8);
-  --border: rgba(255, 255, 255, 0.1);
-  --border2: rgba(255, 255, 255, 0.15);
+  --bg: #0a0a0c;
+  --bg2: #141416;
+  --card: rgba(20, 20, 24, 0.4);
+  --card-h: rgba(40, 40, 46, 0.5);
+  --border: rgba(255, 255, 255, 0.06);
+  --border2: rgba(255, 255, 255, 0.1);
   --text: #f5f5f7;
   --dim: #86868b;
   --muted: #636366;
-  --green: #32d74b;
+  
+  /* Extremely subtle Neumorphic shadow mix for elegant dark mode */
+  --shadow-dark: rgba(0, 0, 0, 0.5);
+  --shadow-light: rgba(255, 255, 255, 0.03);
+  --neu-out: 4px 4px 12px var(--shadow-dark), -2px -2px 10px var(--shadow-light);
+  --neu-in: inset 2px 2px 6px rgba(0,0,0,0.5), inset -1px -1px 4px rgba(255,255,255,0.02);
+
+  --green: #30d158;
   --yellow: #ffd60a;
   --red: #ff453a;
   --blue: #0a84ff;
   --purple: #bf5af2;
   --indigo: #5e5ce6;
   --orange: #ff9f0a;
-  --r: 16px;
+  --r: 20px;
   --nav-h: 68px;
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -33,15 +40,21 @@
 }
 
 body.light-mode {
-  --bg: #f9f9fa;
-  --bg2: #ffffff;
-  --card: rgba(255, 255, 255, 0.85);
-  --card-h: rgba(230, 230, 230, 0.9);
-  --border: rgba(0, 0, 0, 0.1);
-  --border2: rgba(0, 0, 0, 0.15);
-  --text: #111111;
-  --dim: #6e6e73;
-  --muted: #86868b;
+  --bg: #ebecf0;
+  --bg2: #f5f6fa;
+  --card: rgba(255, 255, 255, 0.4);
+  --card-h: rgba(255, 255, 255, 0.6);
+  --border: rgba(255, 255, 255, 0.8);
+  --border2: rgba(255, 255, 255, 1);
+  --text: #2d3436;
+  --dim: #636e72;
+  --muted: #b2bec3;
+  
+  /* Classic Soft UI / Neumorphism colors for light mode */
+  --shadow-dark: rgba(174, 186, 204, 0.5);
+  --shadow-light: rgba(255, 255, 255, 0.9);
+  --neu-out: 6px 6px 14px var(--shadow-dark), -6px -6px 14px var(--shadow-light);
+  --neu-in: inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light);
 }
 
 html {
@@ -595,13 +608,13 @@ body {
   font-size: 32px;
   font-weight: 800;
   letter-spacing: 2px;
-  color: #ffffff;
-  text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  text-shadow: 0 0 24px rgba(255, 255, 255, 0.2);
 }
 
 .home-sub {
   font-size: 14px;
-  color: rgba(255, 255, 255, .6);
+  color: var(--dim);
   margin-top: 2px;
   letter-spacing: 6px;
   text-transform: uppercase
@@ -3249,4 +3262,187 @@ html.transition-dark::view-transition-old(root) {
 }
 html.transition-dark::view-transition-new(root) {
   z-index: 1; /* 黑底放在下面被吃掉 */
+}
+/* ========================================================
+   GLASS-NEUMORPHISM OVERRIDES (Appended by Agent)
+   ======================================================== */
+
+/* 1. Global Box Shadows & Cards */
+.sq-card, .modal-card, .settings-card,
+.sqd-card, .big-stat, .sm-stat,
+.dev-card, .rc-stat, .date-picker-panel, .student-row,
+.changelog-content {
+  background: var(--card);
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  box-shadow: var(--neu-out);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+}
+
+.modal-card {
+  border-radius: 28px;
+}
+
+.bottom-nav {
+  background: var(--card);
+  backdrop-filter: blur(24px) saturate(180%);
+  box-shadow: 0 -8px 24px var(--shadow-dark), 0 0 16px var(--shadow-light);
+}
+
+/* 2. Buttons - Default Pop-Out */
+.back-btn, .submit-btn, .action-btn, .empty-bed-action, .fab-empty-bed,
+.nav-arrow, .date-pill, .rc-date-clickable, .changelog-btn, .dev-trigger,
+.modal-btn, .stepper-btn {
+  background: var(--card);
+  backdrop-filter: blur(12px) saturate(120%);
+  box-shadow: var(--neu-out);
+  border: 1px solid var(--border);
+  transition: all 0.25s cubic-bezier(.175, .885, .32, 1.275);
+}
+
+/* Background resets for heavy colors */
+.submit-btn, .fab-empty-bed {
+  background: rgba(139, 92, 246, 0.15) !important;
+  color: var(--text) !important;
+  border-color: rgba(139, 92, 246, 0.4) !important;
+}
+
+/* 3. Interactive States - Inset Shadow (Depressed) */
+.back-btn:active, .submit-btn:active, .action-btn:active, .empty-bed-action:active,
+.fab-empty-bed:active, .nav-arrow:active, .rc-date-clickable:active,
+.changelog-btn:active, .dev-trigger:active, .modal-btn:active, .stepper-btn:active,
+.sq-card:active, .student-row:active {
+  box-shadow: var(--neu-in) !important;
+  transform: translateY(2px) scale(0.98) !important;
+}
+
+.empty-bed-action:hover, .sq-card:hover {
+  box-shadow: var(--neu-out), 0 16px 24px rgba(0,0,0,0.05);
+}
+
+/* 4. Inputs & Selects - Inset Trench */
+.styled-input, .styled-select, .dev-input, .stepper-input, .repair-textarea {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--neu-in) !important;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 14px;
+}
+
+.styled-input:focus, .styled-select:focus, .dev-input:focus, .stepper-input:focus {
+  box-shadow: var(--neu-in), 0 0 0 2px var(--shadow-light) !important;
+  outline: none;
+}
+
+/* 5. Nav Items in Bottom Bar */
+.nav-item.active .nav-icon {
+  transform: translateY(-2px);
+  color: var(--purple);
+  filter: drop-shadow(0 4px 8px var(--shadow-dark));
+}
+
+/* 6. RC Confirm Action Banner */
+.rc-confirm-action {
+  background: var(--card);
+  box-shadow: var(--neu-out);
+  border-radius: 16px;
+}
+.rc-confirm-action:active {
+  box-shadow: var(--neu-in);
+  transform: scale(0.98);
+}
+
+
+/* ========================================================
+   HIGH-END UI/UX NEUMORPHIC-GLASS OVERRIDES
+   ======================================================== */
+
+/* Elegant Base Glass Cards with Soft Pop-out */
+.sq-card, .modal-card, .settings-card,
+.sqd-card, .big-stat, .sm-stat, .rc-stat, .student-row,
+.empty-bed-action, .fab-empty-bed {
+  background: var(--card);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid var(--border);
+  box-shadow: var(--neu-out);
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Modals should be extremely soft */
+.modal-card {
+  border-radius: 32px;
+  background: var(--bg2); /* solid base to avoid muddy stacking blur */
+  border: 1px solid var(--border);
+  box-shadow: var(--neu-out), 0 24px 64px rgba(0,0,0,0.1);
+}
+
+.bottom-nav {
+  background: var(--card);
+  backdrop-filter: blur(24px) saturate(180%);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.03); /* Keep nav shadow subtle, not heavy neu */
+}
+
+/* Restoring text clarity for buttons */
+.fab-empty-bed, .submit-btn, .modal-btn.confirm {
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  box-shadow: 0 4px 16px rgba(10, 132, 255, 0.25), var(--neu-out);
+}
+.fab-empty-bed:active, .submit-btn:active, .modal-btn.confirm:active {
+  box-shadow: var(--neu-in);
+  transform: scale(0.97);
+}
+
+/* Active Depressed States for General Elements */
+.back-btn:active, .action-btn:active, .empty-bed-action:active,
+.sq-card:active, .student-row:active, .nav-arrow:active, .rc-date-clickable:active {
+  box-shadow: var(--neu-in);
+  background: var(--card-h);
+  border-color: transparent;
+  transform: translateY(1px) scale(0.98);
+}
+
+.empty-bed-action:hover, .sq-card:hover {
+  box-shadow: var(--neu-out), 0 8px 24px rgba(0,0,0,0.06);
+  transform: translateY(-2px);
+}
+
+/* Beautiful Clean Inset Trenches for Inputs */
+.styled-input, .styled-select, .dev-input, .stepper-input, .repair-textarea {
+  background: rgba(0,0,0,0.02); /* Very faint darkening */
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: var(--neu-in);
+  color: var(--text);
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+
+body.light-mode .styled-input, 
+body.light-mode .styled-select, 
+body.light-mode .dev-input, 
+body.light-mode .stepper-input, 
+body.light-mode .repair-textarea {
+  background: rgba(0,0,0,0.02);
+  border: 1px solid rgba(255,255,255,0.6);
+}
+
+.styled-input:focus, .styled-select:focus, .dev-input:focus, .stepper-input:focus, .repair-textarea:focus {
+  outline: none;
+  box-shadow: var(--neu-in), 0 0 0 2px var(--blue);
+  background: var(--bg2);
+}
+
+/* General fixes */
+.rc-confirm-action {
+  box-shadow: var(--neu-out);
+}
+.rc-confirm-action:active {
+  box-shadow: var(--neu-in);
+  transform: scale(0.98);
 }
