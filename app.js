@@ -582,9 +582,11 @@ function renderCurrentPage() {
 function renderHome() {
   // 日期
   const dateEl = document.getElementById('home-date');
-  const now = new Date();
-  const weekDay = ['日', '一', '二', '三', '四', '五', '六'][now.getDay()];
-  dateEl.textContent = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 星期${weekDay}`;
+  if (dateEl) {
+    const now = new Date();
+    const weekDay = ['日', '一', '二', '三', '四', '五', '六'][now.getDay()];
+    dateEl.textContent = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 星期${weekDay}`;
+  }
 
   // ── 斜線球體動畫 ──
   const animBg = document.querySelector('.home-anim-bg');
@@ -1225,6 +1227,17 @@ function closeModal(id) {
  * 計算某日的全域統計資料（一個函數，renderSummary 和 copySummary 共用）
  */
 function computeDailyStats(date) {
+  const todayStr = getTodayColumnName();
+  if (date !== todayStr) {
+    const snap = state.config['snapshot_' + date];
+    if (snap) {
+      try {
+        const cachedSt = JSON.parse(snap);
+        if (cachedSt && typeof cachedSt === 'object') return cachedSt;
+      } catch(e) { console.error('Failed to parse snapshot', e); }
+    }
+  }
+
   const totalBeds = parseInt(state.config['total_beds']) || state.students.filter(s => !s.hidden).length;
   const bedOffset = parseInt(state.config['bed_offset']) || 0;
 
@@ -1286,9 +1299,25 @@ function computeDailyStats(date) {
 
 function renderSummary() {
   const date = state.currentDate || getTodayColumnName();
-  document.getElementById('summary-date').textContent = date;
-
+  const todayStr = getTodayColumnName();
   const st = computeDailyStats(date);
+
+  if (date !== todayStr && state.config['snapshot_' + date]) {
+    document.getElementById('summary-date').textContent = date + ' 🔒';
+  } else {
+    document.getElementById('summary-date').textContent = date;
+  }
+
+  // 核心功能：當觀看的是「今天」的總表時，背景自動紀錄快照。
+  // 這確保 11 點鐘他們拉開來看數字回報時，系統就會自動存下那瞬間的結果。
+  if (date === todayStr) {
+    const snapshotStr = JSON.stringify(st);
+    if (state.config['snapshot_' + date] !== snapshotStr) {
+      state.config['snapshot_' + date] = snapshotStr;
+      // 靜默儲存到 Notion DB 的設定表裡
+      window._api.setConfig({ ['snapshot_' + date]: snapshotStr }).catch(e => console.error('Auto snapshot failed', e));
+    }
+  }
 
   // 1-3: 上排大數字
   document.getElementById('total-beds').textContent = st.totalBeds;
@@ -1668,7 +1697,7 @@ function applyNavIcons() {
     if (src) {
       // 加上 onerror 備援機制，如果發生錯誤就 fallback 回 emoji
       const defEmoji = NAV_PAGES.find(n => n.page === page)?.emoji || '⚙️';
-      iconEl.innerHTML = `<img class="nav-icon-img" src="${src}" alt="${page}" style="width:24px;height:24px;object-fit:contain;" onerror="this.outerHTML='${defEmoji}'">`;
+      iconEl.innerHTML = `<img class="nav-icon-img" src="${src}" alt="${page}" style="width:28px;height:28px;object-fit:contain;margin-bottom:2px;" onerror="this.outerHTML='${defEmoji}'">`;
     } else {
       const def = NAV_PAGES.find(n => n.page === page);
       if (def) iconEl.textContent = def.emoji;

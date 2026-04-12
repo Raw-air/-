@@ -129,6 +129,7 @@
     <!-- 背景已移至外層全域 -->
     <div class="home-hero">
       <button class="changelog-btn" onclick="openChangelogModal()">
+        <img src="./Lp/ICON/NEW.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">
         <span>公告 & 日誌</span>
         <div class="changelog-dot"></div>
       </button>
@@ -403,6 +404,29 @@
     <!-- 各中隊 -->
     <div id="summary-squad-grid" class="squad-detail-grid"></div>
 
+    <!-- 更多選項按鈕 -->
+    <button class="empty-bed-action" style="border-left:none; justify-content:center; padding:18px;" onclick="navigateTo('tools')">
+      <span style="font-size:16px; font-weight:700; color:#fff; letter-spacing:1px;">更多選項</span>
+    </button>
+
+    <div class="summary-actions">
+      <button id="copy-summary-btn" class="action-btn">
+        <img src="./Lp/ICON/COPY.svg" style="width:18px;height:18px;vertical-align:middle;margin-right:6px;">複製總表
+      </button>
+      <button id="refresh-summary-btn" class="action-btn">
+        <img src="./Lp/ICON/RESET.svg" style="width:18px;height:18px;vertical-align:middle;margin-right:6px;">重新整理
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════ 工具與選項 ═══════════ -->
+  <div id="page-tools" class="page">
+    <div class="rc-header" style="margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center;">
+      <button class="back-btn" style="position:static; margin-right: 12px; margin-top: 0; min-width: 100px;" onclick="navigateTo('summary')">‹ 返回總表</button>
+      <h1 class="rc-title" style="flex:1; text-align:center; font-size: 20px; font-weight: 800; letter-spacing:1px; margin:0;">工具與選項</h1>
+      <div style="width: 100px;"></div>
+    </div>
+
     <!-- 空床回報按鈕 -->
     <button class="empty-bed-action" onclick="openEmptyBedModal()">
       <span class="eb-icon">🛏️</span>
@@ -442,11 +466,6 @@
       </div>
       <span class="eb-arrow">›</span>
     </button>
-
-    <div class="summary-actions">
-      <button id="copy-summary-btn" class="action-btn">📋 複製總表</button>
-      <button id="refresh-summary-btn" class="action-btn">🔄 重新整理</button>
-    </div>
   </div>
 
   <!-- ═══════════ 歷史 ═══════════ -->
@@ -463,14 +482,14 @@
 
   <!-- ═══════════ 設定 ═══════════ -->
   <div id="page-settings" class="page">
-    <h1 class="page-title">⚙️ 系統設定</h1>
+    <h1 class="page-title"><img src="./Lp/ICON/SETTIN.svg" style="width:28px;height:28px;vertical-align:middle;margin-right:12px;margin-bottom:6px;">系統設定</h1>
 
     <div class="settings-card">
-      <div class="settings-card-header">📡 連線狀態</div>
+      <div class="settings-card-header">連線狀態</div>
       <div id="conn-status" class="conn-badge">檢查中...</div>
       <div id="settings-info" class="settings-dim"></div>
       <button class="action-btn wide warning" style="margin-top:12px;font-size:12px;padding:8px"
-        onclick="clearSystemCache()">🗑️ 強制清除快取 (解Bug專用)</button>
+        onclick="clearSystemCache()"><img src="./Lp/ICON/RESET.svg" style="width:14px;height:14px;vertical-align:middle;margin-right:6px;">強制清除快取 (解Bug專用)</button>
     </div>
 
     <script>
@@ -491,7 +510,7 @@
     </script>
 
     <div class="settings-card">
-      <div class="settings-card-header">🏠 宿舍參數</div>
+      <div class="settings-card-header"><img src="./Lp/ICON/HOME.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">宿舍參數</div>
       <div class="setting-row">
         <span>總床數</span>
         <div class="stepper">
@@ -511,17 +530,17 @@
       <p class="settings-hint">💡 空床修正值用於微調全部空床數量</p>
       <div class="setting-divider"></div>
       <p class="settings-hint">⚠️ 118/120/122/124/126 為雙人房（自動屏蔽 C/D 床）<br>⚠️ 128 為儲藏室（自動隱藏）</p>
-      <button class="action-btn wide save-btn" onclick="saveDormSettings()">💾 儲存宿舍參數</button>
+      <button class="action-btn wide save-btn" onclick="saveDormSettings()">儲存宿舍參數</button>
     </div>
 
     <div class="settings-card">
-      <div class="settings-card-header">📤 匯出 Excel</div>
+      <div class="settings-card-header"><img src="./Lp/ICON/COPY.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">匯出 Excel</div>
       <button id="export-btn" class="action-btn wide" onclick="exportExcel()">📥 匯出完整 Excel</button>
     </div>
 
     <div class="settings-card">
-      <div class="settings-card-header">🔄 資料操作</div>
-      <button class="action-btn wide" onclick="loadData()">🔄 重新從 Notion 載入</button>
+      <div class="settings-card-header"><img src="./Lp/ICON/RESET.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">資料操作</div>
+      <button class="action-btn wide" onclick="loadData()"><img src="./Lp/ICON/RESET.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">重新從 Notion 載入</button>
     </div>
 
 
