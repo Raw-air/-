@@ -446,6 +446,8 @@ body {
   opacity: 0.25;
   /* 不干擾文字的亮度 */
   filter: saturate(1.2);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 100%);
 }
 
 @keyframes fadeInVideo {
@@ -476,7 +478,7 @@ body {
 
 #custom-video-bg.hidden-bg,
 .home-anim-bg.hidden-bg {
-  transform: translateY(100vh);
+  transform: scale(1.05);
   opacity: 0;
 }
 
