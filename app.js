@@ -318,6 +318,9 @@ function toggleWhiteMode(el, event) {
 
   if(isDark) document.documentElement.classList.add('transition-dark');
   
+  // 🔥 強制瀏覽器同步重繪此幀，確保 vt-active (拔除 blur/shadow) 實時生效於舊快照的截取
+  void document.documentElement.offsetHeight;
+
   const transition = document.startViewTransition(() => performAppearanceChange(isLight));
 
   transition.ready.then(() => {

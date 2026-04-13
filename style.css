@@ -3285,42 +3285,12 @@ html.transition-dark::view-transition-new(root) {
 /* ⚡ 效能核彈：暫時關閉 backdrop-filter 來加速 View Transition 截圖 */
 /* backdrop-filter: blur() 是 VT 截圖最重的瓶頸 —— 每個元素都要獨立做高斯模糊 */
 /* 截圖期間關閉它們不影響視覺，因為快照本來就是靜態點陣圖 */
-html.vt-active .sq-card,
-html.vt-active .sqd-card,
-html.vt-active .big-stat,
-html.vt-active .sm-stat,
-html.vt-active .rc-stat,
-html.vt-active .student-row,
-html.vt-active .modal-card,
-html.vt-active .settings-card,
-html.vt-active .dev-card,
-html.vt-active .date-picker-panel,
-html.vt-active .empty-bed-action,
-html.vt-active .fab-empty-bed,
-html.vt-active .back-btn,
-html.vt-active .action-btn,
-html.vt-active .nav-arrow,
-html.vt-active .rc-date-clickable,
-html.vt-active .changelog-btn,
-html.vt-active .dev-trigger,
-html.vt-active .modal-btn,
-html.vt-active .stepper-btn,
-html.vt-active .home-date,
-html.vt-active .toast,
-html.vt-active .rc-confirm-action,
-html.vt-active .submit-btn {
+/* 使用萬用字元一次性覆蓋，並且加入 box-shadow 也能進一步降低 GPU 在 Android 上的渲染時間 */
+html.vt-active,
+html.vt-active * {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-}
-
-/* 凍結截圖期間的 CSS transition，減少渲染計算量 */
-html.vt-active .sq-card,
-html.vt-active .sqd-card,
-html.vt-active .student-row,
-html.vt-active .empty-bed-action,
-html.vt-active .bottom-nav,
-html.vt-active .back-btn,
-html.vt-active .action-btn {
+  box-shadow: none !important;
   transition-duration: 0s !important;
 }
 /* ========================================================
