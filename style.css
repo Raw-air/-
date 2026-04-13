@@ -1885,7 +1885,8 @@ body.light-mode #changelog-content .changelog-time {
 .stepper {
   display: flex;
   align-items: center;
-  gap: 4px
+  gap: 4px;
+  position: relative
 }
 
 .stepper-btn {
@@ -1912,16 +1913,24 @@ body.light-mode #changelog-content .changelog-time {
   width: 56px;
   text-align: center;
   padding: 8px;
-  background: rgba(255, 255, 255, .06);
+  background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  box-shadow: var(--neu-in);
+  border-radius: 12px;
   color: var(--text);
   font-size: 16px;
   font-weight: 700;
   outline: none;
   -webkit-appearance: none;
   -moz-appearance: textfield;
-  appearance: none
+  appearance: none;
+  transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.stepper-input-hiding {
+  color: transparent !important;
+  text-shadow: 0 0 0 transparent !important;
+  caret-color: transparent !important;
 }
 
 .stepper-input::-webkit-inner-spin-button,
@@ -2636,11 +2645,18 @@ body.light-mode .styled-input {
   border-color: rgba(0, 0, 0, 0.15);
 }
 
-body.light-mode .stepper-btn,
-body.light-mode .stepper-input {
-  background: rgba(0, 0, 0, 0.05);
+body.light-mode .stepper-btn {
+  background: var(--bg);
   color: var(--text);
-  border-color: rgba(0, 0, 0, 0.15);
+  box-shadow: var(--neu-out);
+  border-color: var(--border);
+}
+
+body.light-mode .stepper-input {
+  background: #e6e9ef;
+  color: var(--text);
+  box-shadow: var(--neu-in);
+  border-color: rgba(0, 0, 0, 0.05);
 }
 
 body.light-mode .nav-item .nav-icon {
@@ -3255,6 +3271,8 @@ label.switch:has(#setting-white-mode) {
   animation: none;
   mix-blend-mode: normal;
   display: block;
+  /* ⚡ GPU 加速提示：clip-path 動畫走合成器線程，不阻主線程 */
+  will-change: clip-path;
 }
 
 html.transition-dark::view-transition-old(root) {
@@ -3262,6 +3280,48 @@ html.transition-dark::view-transition-old(root) {
 }
 html.transition-dark::view-transition-new(root) {
   z-index: 1; /* 黑底放在下面被吃掉 */
+}
+
+/* ⚡ 效能核彈：暫時關閉 backdrop-filter 來加速 View Transition 截圖 */
+/* backdrop-filter: blur() 是 VT 截圖最重的瓶頸 —— 每個元素都要獨立做高斯模糊 */
+/* 截圖期間關閉它們不影響視覺，因為快照本來就是靜態點陣圖 */
+html.vt-active .sq-card,
+html.vt-active .sqd-card,
+html.vt-active .big-stat,
+html.vt-active .sm-stat,
+html.vt-active .rc-stat,
+html.vt-active .student-row,
+html.vt-active .modal-card,
+html.vt-active .settings-card,
+html.vt-active .dev-card,
+html.vt-active .date-picker-panel,
+html.vt-active .empty-bed-action,
+html.vt-active .fab-empty-bed,
+html.vt-active .back-btn,
+html.vt-active .action-btn,
+html.vt-active .nav-arrow,
+html.vt-active .rc-date-clickable,
+html.vt-active .changelog-btn,
+html.vt-active .dev-trigger,
+html.vt-active .modal-btn,
+html.vt-active .stepper-btn,
+html.vt-active .home-date,
+html.vt-active .toast,
+html.vt-active .rc-confirm-action,
+html.vt-active .submit-btn {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* 凍結截圖期間的 CSS transition，減少渲染計算量 */
+html.vt-active .sq-card,
+html.vt-active .sqd-card,
+html.vt-active .student-row,
+html.vt-active .empty-bed-action,
+html.vt-active .bottom-nav,
+html.vt-active .back-btn,
+html.vt-active .action-btn {
+  transition-duration: 0s !important;
 }
 /* ========================================================
    GLASS-NEUMORPHISM OVERRIDES (Appended by Agent)

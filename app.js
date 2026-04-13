@@ -291,6 +291,7 @@ function toggleWhiteMode(el, event) {
 
   if (!document.startViewTransition) {
     performAppearanceChange(isLight);
+    if (typeof updateAllImagesToTheme === 'function') updateAllImagesToTheme();
     return;
   }
 
@@ -312,6 +313,9 @@ function toggleWhiteMode(el, event) {
       return Math.max(0, startRadius + (targetRadius - startRadius) * progress);
   };
 
+  // ⚡ 在截圖前先暫時關閉 backdrop-filter，大幅降低光柵化成本
+  document.documentElement.classList.add('vt-active');
+
   if(isDark) document.documentElement.classList.add('transition-dark');
   
   const transition = document.startViewTransition(() => performAppearanceChange(isLight));
@@ -320,28 +324,38 @@ function toggleWhiteMode(el, event) {
     const clipPathStart = `circle(${startRadius}px at ${x}px ${y}px)`;
     const clipPathEnd = `circle(${targetRadius}px at ${x}px ${y}px)`;
 
-    let fallbackStyle = document.getElementById('vt-fallback');
-    if (!fallbackStyle) {
-      fallbackStyle = document.createElement('style');
-      fallbackStyle.id = 'vt-fallback';
-      document.head.appendChild(fallbackStyle);
-    }
+    // ⚡ 使用 Web Animations API 直接驅動偽元素，避免動態注入 @keyframes 觸發 style recalc
     const pseudo = isDark ? '::view-transition-old(root)' : '::view-transition-new(root)';
-    const prefix = isDark ? 'html.transition-dark' : '';
-    const animName = 'vt-circle-anim-' + Date.now();
-    fallbackStyle.innerHTML = `
-      @keyframes ${animName} {
-        0% { clip-path: ${clipPathStart}; }
-        100% { clip-path: ${clipPathEnd}; }
+    try {
+      document.documentElement.animate(
+        { clipPath: [clipPathStart, clipPathEnd] },
+        { duration, easing: 'ease-out', fill: 'forwards', pseudoElement: pseudo }
+      );
+    } catch (_) {
+      // 降級方案：若 Web Animations API 不支援 pseudoElement，用注入 style 方式
+      let fallbackStyle = document.getElementById('vt-fallback');
+      if (!fallbackStyle) {
+        fallbackStyle = document.createElement('style');
+        fallbackStyle.id = 'vt-fallback';
+        document.head.appendChild(fallbackStyle);
       }
-      ${prefix}${pseudo} {
-        animation: ${animName} ${duration}ms ease-out forwards !important;
-      }
-    `;
+      const prefix = isDark ? 'html.transition-dark' : '';
+      const animName = 'vt-circle-anim-' + Date.now();
+      fallbackStyle.textContent = `
+        @keyframes ${animName} {
+          from { clip-path: ${clipPathStart}; }
+          to   { clip-path: ${clipPathEnd}; }
+        }
+        ${prefix}${pseudo} {
+          animation: ${animName} ${duration}ms ease-out forwards !important;
+        }
+      `;
+    }
   }).catch(() => {});
 
   transition.finished.finally(() => {
     document.documentElement.classList.remove('transition-dark');
+    document.documentElement.classList.remove('vt-active');
     const styleEl = document.getElementById('vt-fallback');
     if (styleEl) styleEl.remove();
   });
@@ -1621,10 +1635,99 @@ function adjustSetting(key, delta) {
   };
   const input = document.getElementById(map[key]);
   if (!input) return;
-  let val = parseInt(input.value) || 0;
-  if (key === 'total_beds') val = Math.max(0, val + delta);
-  else val = val + delta;
-  input.value = val;
+
+  const oldVal = parseInt(input.value) || 0;
+  const newVal = key === 'total_beds' ? Math.max(0, oldVal + delta) : oldVal + delta;
+  if (newVal === oldVal) return;
+
+  // 立即更新邏輯
+  input.value = newVal;
+
+  const stepper = input.closest('.stepper');
+  
+  // 獲取實體的最精準字體樣式與尺寸
+  const style = window.getComputedStyle(input);
+  const rect = input.getBoundingClientRect();
+  const sRect = stepper.getBoundingClientRect();
+  const h = rect.height;
+  const w = rect.width;
+  const left = rect.left - sRect.left;
+  const top = rect.top - sRect.top;
+  
+  const dir = delta > 0 ? -1 : 1; 
+
+  // 狂點防禦：賦予專屬 ID
+  const currentAnimId = (parseInt(input.dataset.animId) || 0) + 1;
+  input.dataset.animId = currentAnimId;
+
+  // 清除舊替身
+  const existingBoxes = stepper.querySelectorAll('.stepper-anim-box');
+  existingBoxes.forEach(b => b.remove());
+
+  // 動畫用的容器（完全透明，包含圓角遮罩）
+  const box = document.createElement('div');
+  box.className = 'stepper-anim-box';
+  box.style.cssText = `
+    position: absolute;
+    width: ${w}px; height: ${h}px;
+    left: ${left}px; top: ${top}px;
+    pointer-events: none; z-index: 10;
+    border-radius: ${style.borderRadius};
+    clip-path: inset(0 round ${style.borderRadius}); /* 確保邊緣純淨 */
+  `;
+
+  // 🧪 退回 <span> 替身，輸入框引擎自帶無法完全覆蓋的系統位移
+  const spanCSS = `
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; height: 100%;
+    position: absolute; left: 0;
+    font-family: ${style.fontFamily};
+    font-size: ${style.fontSize};
+    font-weight: ${style.fontWeight};
+    color: var(--text);
+    letter-spacing: ${style.letterSpacing};
+    padding: ${style.padding}; /* 繼承 Padding 確保對齊 */
+    box-sizing: border-box;
+    font-variant-numeric: tabular-nums;
+  `;
+
+  const oldSpan = document.createElement('span');
+  oldSpan.textContent = oldVal;
+  oldSpan.style.cssText = spanCSS + `top: 0;`;
+
+  const newSpan = document.createElement('span');
+  newSpan.textContent = newVal;
+  newSpan.style.cssText = spanCSS + `top: ${-dir * h}px;`;
+
+  box.appendChild(oldSpan);
+  box.appendChild(newSpan);
+  stepper.appendChild(box);
+
+  // 徹底隱藏實體文字，鎖定渲染層
+  input.classList.add('stepper-input-hiding');
+  input.style.transform = 'translateZ(0)';
+
+  // 回歸 QQ 彈跳質感與適中速度
+  const dur = 220;
+  const ease = 'cubic-bezier(0.34, 1.56, 0.64, 1)'; 
+
+  oldSpan.animate(
+    [{ transform: 'translateY(0)' }, { transform: `translateY(${dir * h}px)` }],
+    { duration: dur, easing: ease, fill: 'forwards' }
+  );
+
+  const mainAnim = newSpan.animate(
+    [{ transform: 'translateY(0)' }, { transform: `translateY(${dir * h}px)` }],
+    { duration: dur, easing: ease, fill: 'forwards' }
+  );
+
+  mainAnim.onfinish = () => {
+    if (parseInt(input.dataset.animId) === currentAnimId) {
+      input.classList.remove('stepper-input-hiding');
+      input.style.transform = '';
+    }
+    if (box.parentNode) box.remove();
+  };
 }
 
 async function saveDormSettings() {
