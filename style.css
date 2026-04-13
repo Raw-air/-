@@ -3271,7 +3271,7 @@ html.transition-dark::view-transition-new(root) {
 .sq-card,
 .sqd-card, .big-stat, .sm-stat,
 .rc-stat, .student-row,
-.changelog-content {
+.changelog-content, .hist-detail {
   background: var(--card);
   backdrop-filter: blur(20px) saturate(120%);
   -webkit-backdrop-filter: blur(20px) saturate(120%);
@@ -3415,7 +3415,8 @@ body.light-mode .date-picker-panel {
 }
 .fab-empty-bed, .submit-btn, .modal-btn.confirm,
 .back-btn, .action-btn, .empty-bed-action,
-.sq-card, .student-row, .nav-arrow, .rc-date-clickable, .rc-confirm-action {
+.sq-card, .student-row, .nav-arrow, .rc-date-clickable, .rc-confirm-action,
+.cal-cell.has-data {
   transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
 }
 
@@ -3427,7 +3428,8 @@ body.light-mode .date-picker-panel {
 
 /* Active Depressed States for General Elements */
 .back-btn:active, .action-btn:active, .empty-bed-action:active,
-.sq-card:active, .student-row:active, .nav-arrow:active, .rc-date-clickable:active {
+.sq-card:active, .student-row:active, .nav-arrow:active, .rc-date-clickable:active,
+.cal-cell.has-data:active {
   box-shadow: var(--neu-in);
   background: var(--card-h);
   border-color: transparent;
