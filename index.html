@@ -10,7 +10,7 @@
   <meta name="theme-color" content="#0a0a14">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=55">
+  <link rel="stylesheet" href="style.css?v=61">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -130,7 +130,7 @@
     <div class="home-hero">
       <button class="changelog-btn" onclick="openChangelogModal()">
         <img src="./Lp/ICON/NEW.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">
-        <span>公告 & 日誌</span>
+        <span>更新公告</span>
         <div class="changelog-dot"></div>
       </button>
       <img src="icon-192.png" class="home-icon" alt="icon">
@@ -147,7 +147,10 @@
 
   <!-- ═══════════ 幹部管理 ═══════════ -->
   <div id="page-management" class="page">
-    <h1 id="mgt-title" class="page-title" style="text-align: center; margin-top: 16px;">幹部專區</h1>
+    <div style="position: relative; display: flex; justify-content: center; align-items: center; margin-bottom: 16px; padding-top: 8px;">
+      <button class="back-btn" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin-top: 0;" onclick="navigateTo('home')">‹ 返回首頁</button>
+      <h1 id="mgt-title" class="page-title" style="margin: 0;">幹部專區</h1>
+    </div>
 
     <div style="padding: 16px;">
       <button class="empty-bed-action" style="border-left: 4px solid var(--orange);" onclick="openReviewPage()">
@@ -159,7 +162,7 @@
         <span class="eb-arrow">›</span>
       </button>
 
-      <button class="empty-bed-action" style="border-left: 4px solid var(--purple);" onclick="openRepairReview()">
+      <button id="manage-repair-btn" class="empty-bed-action" style="border-left: 4px solid var(--purple);" onclick="openRepairReview()">
         <span class="eb-icon">🔧</span>
         <div class="eb-content">
           <span class="eb-title" style="color:var(--purple)">報修審核</span>
@@ -430,10 +433,9 @@
 
   <!-- ═══════════ 工具與選項 ═══════════ -->
   <div id="page-tools" class="page">
-    <div style="margin-bottom: 24px; display: flex; align-items: center; gap: 12px; padding-top: 8px;">
-      <button class="back-btn" style="position:static; margin-top: 0;" onclick="navigateTo('summary')">‹ 返回總表</button>
-      <h1 style="flex:1; text-align:center; font-size: 20px; font-weight: 800; letter-spacing:1px; margin:0; color: var(--text);">工具與選項</h1>
-      <div style="width: 72px;"></div>
+    <div style="position: relative; margin-bottom: 24px; display: flex; justify-content: center; align-items: center; padding-top: 8px;">
+      <button class="back-btn" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin-top: 0;" onclick="navigateTo('summary')">‹ 返回總表</button>
+      <h1 style="font-size: 20px; font-weight: 800; letter-spacing:1px; margin:0; color: var(--text);">工具與選項</h1>
     </div>
 
     <!-- 空床回報按鈕 -->
@@ -489,9 +491,14 @@
 
   <!-- ═══════════ 報修填寫頁面 ═══════════ -->
   <div id="page-repair-form" class="page">
-    <div style="display:flex; align-items:center; gap: 12px; margin-bottom: 20px; padding-top: 8px;">
-      <button class="back-btn" style="position:static; margin-top: 0;" onclick="navigateTo('tools')">‹ 返回</button>
-      <h1 style="flex:1; font-size: 20px; font-weight: 800; margin:0; color: var(--text);">🔧 通知報修</h1>
+    <div style="position: relative; display: flex; justify-content: center; align-items: center; margin-bottom: 20px; padding-top: 8px;">
+      <button class="back-btn" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin-top: 0;" onclick="navigateTo('tools')">‹ 返回</button>
+      <h1 style="font-size: 20px; font-weight: 800; margin:0; color: var(--text);">🔧 通知報修</h1>
+    </div>
+
+    <div class="repair-form-group">
+      <label>🗣️ 報修人 (姓名/房號)</label>
+      <input type="text" id="repair-reporter" class="styled-input" placeholder="例如：110A 王小明" style="margin-bottom: 16px;">
     </div>
 
     <div class="repair-form-group">
@@ -505,7 +512,7 @@
         <div class="repair-upload-icon">📸</div>
         <div class="repair-upload-text">點擊上傳照片 或 直接拍照</div>
       </div>
-      <input type="file" id="repair-file-input" accept="image/*" multiple capture="environment" style="display:none" onchange="handleRepairPhotos(this)">
+      <input type="file" id="repair-file-input" accept="image/*" multiple style="display:none" onchange="handleRepairPhotos(this)">
       <div id="repair-preview-grid" class="repair-preview-grid"></div>
     </div>
 
@@ -514,9 +521,9 @@
 
   <!-- ═══════════ 報修審核頁面 ═══════════ -->
   <div id="page-repair-review" class="page">
-    <div style="display:flex; align-items:center; gap: 12px; margin-bottom: 20px; padding-top: 8px;">
-      <button class="back-btn" style="position:static; margin-top: 0;" onclick="navigateTo('management')">‹ 返回幹部專區</button>
-      <h1 style="flex:1; font-size: 20px; font-weight: 800; margin:0; color: var(--text);">🔧 報修審核</h1>
+    <div style="position: relative; display: flex; justify-content: center; align-items: center; margin-bottom: 20px; padding-top: 8px;">
+      <button class="back-btn" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin-top: 0;" onclick="navigateTo('management')">‹ 返回幹部專區</button>
+      <h1 style="font-size: 20px; font-weight: 800; margin:0; color: var(--text);">🔧 報修審核</h1>
     </div>
     <div id="repair-review-list">
       <!-- Javascript 會注入這區的內容 -->
@@ -829,7 +836,7 @@
     <div class="modal-card" style="max-height:80vh;display:flex;flex-direction:column;max-width:500px">
       <div
         style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:12px;">
-        <h3 style="margin:0;font-size:18px">📢 系統最新公告與日誌</h3>
+        <h3 style="margin:0;font-size:18px">📢 最新更新公告</h3>
         <button onclick="closeChangelogModal()"
           style="background:none;border:none;color:var(--dim);font-size:24px;cursor:pointer">&times;</button>
       </div>
@@ -862,9 +869,9 @@
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=55"></script>
-  <script src="api.js?v=55"></script>
-  <script src="app.js?v=55"></script>
+  <script src="config.js?v=61"></script>
+  <script src="api.js?v=61"></script>
+  <script src="app.js?v=61"></script>
 </body>
 
 </html>

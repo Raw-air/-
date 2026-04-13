@@ -320,35 +320,24 @@ function toggleWhiteMode(el, event) {
     const clipPathStart = `circle(${startRadius}px at ${x}px ${y}px)`;
     const clipPathEnd = `circle(${targetRadius}px at ${x}px ${y}px)`;
 
-    try {
-      document.documentElement.animate(
-        { clipPath: [clipPathStart, clipPathEnd] },
-        {
-          duration: duration,
-          easing: 'ease-out',
-          fill: 'forwards',
-          pseudoElement: isDark ? '::view-transition-old(root)' : '::view-transition-new(root)'
-        }
-      );
-    } catch (animErr) {
-      let fallbackStyle = document.getElementById('vt-fallback');
-      if (!fallbackStyle) {
-        fallbackStyle = document.createElement('style');
-        fallbackStyle.id = 'vt-fallback';
-        document.head.appendChild(fallbackStyle);
-      }
-      const pseudo = isDark ? '::view-transition-old(root)' : '::view-transition-new(root)';
-      const prefix = isDark ? 'html.transition-dark' : '';
-      fallbackStyle.innerHTML = `
-        @keyframes vt-circle-anim {
-          0% { clip-path: ${clipPathStart}; }
-          100% { clip-path: ${clipPathEnd}; }
-        }
-        ${prefix}${pseudo} {
-          animation: vt-circle-anim ${duration}ms ease-out forwards !important;
-        }
-      `;
+    let fallbackStyle = document.getElementById('vt-fallback');
+    if (!fallbackStyle) {
+      fallbackStyle = document.createElement('style');
+      fallbackStyle.id = 'vt-fallback';
+      document.head.appendChild(fallbackStyle);
     }
+    const pseudo = isDark ? '::view-transition-old(root)' : '::view-transition-new(root)';
+    const prefix = isDark ? 'html.transition-dark' : '';
+    const animName = 'vt-circle-anim-' + Date.now();
+    fallbackStyle.innerHTML = `
+      @keyframes ${animName} {
+        0% { clip-path: ${clipPathStart}; }
+        100% { clip-path: ${clipPathEnd}; }
+      }
+      ${prefix}${pseudo} {
+        animation: ${animName} ${duration}ms ease-out forwards !important;
+      }
+    `;
   }).catch(() => {});
 
   transition.finished.finally(() => {
@@ -518,7 +507,7 @@ function openChangelogModal() {
       if (timeLabel) {
         html = html.replace(
           /(<\/h[23]>)/,
-          `$1<span style="${tsStyle}">🕐 ${timeLabel}</span>`
+          `$1<span class="changelog-time" style="font-size:11px;margin:-2px 0 8px 2px;font-weight:400;letter-spacing:0.5px;display:block;">🕐 ${timeLabel}</span>`
         );
       }
       combinedHTML += html;
@@ -871,6 +860,13 @@ function enterManagement(roleId, title) {
     playClickSound('dev_unlock');
     showToast(`歡迎進入，${title}！`, 'success');
     document.getElementById('mgt-title').textContent = title;
+
+    // 權限控制：報修審核只有副社長可見
+    const repairBtn = document.getElementById('manage-repair-btn');
+    if (repairBtn) {
+      repairBtn.style.display = (roleId === 'vice_president') ? 'flex' : 'none';
+    }
+
     navigateTo('management');
   }, `🔐 ${title} 身分驗證`);
 }
@@ -998,8 +994,23 @@ function toggleStatus(pageId) {
   if (idx >= 0) state.changes[idx] = change;
   else state.changes.push(change);
 
-  // 即時更新 UI
-  renderRollCall();
+  // 即時更新局部的 UI，不重新渲染整個列表以保留點擊動畫
+  const row = document.querySelector(`.student-row[data-pid="${pageId}"]`);
+  if (row) {
+    const si = window.CONFIG.STATUS[next] || window.CONFIG.STATUS['✓'];
+    const absent = next !== '✓';
+    if (absent) row.classList.add('absent');
+    else row.classList.remove('absent');
+
+    const badge = row.querySelector('.status-badge');
+    if (badge) {
+      badge.style.cssText = `background:${si.color}20;color:${si.color};border:1px solid ${si.color}40`;
+      badge.innerHTML = `${si.icon} ${si.label}`;
+    }
+    const syncDot = row.querySelector('.sync-dot');
+    if (syncDot) syncDot.classList.add('pending');
+  }
+  updateRollCallStats();
 
   // 立即同步到 Notion（debounce 800ms 防止快速連點重複 API）
   clearTimeout(_syncTimers[pageId]);
@@ -1601,8 +1612,6 @@ function renderSettings() {
   document.getElementById('cfg-total-beds').value = totalBeds;
   document.getElementById('cfg-bed-offset').value = bedOffset;
 
-  // 導覽列圖示（僅開發者模式解鎖後才渲染）
-  if (devUnlocked) renderNavIconUpload();
 }
 
 function adjustSetting(key, delta) {
@@ -1855,7 +1864,7 @@ function applyNavIcons() {
       const src = getIconSrc(srcBase);
       // 加上 onerror 備援機制，如果發生錯誤就 fallback 回 emoji
       const defEmoji = NAV_PAGES.find(n => n.page === page)?.emoji || '⚙️';
-      iconEl.innerHTML = `<img class="nav-icon-img" src="${src}" alt="${page}" style="width:28px;height:28px;object-fit:contain;margin-bottom:2px;" onerror="this.outerHTML='${defEmoji}'">`;
+      iconEl.innerHTML = `<img class="nav-icon-img" src="${src}" alt="${page}" style="width:28px;height:28px;object-fit:contain;margin-bottom:-2px;" onerror="this.outerHTML='${defEmoji}'">`;
     } else {
       const def = NAV_PAGES.find(n => n.page === page);
       if (def) iconEl.textContent = def.emoji;
@@ -1952,7 +1961,11 @@ function loadGlobalBgVideo() {
   const animBg = document.querySelector('.home-anim-bg');
 
   if (url) {
-    container.innerHTML = `<video src="${url}" autoplay loop muted playsinline style="transform: scale(${scale}); opacity: ${opacity};"></video>`;
+    container.innerHTML = `<video src="${url}" autoplay loop muted playsinline style="--target-scale: ${scale}; --target-opacity: ${opacity}; opacity: 0;"></video>`;
+    const vid = container.querySelector('video');
+    vid.addEventListener('loadeddata', () => {
+      vid.style.animation = 'fadeInVideo 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards';
+    }, { once: true });
     if (animBg) animBg.style.display = 'none'; // 隱藏預設動畫
 
     // 同步到 UI (如果在設定頁)
@@ -2453,6 +2466,8 @@ let repairPhotos = []; // base64 array
 function openRepairForm() {
   repairPhotos = [];
   navigateTo('repair-form');
+  const reporter = document.getElementById('repair-reporter');
+  if (reporter) reporter.value = '';
   const reason = document.getElementById('repair-reason');
   if (reason) reason.value = '';
   const grid = document.getElementById('repair-preview-grid');
@@ -2506,7 +2521,12 @@ function removeRepairPhoto(index) {
 }
 
 async function submitRepair() {
+  const reporter = document.getElementById('repair-reporter')?.value?.trim();
   const reason = document.getElementById('repair-reason')?.value?.trim();
+  if (!reporter) {
+    showToast('請填寫報修人', 'error');
+    return;
+  }
   if (!reason) {
     showToast('請填寫報修原因', 'error');
     return;
@@ -2518,12 +2538,14 @@ async function submitRepair() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        reporter: reporter,
         reason: reason,
         photos: repairPhotos
       })
     });
     const data = await res.json();
     if (data.success) {
+      playClickSound('all_present');
       showToast('報修通知已送出！', 'success');
       repairPhotos = [];
       navigateTo('tools');
