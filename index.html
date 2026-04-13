@@ -130,7 +130,7 @@
     <div class="home-hero">
       <button class="changelog-btn" onclick="openChangelogModal()">
         <img src="./Lp/ICON/NEW.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">
-        <span>公告 & 日誌</span>
+        <span>更新公告</span>
         <div class="changelog-dot"></div>
       </button>
       <img src="icon-192.png" class="home-icon" alt="icon">
@@ -497,6 +497,11 @@
     </div>
 
     <div class="repair-form-group">
+      <label>🗣️ 報修人 (姓名/房號)</label>
+      <input type="text" id="repair-reporter" class="styled-input" placeholder="例如：110A 王小明" style="margin-bottom: 16px;">
+    </div>
+
+    <div class="repair-form-group">
       <label>📝 報修原因</label>
       <textarea id="repair-reason" class="repair-textarea" placeholder="請描述設施損壞的位置與狀況..."></textarea>
     </div>
@@ -507,7 +512,7 @@
         <div class="repair-upload-icon">📸</div>
         <div class="repair-upload-text">點擊上傳照片 或 直接拍照</div>
       </div>
-      <input type="file" id="repair-file-input" accept="image/*" multiple capture="environment" style="display:none" onchange="handleRepairPhotos(this)">
+      <input type="file" id="repair-file-input" accept="image/*" multiple style="display:none" onchange="handleRepairPhotos(this)">
       <div id="repair-preview-grid" class="repair-preview-grid"></div>
     </div>
 
@@ -831,7 +836,7 @@
     <div class="modal-card" style="max-height:80vh;display:flex;flex-direction:column;max-width:500px">
       <div
         style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:12px;">
-        <h3 style="margin:0;font-size:18px">📢 系統最新公告與日誌</h3>
+        <h3 style="margin:0;font-size:18px">📢 最新更新公告</h3>
         <button onclick="closeChangelogModal()"
           style="background:none;border:none;color:var(--dim);font-size:24px;cursor:pointer">&times;</button>
       </div>

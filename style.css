@@ -9,21 +9,21 @@
 }
 
 :root {
-  --bg: #0a0a0c;
-  --bg2: #141416;
-  --card: rgba(20, 20, 24, 0.4);
-  --card-h: rgba(40, 40, 46, 0.5);
-  --border: rgba(255, 255, 255, 0.06);
-  --border2: rgba(255, 255, 255, 0.1);
+  --bg: #151518;
+  --bg2: #1e1e22;
+  --card: rgba(38, 38, 44, 0.6);
+  --card-h: rgba(50, 50, 58, 0.8);
+  --border: rgba(255, 255, 255, 0.08);
+  --border2: rgba(255, 255, 255, 0.15);
   --text: #f5f5f7;
-  --dim: #86868b;
-  --muted: #636366;
+  --dim: #9898a0;
+  --muted: #73737a;
   
   /* Extremely subtle Neumorphic shadow mix for elegant dark mode */
-  --shadow-dark: rgba(0, 0, 0, 0.5);
-  --shadow-light: rgba(255, 255, 255, 0.03);
-  --neu-out: 4px 4px 12px var(--shadow-dark), -2px -2px 10px var(--shadow-light);
-  --neu-in: inset 2px 2px 6px rgba(0,0,0,0.5), inset -1px -1px 4px rgba(255,255,255,0.02);
+  --shadow-dark: rgba(0, 0, 0, 0.7);
+  --shadow-light: rgba(255, 255, 255, 0.06);
+  --neu-out: 5px 5px 14px var(--shadow-dark), -3px -3px 10px var(--shadow-light);
+  --neu-in: inset 3px 3px 8px rgba(0,0,0,0.6), inset -2px -2px 6px rgba(255,255,255,0.03);
 
   --green: #30d158;
   --yellow: #ffd60a;
@@ -2327,8 +2327,8 @@ body.light-mode #changelog-content .changelog-time {
   position: absolute;
   top: 16px;
   right: 16px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.15); /* Brighter */
+  border: 1px solid rgba(255, 255, 255, 0.3);
   backdrop-filter: blur(10px);
   padding: 6px 12px;
   border-radius: 20px;
@@ -3268,9 +3268,9 @@ html.transition-dark::view-transition-new(root) {
    ======================================================== */
 
 /* 1. Global Box Shadows & Cards */
-.sq-card, .modal-card, .settings-card,
+.sq-card,
 .sqd-card, .big-stat, .sm-stat,
-.dev-card, .rc-stat, .date-picker-panel, .student-row,
+.rc-stat, .student-row,
 .changelog-content {
   background: var(--card);
   backdrop-filter: blur(20px) saturate(120%);
@@ -3278,6 +3278,26 @@ html.transition-dark::view-transition-new(root) {
   box-shadow: var(--neu-out);
   border: 1px solid var(--border);
   border-radius: var(--r);
+}
+
+.modal-card, .dev-card, .settings-card, .date-picker-panel {
+  background: rgba(30, 30, 32, 0.85); /* More solid background to prevent transparency issues */
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); /* Clean drop shadow instead of blurry var(--neu-out) */
+  border: 1px solid rgba(255, 255, 255, 0.15); /* Clean 1px border */
+  border-radius: var(--r);
+  overflow: hidden; /* Fix fuzzy edges */
+  transform: translateZ(0); /* Hardware acceleration to clear antialiasing issues */
+}
+
+body.light-mode .modal-card,
+body.light-mode .dev-card,
+body.light-mode .settings-card,
+body.light-mode .date-picker-panel {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .modal-card {
@@ -3393,9 +3413,16 @@ html.transition-dark::view-transition-new(root) {
   border: none;
   box-shadow: 0 4px 16px rgba(10, 132, 255, 0.25), var(--neu-out);
 }
+.fab-empty-bed, .submit-btn, .modal-btn.confirm,
+.back-btn, .action-btn, .empty-bed-action,
+.sq-card, .student-row, .nav-arrow, .rc-date-clickable, .rc-confirm-action {
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
 .fab-empty-bed:active, .submit-btn:active, .modal-btn.confirm:active {
   box-shadow: var(--neu-in);
-  transform: scale(0.97);
+  transform: scale(0.94);
+  transition: all 0.12s cubic-bezier(0.2, 0, 0, 1) !important;
 }
 
 /* Active Depressed States for General Elements */
@@ -3404,7 +3431,8 @@ html.transition-dark::view-transition-new(root) {
   box-shadow: var(--neu-in);
   background: var(--card-h);
   border-color: transparent;
-  transform: translateY(1px) scale(0.98);
+  transform: translateY(2px) scale(0.95); /* Slightly deeper compress for tactile feel */
+  transition: all 0.12s cubic-bezier(0.2, 0, 0, 1) !important;
 }
 
 .empty-bed-action:hover, .sq-card:hover {
@@ -3444,5 +3472,6 @@ body.light-mode .repair-textarea {
 }
 .rc-confirm-action:active {
   box-shadow: var(--neu-in);
-  transform: scale(0.98);
+  transform: scale(0.96);
+  transition: all 0.12s cubic-bezier(0.2, 0, 0, 1) !important;
 }
