@@ -3248,8 +3248,8 @@ function renderStudentFileCards(sweepIn = false) {
     card.innerHTML = `
       <div class="sf-card-title" style="display: flex; align-items: flex-start; position: relative;">
         <span class="sf-title-text" style="flex:1;">${s.room || ''} ${s.bed || ''}</span>
-        <button class="sf-icon-btn sf-broom-btn" onclick="clearStudentData(this)" title="清空床位資料" style="margin-right: 8px;">🧹</button>
-        <div class="sf-card-badge-relative">${s.isForeign ? '外籍生' : (s.isEmpty || !s.name ? '空床' : (s.squad || '無班級'))}</div>
+        <button class="sf-icon-btn sf-broom-btn" onclick="clearStudentData(this)" title="清空床位資料" style="margin-top: 2px; margin-right: 12px;">🧹</button>
+        <div class="sf-card-badge-relative" style="margin-top: 14px; margin-right: 12px; transform-origin: center right;">${s.isForeign ? '外籍生' : (s.isEmpty || !s.name ? '空床' : (s.squad || '無班級'))}</div>
       </div>
       
       <div class="sf-edit-form">
@@ -3495,15 +3495,16 @@ function setup2DCarouselInteraction() {
         // Soft continuous interpolation using a simple quadratic curve
         let t = Math.max(0, 1 - absDiff * 0.45); 
         let scale = 0.85 + 0.15 * (t * t);   
-        let brightness = 0.8 + 0.2 * t;      
+        let alpha = 0.8 + 0.2 * t;      
         
         // 確保中間卡片絕對在最上層，兩側往後排
         c.style.zIndex = Math.round(100 - absDiff * 10);
-        c.style.filter = `brightness(${brightness})`;
+        c.style.opacity = alpha; // use hardware-accelerated opacity instead of blur/brightness!
+        c.style.filter = 'none'; // IMPORTANT: completely remove heavy CSS filters during drag!
+        
         if (c.classList.contains('is-3d-active')) {
             c.style.transition = 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
             c.style.transform = `perspective(1000px) rotate3d(0.5, 1, 0, 15deg) scale(${scale + 0.05})`;
-            c.style.filter = 'none'; // CRITICAL: remove filter to un-flatten 3D space
             c.style.opacity = '1';
         } else {
             if (isDragging) {
@@ -3668,7 +3669,7 @@ window.clearStudentData = function() {
    activeCard.querySelector('.sf-chk-foreign').checked = false;
    activeCard.querySelector('.sf-chk-empty').checked = true;
    
-   debouncedAutoSave(activeCard.querySelector('.sf-chk-empty'));
+   // 不自動儲存，留給用戶確認後再按下方的儲存按鈕
 };
 
 window.debouncedAutoSave = function(elem) {

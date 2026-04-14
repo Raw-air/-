@@ -4262,6 +4262,10 @@ body.light-mode .focus-indicator { background: #6366f1; }
   transform: translateZ(35px) scale(1.02);
   box-shadow: 0 15px 30px rgba(59, 130, 246, 0.2);
 }
+.sf-student-card-2d.is-3d-active .sf-save-action-btn:active {
+  transform: translateZ(5px) scale(0.95);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
 
 .sf-student-card-2d.is-3d-active .sf-card-badge {
   transform: translateZ(30px);
