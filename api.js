@@ -56,7 +56,18 @@ class ApiClient {
   getChangelog() { return this._fetch('/api/changelog'); }
 
   // 發布新公告日誌
+  // 發布新公告日誌
   postChangelog(content) { return this._fetch('/api/changelog', 'POST', { content }); }
+
+  // ⚡ 即時輪詢（KV 信號層，回應 < 10ms，不走重試邏輯）
+  async poll() {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/poll`);
+      return await res.json();
+    } catch (e) {
+      return null; // 輪詢失敗靜默跳過
+    }
+  }
 }
 
 // 全域單例

@@ -239,20 +239,91 @@ document.addEventListener('DOMContentLoaded', async () => {
     navigateTo('home');
     await loadData();
 
-    // 背景輪詢同步點名狀態
-    setInterval(async () => {
+    // ⚡ 即時同步系統 — KV 信號層輪詢
+    // 取代舊的 15 秒 Notion 輪詢，改為 3 秒 KV 輪詢（回應 < 10ms）
+    let _pollTimer = null;
+    let _lastPollTs = 0;      // 上次收到的 confirm 時間戳
+    let _lastAttTs = 0;       // 上次收到的出席變動時間戳
+    let _pollPaused = false;
+
+    function getPollInterval() {
+      if (currentPage === 'summary') return 3000;   // 總表頁：3 秒
+      if (currentPage === 'rollcall') return 5000;   // 點名頁：5 秒
+      return 10000;                                    // 其他頁：10 秒
+    }
+
+    async function doPoll() {
+      if (_pollPaused) return;
       try {
-        const newConfig = await window._api.getConfig();
-        state.config = newConfig;
-        const today = getTodayColumnName();
-        const confVal = state.config['confirm_' + today];
-        const newConfirmed = confVal ? confVal.split(',').filter(Boolean) : [];
-        if (newConfirmed.join(',') !== state.confirmedSquads.join(',')) {
-          state.confirmedSquads = newConfirmed;
-          if (currentPage === 'summary') renderSummary();
+        const data = await window._api.poll();
+        if (!data) return;
+
+        // 1. 檢查確認回報狀態是否有更新
+        if (data.ts > _lastPollTs) {
+          _lastPollTs = data.ts;
+          const newConfirms = data.confirms ? data.confirms.split(',').filter(Boolean) : [];
+          if (newConfirms.join(',') !== state.confirmedSquads.join(',')) {
+            state.confirmedSquads = newConfirms;
+            const today = getTodayColumnName();
+            state.config['confirm_' + today] = data.confirms || '';
+            // 僅重新渲染，不需要 loadData
+            if (currentPage === 'summary') renderSummary();
+            if (currentPage === 'rollcall') updateRollCallStats();
+          }
         }
-      } catch (e) { }
-    }, 15000);
+
+        // 2. 檢查出席資料是否有更新（其他中隊提交了點名）
+        if (data.att_ts > _lastAttTs && _lastAttTs > 0) {
+          _lastAttTs = data.att_ts;
+          // 靜默觸發完整刷新（不顯示 loading 畫面）
+          try {
+            const [roster, config] = await Promise.all([
+              window._api.getRoster(),
+              window._api.getConfig(),
+            ]);
+            state.students = roster.students || [];
+            state.dateColumns = roster.dateColumns || [];
+            state.config = config || {};
+            applyRoomRules();
+            const today = getTodayColumnName();
+            const confVal = state.config['confirm_' + today];
+            if (confVal) state.confirmedSquads = confVal.split(',').filter(Boolean);
+            renderCurrentPage();
+          } catch (e) { console.warn('[Poll] 背景刷新失敗', e); }
+        } else if (_lastAttTs === 0) {
+          _lastAttTs = data.att_ts || 0; // 首次初始化
+        }
+      } catch (e) { /* 輪詢失敗靜默跳過 */ }
+    }
+
+    function startPoll() {
+      if (_pollTimer) clearInterval(_pollTimer);
+      _pollTimer = setInterval(doPoll, getPollInterval());
+    }
+
+    // 頁面可見性監聽：最小化/切到背景時暫停輪詢，回來時立即觸發
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        _pollPaused = true;
+        if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+      } else {
+        _pollPaused = false;
+        doPoll(); // 回到前景時立即觸發一次
+        startPoll();
+      }
+    });
+
+    // 頁面切換時重新調整輪詢頻率
+    const _origNavigateTo = window.navigateTo;
+    if (typeof _origNavigateTo === 'function') {
+      window.navigateTo = function(page) {
+        _origNavigateTo(page);
+        startPoll(); // 因為 currentPage 改變了，間隔也要跟著調整
+      };
+    }
+
+    startPoll();
+    doPoll(); // 啟動後立即執行一次
 
   } catch (err) {
     showLoading(false);
