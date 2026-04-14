@@ -4136,7 +4136,6 @@ body.light-mode .focus-indicator { background: #6366f1; }
   transition: all 0.3s;
   box-shadow: var(--neu-out);
   transform-style: preserve-3d;
-  /* margin-right removed as it's now inline via flex */
 }
 .sf-icon-btn:hover {
   background: rgba(239, 68, 68, 0.1); 
@@ -4189,12 +4188,18 @@ body.light-mode .focus-indicator { background: #6366f1; }
 }
 
 .sf-student-card-2d.is-3d-active .sf-card-title {
-  transform: translateZ(25px);
-  text-shadow: 0 5px 10px rgba(0,0,0,0.2);
+  transform: translateZ(5px);
+  text-shadow: 0 5px 10px rgba(0,0,0,0.1);
 }
-.sf-student-card-2d.is-3d-active .sf-card-title:hover {
-  transform: translateZ(40px);
-  text-shadow: 0 10px 20px rgba(0,0,0,0.3);
+.sf-student-card-2d.is-3d-active .sf-title-text {
+  transform: translateZ(10px);
+  display: inline-block;
+  transition: all 0.3s;
+}
+.sf-student-card-2d.is-3d-active .sf-title-text:hover {
+  transform: translateZ(25px);
+  color: var(--blue);
+  text-shadow: 0 5px 15px rgba(59, 130, 246, 0.4);
 }
 
 .sf-student-card-2d.is-3d-active .sf-edit-form {

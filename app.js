@@ -3228,14 +3228,16 @@ function renderStudentFileCards(sweepIn = false) {
     card.dataset.index = i;
     
     card.innerHTML = `
-      <div class="sf-card-title" style="display: flex; align-items: center; gap: 8px;">
-        <span style="flex:1;">${s.room || ''} ${s.bed || ''}</span>
-        <button class="sf-icon-btn" onclick="clearStudentData(this)" title="清空床位資料">🧹</button>
-        <div class="sf-card-badge-relative">${s.isForeign ? '外籍生' : (s.isEmpty || !s.name ? '空床' : (s.squad || '無班級'))}</div>
+      <div class="sf-card-title" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
+        <span class="sf-title-text">${s.room || ''} ${s.bed || ''}</span>
+        <div style="display: flex; align-items: center; gap: 6px; transform-style: preserve-3d;">
+            <button class="sf-icon-btn" onclick="clearStudentData(this)" title="清空床位資料">🧹</button>
+            <div class="sf-card-badge-relative">${s.isForeign ? '外籍生' : (s.isEmpty || !s.name ? '空床' : (s.squad || '無班級'))}</div>
+        </div>
       </div>
       
       <div class="sf-edit-form">
-        <div style="display:flex; gap: 8px;">
+        <div style="display:flex; gap: 8px; transform-style: preserve-3d;">
             <div class="sf-form-group" style="flex: 1;">
               <label>姓名</label>
               <input type="text" class="sf-input-name styled-input" value="${s.name || ''}" placeholder="未登記">
@@ -3245,7 +3247,7 @@ function renderStudentFileCards(sweepIn = false) {
               <input type="text" class="sf-input-id styled-input" value="${s.studentId || ''}" placeholder="無">
             </div>
         </div>
-        <div style="display:flex; gap: 8px; align-items: flex-end;">
+        <div style="display:flex; gap: 8px; align-items: flex-end; transform-style: preserve-3d;">
             <div class="sf-form-group" style="flex: 1;">
               <label>班別</label>
               <input type="text" class="sf-input-class styled-input" value="${s.squad || ''}" placeholder="無">
