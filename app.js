@@ -3248,34 +3248,34 @@ function renderStudentFileCards(sweepIn = false) {
     card.innerHTML = `
       <div class="sf-card-title" style="display: flex; align-items: flex-start; position: relative;">
         <span class="sf-title-text" style="flex:1;">${s.room || ''} ${s.bed || ''}</span>
-        <button class="sf-icon-btn sf-broom-btn" onclick="clearStudentData(this)" title="清空床位資料" style="margin-top: 2px; margin-right: 12px;">🧹</button>
-        <div class="sf-card-badge-relative" style="margin-top: 14px; margin-right: 12px; transform-origin: center right;">${s.isForeign ? '外籍生' : (s.isEmpty || !s.name ? '空床' : (s.squad || '無班級'))}</div>
+        <button class="sf-icon-btn sf-broom-btn" onclick="clearStudentData(this)" title="清空床位資料" style="margin-top: 2px; margin-right: 6px;">🧹</button>
+        <div class="sf-card-badge-relative" style="margin-top: 4px; margin-right: 4px; transform-origin: center right;">${s.isForeign ? '外籍生' : (s.isEmpty || !s.name ? '空床' : (s.squad || '無班級'))}</div>
       </div>
       
       <div class="sf-edit-form">
         <div style="display:flex; gap: 8px; transform-style: preserve-3d;">
             <div class="sf-form-group" style="flex: 1;">
               <label>姓名</label>
-              <input type="text" class="sf-input-name styled-input" value="${s.name || ''}" placeholder="未登記" onchange="debouncedAutoSave(this)">
+              <input type="text" class="sf-input-name styled-input" value="${s.name || ''}" placeholder="未登記">
             </div>
             <div class="sf-form-group" style="flex: 1;">
               <label>學號</label>
-              <input type="text" class="sf-input-id styled-input" value="${s.studentId || ''}" placeholder="無" onchange="debouncedAutoSave(this)">
+              <input type="text" class="sf-input-id styled-input" value="${s.studentId || ''}" placeholder="無">
             </div>
         </div>
         <div style="display:flex; gap: 8px; align-items: flex-end; transform-style: preserve-3d;">
             <div class="sf-form-group" style="flex: 1;">
               <label>班別</label>
-              <input type="text" class="sf-input-class styled-input" value="${s.squad || ''}" placeholder="無" onchange="debouncedAutoSave(this)">
+              <input type="text" class="sf-input-class styled-input" value="${s.class || ''}" placeholder="無">
             </div>
             <div class="sf-toggles" style="flex: 1; padding-bottom: 6px; padding-left: 8px; gap: 8px;">
-              <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-foreign" ${s.isForeign ? 'checked' : ''} onchange="debouncedAutoSave(this)"> 外籍</label>
-              <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-empty" ${s.isEmpty || !s.name ? 'checked' : ''} onchange="debouncedAutoSave(this)"> 空床</label>
+              <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-foreign" ${s.isForeign ? 'checked' : ''}> 外籍</label>
+              <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-empty" ${s.isEmpty || !s.name ? 'checked' : ''}> 空床</label>
             </div>
         </div>
         <div class="sf-form-group" style="flex: 1; margin-top: 8px;">
           <label>備註 (情況註記)</label>
-          <textarea class="sf-input-remarks styled-input" style="flex: 1; resize: none; font-size: 13px; line-height: 1.4; padding: 10px;" placeholder="住宿生備註欄" onchange="debouncedAutoSave(this)">${s.remarks || ''}</textarea>
+          <textarea class="sf-input-remarks styled-input" style="flex: 1; resize: none; font-size: 13px; line-height: 1.4; padding: 10px;" placeholder="住宿生備註欄">${s.remarks || ''}</textarea>
         </div>
         <button class="sf-save-action-btn" onclick="autoSaveStudentFile(this)" style="margin-top: 16px;">💾 儲存修改</button>
       </div>
@@ -3434,7 +3434,8 @@ function setup2DCarouselInteraction() {
     const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
     const deltaX = clientX - startX;
     
-    if (Math.abs(deltaX) > 15) {
+    // 如果滑動量明顯，才取消 3D 狀態避免使用者點擊輸入框誤觸
+    if (Math.abs(deltaX) > 40) {
        disable3D(); 
     }
     

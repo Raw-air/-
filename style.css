@@ -4354,8 +4354,7 @@ body.light-mode .sf-student-card-2d::after {
   background: linear-gradient(90deg, #6366f1, #d946ef, #8b5cf6) top/100% 4px no-repeat, rgba(255,255,255,0.92);
 }
 body.light-mode .sf-form-group input[type="text"],
-body.light-mode .sf-form-group textarea,
-body.light-mode .sf-toggles {
+body.light-mode .sf-form-group textarea {
   background: rgba(0,0,0,0.04);
   border-color: rgba(0,0,0,0.1);
   color: #333;
