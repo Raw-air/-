@@ -1,5 +1,5 @@
 // 碧苑宿舍點名系統 - Service Worker（PWA 離線支援）
-const CACHE_NAME = 'biyuan-v34'; // ← 每次更新 JS/CSS 必須遞增此版號
+const CACHE_NAME = 'biyuan-v48'; // ← 每次更新 JS/CSS 必須遞增此版號
 const ASSETS = [
   './',
   './index.html',

@@ -232,6 +232,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (muteToggle) muteToggle.checked = true;
     }
 
+    // 初始狀態：潘仔模式
+    if (localStorage.getItem('panzi_mode') === 'true') {
+      document.body.classList.add('panzi-mode');
+      const panziToggle = document.getElementById('setting-panzi');
+      if (panziToggle) panziToggle.checked = true;
+    }
+
     state.currentDate = getTodayColumnName();
     setupNav();
     setupPinDialog();
@@ -334,6 +341,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 // 個人化設定 Toggle
 function toggleMute(el) {
   localStorage.setItem('mute_sound', el.checked);
+}
+
+function togglePanzi(el) {
+  const isPanzi = el.checked;
+  localStorage.setItem('panzi_mode', isPanzi);
+  if (isPanzi) document.body.classList.add('panzi-mode');
+  else document.body.classList.remove('panzi-mode');
 }
 
 function performAppearanceChange(isLight) {
@@ -3106,3 +3120,358 @@ window.openFeedbackReview = openFeedbackReview;
 window.renderFeedbackReviewList = renderFeedbackReviewList;
 window.markFeedbackRead = markFeedbackRead;
 window.checkUnreadFeedback = checkUnreadFeedback;
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
+// 住宿生檔案管理
+// ═════════════════════════════════════════════════════════════════════════════
+let _sfSearchTimer = null;
+let _sfResults = [];
+let _sfActiveIndex = 0;
+let _sfObserver = null;
+let _sfRenderMap = new WeakMap(); // DOM element 到物件的對應
+let _sfRandomDefaults = [];
+
+function getRandomStudents(count) {
+  if (!state.students || state.students.length === 0) return [];
+  const shuffled = [...state.students].sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, count);
+}
+
+function onStudentFileSearch(query) {
+  clearTimeout(_sfSearchTimer);
+  const scene = document.getElementById('sf-scene');
+  const mirror = document.getElementById('sf-search-mirror');
+  const saveContainer = document.getElementById('sf-save-container');
+
+  if (!query || query.trim().length === 0) {
+    if (mirror) mirror.style.display = 'none';
+    if (scene) scene.classList.remove('is-searching');
+    if (saveContainer) saveContainer.style.display = 'none';
+    
+    if (_sfRandomDefaults.length === 0) {
+      _sfRandomDefaults = getRandomStudents(5);
+    }
+    _sfResults = _sfRandomDefaults;
+    renderStudentFileCards();
+    return;
+  }
+
+  // 使用者開始打字，隱藏按鈕，並「立刻」顯示掃描鏡子與假搜尋動畫（fake train 將無限輪迴不會沒卡片）
+  if (saveContainer) saveContainer.style.display = 'none';
+  if (mirror) mirror.style.display = 'block';
+  if (scene) scene.classList.add('is-searching');
+
+  _sfSearchTimer = setTimeout(() => {
+    // 系統確認使用者打字完畢 (1 秒後)，準備顯示結果
+    const q = query.trim().toLowerCase();
+    _sfResults = state.students.filter(s => {
+      const name = (s.name || '').toLowerCase();
+      const room = (s.room || '').toLowerCase();
+      const bed = (s.bed || '').toLowerCase();
+      const studentId = (s.studentId || '').toLowerCase();
+      const cls = (s.class || '').toLowerCase();
+      const squad = (s.squad || '').toLowerCase();
+      return name.includes(q) || room.includes(q) || bed.includes(q) ||
+             studentId.includes(q) || cls.includes(q) || squad.includes(q) ||
+             (room + bed).includes(q);
+    });
+
+    if (mirror) mirror.style.display = 'none';
+    if (scene) scene.classList.remove('is-searching');
+    if (saveContainer && _sfResults.length > 0) saveContainer.style.display = 'flex';
+    
+    _sfRandomDefaults = [];
+    _sfActiveIndex = 0;
+    renderStudentFileCards();
+    
+    // 追加一個過渡動畫：從「假找」切換成「找到了！」的 pop 動畫
+    const area = document.getElementById('sf-card-area');
+    if (area) {
+      area.classList.remove('search-found-pop');
+      void area.offsetWidth; // 觸發重繪
+      area.classList.add('search-found-pop');
+    }
+  }, 1000); // 打字防抖 1 秒
+}
+
+function renderStudentFileCards() {
+  const cardArea = document.getElementById('sf-card-area');
+  const track = document.getElementById('sf-card-track');
+
+  if (_sfObserver) {
+    _sfObserver.disconnect();
+    _sfObserver = null;
+  }
+
+  if (_sfResults.length === 0) {
+    track.innerHTML = `<div class="sf-empty-hint">
+      <div style="font-size:48px; margin-bottom:12px;">😔</div>
+      <div style="color:var(--dim); font-size:14px;">找不到符合的住宿生或床位</div>
+    </div>`;
+    return;
+  }
+
+  track.innerHTML = '';
+  
+  // 無限滑動：將結果陣列大量的重複，配合 JS 自動校正做到「地球是圓的」無盡迴圈
+  const repeats = Math.max( 160, Math.ceil(160 / _sfResults.length) );
+  let renderList = [];
+  for (let i = 0; i < repeats; i++) {
+     renderList.push(..._sfResults);
+  }
+  
+  renderList.forEach((s, i) => {
+    const card = document.createElement('div');
+    card.className = 'sf-student-card-2d';
+    card.dataset.index = i;
+    
+    let badgeHtml = '';
+    if (s.isForeign) badgeHtml = `<div class="sf-card-badge foreign">外籍生</div>`;
+    else if (s.isEmpty || !s.name) badgeHtml = `<div class="sf-card-badge empty">空床</div>`;
+    else badgeHtml = `<div class="sf-card-badge">${s.squad || ''}</div>`;
+
+    card.innerHTML = `
+      ${badgeHtml}
+      <div style="font-size: 16px; color: var(--purple); font-weight: 800; margin-bottom: 8px;">
+        🏠 ${s.room || ''}${s.bed || ''}
+      </div>
+      
+      <div class="sf-edit-form">
+        <div class="sf-form-group">
+          <label>名稱</label>
+          <input type="text" class="sf-input-name" value="${s.name || ''}" placeholder="未登記">
+        </div>
+        <div class="sf-form-group">
+          <label>學號</label>
+          <input type="text" class="sf-input-id" value="${s.studentId || ''}" placeholder="無">
+        </div>
+        
+        <div class="sf-toggles">
+          <label class="sf-toggle-item">
+            <input type="checkbox" class="sf-chk-foreign" ${s.isForeign ? 'checked' : ''}>
+            外籍生
+          </label>
+          <label class="sf-toggle-item">
+            <input type="checkbox" class="sf-chk-empty" ${s.isEmpty || !s.name ? 'checked' : ''}>
+            空床
+          </label>
+        </div>
+        
+        <button class="sf-clear-btn" onclick="clearStudentData()">清空此床位資料</button>
+      </div>
+    `;
+    
+    track.appendChild(card);
+    _sfRenderMap.set(card, s); // mapping DOM to object
+  });
+
+  setup2DCarouselInteraction();
+
+  const middleIndex = Math.floor(repeats / 2) * _sfResults.length;
+  
+  _sfActiveIndex = middleIndex;
+  _currentX = -(_sfActiveIndex * _cardWidth);
+  track.style.transition = 'none';
+  track.style.transform = `translateX(${_currentX}px)`;
+  
+  Array.from(track.children).forEach((c, i) => {
+     c.classList.toggle('active', i === _sfActiveIndex);
+  });
+}
+
+let _currentX = 0;
+let _cardWidth = 308; // 300(card) + 8(gap)
+let _carouselAttached = false;
+
+function setup2DCarouselInteraction() {
+  const area = document.getElementById('sf-card-area');
+  const track = document.getElementById('sf-card-track');
+  const scene = document.getElementById('sf-scene');
+  
+  if (_carouselAttached || !scene || !track) return; 
+  _carouselAttached = true;
+  
+  let startX = 0;
+  let trackStartX = 0;
+  let isDragging = false;
+  
+  let velocityX = 0;
+  let lastMoveX = 0;
+  let lastMoveTime = 0;
+  
+  function onDown(e) {
+    if (scene.classList.contains('is-searching')) return; 
+    
+    // 無限滑動（地球是圓的）核心：如果在上次滑行結束後太靠近邊緣，就無縫瞬間傳送到中間
+    const total = track.children.length;
+    const baseN = _sfResults.length;
+    if (baseN > 0 && total > baseN * 10) {
+      if (_sfActiveIndex < total * 0.3 || _sfActiveIndex > total * 0.7) {
+        const targetCenterBase = Math.floor((total / 2) / baseN) * baseN;
+        const localOffset = _sfActiveIndex % baseN;
+        _sfActiveIndex = targetCenterBase + localOffset;
+        _currentX = -(_sfActiveIndex * _cardWidth);
+        track.style.transition = 'none';
+        track.style.transform = `translateX(${_currentX}px)`;
+      }
+    }
+
+    isDragging = true;
+    startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    trackStartX = _currentX;
+    
+    lastMoveX = startX;
+    lastMoveTime = performance.now();
+    velocityX = 0;
+    
+    track.style.transition = 'none';
+  }
+  
+  function onMove(e) {
+    if (!isDragging) return;
+    const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    const deltaX = clientX - startX;
+    
+    const now = performance.now();
+    const dt = now - lastMoveTime;
+    if (dt > 0) {
+       velocityX = (clientX - lastMoveX) / dt;
+    }
+    lastMoveX = clientX;
+    lastMoveTime = now;
+    
+    _currentX = trackStartX + deltaX;
+    track.style.transform = `translateX(${_currentX}px)`;
+  }
+  
+  let _currentTransitionTime = 0.5;
+
+  function snapToNearest() {
+    const maxIdx = track.children.length - 1;
+    let newIndex = Math.round(-_currentX / _cardWidth);
+    
+    if (newIndex < 0) newIndex = 0;
+    if (newIndex > maxIdx) newIndex = maxIdx;
+    
+    _sfActiveIndex = newIndex;
+    _currentX = -(_sfActiveIndex * _cardWidth);
+    
+    // 使用動態計算出的時間，搭配減速彈性的貝茲曲線模擬摩擦力到完全煞停
+    track.style.transition = `transform ${_currentTransitionTime}s cubic-bezier(0.2, 0.9, 0.3, 1.05)`;
+    track.style.transform = `translateX(${_currentX}px)`;
+    
+    // Update active visual class
+    Array.from(track.children).forEach((c, i) => {
+        c.classList.toggle('active', i === _sfActiveIndex);
+    });
+  }
+
+  function onUp(e) {
+    if (!isDragging) return;
+    isDragging = false;
+    
+    // 依據拖曳速度計算慣性滑動距離 (摩擦力模擬)
+    const friction = 0.002;
+    let momentumDist = (velocityX * Math.abs(velocityX)) / (2 * friction);
+    
+    // 上下限保護
+    if (momentumDist > 8000) momentumDist = 8000;
+    if (momentumDist < -8000) momentumDist = -8000;
+
+    let targetX = _currentX + momentumDist;
+    const maxIdx = track.children.length - 1;
+    let newIndex = Math.round(-targetX / _cardWidth);
+    if (newIndex < 0) newIndex = 0;
+    if (newIndex > maxIdx) newIndex = maxIdx;
+    
+    // 根據要滑動的實際距離動態計算動畫時間
+    const distToTravel = Math.abs((newIndex * _cardWidth) + _currentX);
+    let time = 0.4 + (distToTravel / 2500); 
+    if (time > 1.2) time = 1.2;
+    if (time < 0.4) time = 0.4;
+    _currentTransitionTime = time;
+
+    _currentX += momentumDist;
+    snapToNearest();
+  }
+
+  area.addEventListener('mousedown', onDown);
+  window.addEventListener('mousemove', onMove, { passive: false });
+  window.addEventListener('mouseup', onUp);
+  
+  area.addEventListener('touchstart', onDown, { passive: true });
+  area.addEventListener('touchmove', (e) => {
+      if (isDragging) e.preventDefault(); 
+      onMove(e);
+  }, { passive: false });
+  window.addEventListener('touchend', onUp);
+}
+
+window.initStudentFiles = function() {
+    _sfRandomDefaults = [];
+    document.getElementById('sf-search-input').value = '';
+    onStudentFileSearch('');
+};
+
+window.clearStudentData = function() {
+   const cardArea = document.getElementById('sf-card-area');
+   const cards = cardArea.querySelectorAll('.sf-student-card-2d');
+   const activeCard = Array.from(cards).find(c => c.classList.contains('active')) || cards[0];
+   if (!activeCard) return;
+
+   activeCard.querySelector('.sf-input-name').value = '';
+   activeCard.querySelector('.sf-input-id').value = '';
+   activeCard.querySelector('.sf-chk-foreign').checked = false;
+   activeCard.querySelector('.sf-chk-empty').checked = true;
+};
+
+window.saveStudentFile = async function() {
+   const cardArea = document.getElementById('sf-card-area');
+   const cards = cardArea.querySelectorAll('.sf-student-card-2d');
+   const activeCard = Array.from(cards).find(c => c.classList.contains('active')) || cards[0];
+   if (!activeCard) return;
+
+   const studentObj = _sfRenderMap.get(activeCard);
+   if (!studentObj) return;
+
+   const newName = activeCard.querySelector('.sf-input-name').value.trim();
+   const newId = activeCard.querySelector('.sf-input-id').value.trim();
+   const isForeign = activeCard.querySelector('.sf-chk-foreign').checked;
+   const isEmpty = activeCard.querySelector('.sf-chk-empty').checked;
+
+   // Update Local Cache Reference
+   studentObj.name = isEmpty ? '' : newName;
+   studentObj.studentId = isEmpty ? '' : newId;
+   studentObj.isForeign = isForeign;
+   studentObj.isEmpty = isEmpty;
+   
+   // 同步更新畫面上所有複製人的顯示內容
+   cards.forEach(c => {
+       const obj = _sfRenderMap.get(c);
+       if (obj === studentObj) {
+           c.querySelector('.sf-input-name').value = studentObj.name;
+           c.querySelector('.sf-input-id').value = studentObj.studentId;
+           c.querySelector('.sf-chk-foreign').checked = studentObj.isForeign;
+           c.querySelector('.sf-chk-empty').checked = studentObj.isEmpty;
+       }
+   });
+   
+   localStorage.setItem('biyuan_temp_students_update', JSON.stringify(state.students));
+
+   // Visual Feedback
+   const btn = document.querySelector('.sf-save-container button');
+   const oldHtml = btn.innerHTML;
+   btn.innerHTML = '✅ 已儲存此卡片修改';
+   btn.style.background = '#10b981';
+   btn.style.color = '#fff';
+
+   setTimeout(() => {
+       btn.innerHTML = oldHtml;
+       btn.style.background = '';
+       btn.style.color = '';
+       renderStudentFileCards(); // 重新渲染更新徽章
+   }, 1500);
+};
+
+window.onStudentFileSearch = onStudentFileSearch;

@@ -10,7 +10,7 @@
   <meta name="theme-color" content="#0a0a14">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=64">
+  <link rel="stylesheet" href="style.css?v=85">
   <link rel="manifest" href="manifest.json?v=2">
   <link rel="apple-touch-icon" href="icon-192.png?v=2">
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -496,6 +496,112 @@
       </div>
       <span class="eb-arrow">›</span>
     </button>
+
+    <!-- 住宿生檔案管理 -->
+    <button class="empty-bed-action" style="border-left: 4px solid #6366f1;" onclick="navigateTo('student-files'); initStudentFiles()">
+      <span class="eb-icon">📋</span>
+      <div class="eb-content">
+        <span class="eb-title" style="color:#6366f1">住宿生檔案管理</span>
+        <span class="eb-desc">搜尋住宿生，瀏覽與編輯個人資料卡</span>
+      </div>
+      <span class="eb-arrow">›</span>
+    </button>
+  </div>
+
+  <!-- ═══════════ 住宿生檔案管理 ═══════════ -->
+  <div id="page-student-files" class="page">
+    <div style="position: relative; margin-bottom: 16px; display: flex; justify-content: center; align-items: center; padding-top: 8px;">
+      <button class="back-btn" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin-top: 0;" onclick="navigateTo('tools')">‹ 返回</button>
+      <h1 style="font-size: 20px; font-weight: 800; letter-spacing:1px; margin:0; color: var(--text);">📋 住宿生檔案</h1>
+    </div>
+
+    <!-- Gooey Search Bar -->
+    <div class="search-orb-container" id="sf-search-container">
+      <div class="gooey-background-layer">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+        <div class="blob-bridge"></div>
+      </div>
+      <div class="input-overlay">
+        <div class="search-icon-wrapper">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="search-icon">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </div>
+        <input type="text" class="modern-input" id="sf-search-input" placeholder="搜尋住宿生 (姓名/床號/學號)" oninput="onStudentFileSearch(this.value)" />
+        <div class="focus-indicator"></div>
+      </div>
+      <svg class="gooey-svg-filter" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="enhanced-goo">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur"></feGaussianBlur>
+            <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -10" result="goo"></feColorMatrix>
+            <feComposite in="SourceGraphic" in2="goo" operator="atop"></feComposite>
+          </filter>
+        </defs>
+      </svg>
+    </div>
+
+    <!-- 2D Carousel & Search Blur Overlay -->
+    <div id="sf-scene" class="sf-scene-2d">
+      <!-- Search Mirror Overlay -->
+      <div id="sf-search-mirror" class="sf-search-mirror" style="display:none;">
+        <div class="loader">
+          <div class="loaderMiniContainer">
+            <div class="barContainer">
+              <span class="bar"></span>
+              <span class="bar bar2"></span>
+            </div>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 101 114"
+              class="svgIcon"
+            >
+              <circle stroke-width="7" stroke="black" transform="rotate(36.0692 46.1726 46.1727)" r="29.5497" cy="46.1727" cx="46.1726"></circle>
+              <line stroke-width="7" stroke="black" y2="111.784" x2="97.7088" y1="67.7837" x1="61.7089"></line>
+            </svg>
+          </div>
+        </div>
+        <div style="text-align:center; color: white; font-weight: 500; font-size: 14px; margin-top:16px; letter-spacing:2px; animation: pulse 1s infinite alternate; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">
+          🔍 查找資料中...
+        </div>
+      </div>
+
+      <!-- Fake Search Train Overlay (Never runs out!) -->
+      <div id="sf-fake-search-train" class="sf-fake-train" style="opacity: 0; pointer-events: none;">
+        <div class="sf-fake-track">
+          <!-- Create enough dummy cards to loop infinitely -->
+          <div class="sf-fake-card"></div><div class="sf-fake-card"></div>
+          <div class="sf-fake-card"></div><div class="sf-fake-card"></div>
+          <div class="sf-fake-card"></div><div class="sf-fake-card"></div>
+          <div class="sf-fake-card"></div><div class="sf-fake-card"></div>
+          <div class="sf-fake-card"></div><div class="sf-fake-card"></div>
+        </div>
+      </div>
+
+      <!-- Scroller Area -->
+      <div id="sf-card-area" class="sf-card-area-2d" style="transition: opacity 0.3s ease;">
+        <div id="sf-card-track" class="sf-card-track">
+          <div class="sf-empty-hint">
+            <div style="font-size:48px; margin-bottom:12px;">🔍</div>
+            <div style="color:var(--dim); font-size:14px;">輸入關鍵字搜尋住宿生</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Indicator Dots -->
+    <div id="sf-card-dots" class="sf-card-dots"></div>
+
+    <!-- Save Button Container -->
+    <div class="sf-save-container" style="display:none;" id="sf-save-container">
+      <button class="action-btn wide" onclick="saveStudentFile()">
+        <img src="./Lp/ICON/CHECK.svg" style="width:18px;height:18px;vertical-align:middle;margin-right:6px;">儲存修改
+      </button>
+    </div>
   </div>
 
   <!-- ═══════════ 報修填寫頁面 ═══════════ -->
@@ -665,6 +771,29 @@
         </div>
         <label class="switch">
             <input id="setting-white-mode" type="checkbox" onchange="toggleWhiteMode(this, event)">
+            <div class="slider">
+                <div class="circle">
+                    <svg class="cross" xml:space="preserve" style="enable-background:new 0 0 512 512" viewBox="0 0 365.696 365.696" y="0" x="0" height="6" width="6" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                        <g>
+                            <path data-original="#000000" fill="currentColor" d="M243.188 182.86 356.32 69.726c12.5-12.5 12.5-32.766 0-45.247L341.238 9.398c-12.504-12.503-32.77-12.503-45.25 0L182.86 122.528 69.727 9.374c-12.5-12.5-32.766-12.5-45.247 0L9.375 24.457c-12.5 12.504-12.5 32.77 0 45.25l113.152 113.152L9.398 295.99c-12.503 12.503-12.503 32.769 0 45.25L24.48 356.32c12.5 12.5 32.766 12.5 45.247 0l113.132-113.132L295.99 356.32c12.503 12.5 32.769 12.5 45.25 0l15.081-15.082c12.5-12.504 12.5-32.77 0-45.25zm0 0"></path>
+                        </g>
+                    </svg>
+                    <svg class="checkmark" xml:space="preserve" style="enable-background:new 0 0 512 512" viewBox="0 0 24 24" y="0" x="0" height="10" width="10" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                        <g>
+                            <path class="" data-original="#000000" fill="currentColor" d="M9.707 19.121a.997.997 0 0 1-1.414 0l-5.646-5.647a1.5 1.5 0 0 1 0-2.121l.707-.707a1.5 1.5 0 0 1 2.121 0L9 14.171l9.525-9.525a1.5 1.5 0 0 1 2.121 0l.707.707a1.5 1.5 0 0 1 0 2.121z"></path>
+                        </g>
+                    </svg>
+                </div>
+            </div>
+        </label>
+      </div>
+      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 4px 0;">
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <span>潘仔模式 (簡潔視角)</span>
+          <span style="color:var(--dim); font-size:11px;">總表隱藏外籍/空床，並簡化色彩</span>
+        </div>
+        <label class="switch">
+            <input id="setting-panzi" type="checkbox" onchange="togglePanzi(this)">
             <div class="slider">
                 <div class="circle">
                     <svg class="cross" xml:space="preserve" style="enable-background:new 0 0 512 512" viewBox="0 0 365.696 365.696" y="0" x="0" height="6" width="6" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xmlns="http://www.w3.org/2000/svg">
@@ -996,9 +1125,9 @@
     <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=70"></script>
-  <script src="api.js?v=70"></script>
-  <script src="app.js?v=70"></script>
+  <script src="config.js?v=85"></script>
+  <script src="api.js?v=85"></script>
+  <script src="app.js?v=85"></script>
 </body>
 
 </html>
