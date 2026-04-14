@@ -239,6 +239,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (panziToggle) panziToggle.checked = true;
     }
 
+    // 初始狀態：省電模式
+    if (localStorage.getItem('power_save_mode') === 'true') {
+      document.body.classList.add('power-save-mode');
+      const psToggle = document.getElementById('setting-powerSave');
+      if (psToggle) psToggle.checked = true;
+    }
+
     state.currentDate = getTodayColumnName();
     setupNav();
     setupPinDialog();
@@ -348,6 +355,13 @@ function togglePanzi(el) {
   localStorage.setItem('panzi_mode', isPanzi);
   if (isPanzi) document.body.classList.add('panzi-mode');
   else document.body.classList.remove('panzi-mode');
+}
+
+function togglePowerSave(el) {
+  const isPS = el.checked;
+  localStorage.setItem('power_save_mode', isPS);
+  if (isPS) document.body.classList.add('power-save-mode');
+  else document.body.classList.remove('power-save-mode');
 }
 
 function performAppearanceChange(isLight) {
@@ -488,11 +502,20 @@ function updateAllImagesToTheme() {
 async function loadData() {
   try {
     showLoading(true);
-    const [roster, config, changelogs] = await Promise.all([
+    const [roster, config, changelogs, remarks] = await Promise.all([
       window._api.getRoster(),
       window._api.getConfig(),
-      window._api.getChangelog().catch(() => []) // 容錯處理：若尚未設定 DB 不會整個炸掉
+      window._api.getChangelog().catch(() => []),
+      window._api.getRemarks().catch(() => ({}))
     ]);
+    
+    // Merge remarks natively into the student list
+    if (roster.students && remarks) {
+        roster.students.forEach(s => {
+            s.remarks = remarks[s.id] || '';
+        });
+    }
+    
     state.students = roster.students || [];
     state.dateColumns = roster.dateColumns || [];
     state.config = config || {};
@@ -3142,12 +3165,9 @@ function onStudentFileSearch(query) {
   clearTimeout(_sfSearchTimer);
   const scene = document.getElementById('sf-scene');
   const mirror = document.getElementById('sf-search-mirror');
-  const saveContainer = document.getElementById('sf-save-container');
-
   if (!query || query.trim().length === 0) {
     if (mirror) mirror.style.display = 'none';
     if (scene) scene.classList.remove('is-searching');
-    if (saveContainer) saveContainer.style.display = 'none';
     
     if (_sfRandomDefaults.length === 0) {
       _sfRandomDefaults = getRandomStudents(5);
@@ -3157,8 +3177,7 @@ function onStudentFileSearch(query) {
     return;
   }
 
-  // 使用者開始打字，隱藏按鈕，並「立刻」顯示掃描鏡子與假搜尋動畫（fake train 將無限輪迴不會沒卡片）
-  if (saveContainer) saveContainer.style.display = 'none';
+  // 使用者開始打字，「立刻」顯示掃描鏡子與假搜尋動畫
   if (mirror) mirror.style.display = 'block';
   if (scene) scene.classList.add('is-searching');
 
@@ -3179,7 +3198,6 @@ function onStudentFileSearch(query) {
 
     if (mirror) mirror.style.display = 'none';
     if (scene) scene.classList.remove('is-searching');
-    if (saveContainer && _sfResults.length > 0) saveContainer.style.display = 'flex';
     
     _sfRandomDefaults = [];
     _sfActiveIndex = 0;
@@ -3228,41 +3246,38 @@ function renderStudentFileCards(sweepIn = false) {
     card.dataset.index = i;
     
     card.innerHTML = `
-      <div class="sf-card-title" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
-        <span class="sf-title-text">${s.room || ''} ${s.bed || ''}</span>
-        <div style="display: flex; align-items: center; gap: 6px; transform-style: preserve-3d;">
-            <button class="sf-icon-btn" onclick="clearStudentData(this)" title="清空床位資料">🧹</button>
-            <div class="sf-card-badge-relative">${s.isForeign ? '外籍生' : (s.isEmpty || !s.name ? '空床' : (s.squad || '無班級'))}</div>
-        </div>
+      <div class="sf-card-title" style="display: flex; align-items: flex-start; position: relative;">
+        <span class="sf-title-text" style="flex:1;">${s.room || ''} ${s.bed || ''}</span>
+        <button class="sf-icon-btn sf-broom-btn" onclick="clearStudentData(this)" title="清空床位資料" style="margin-right: 8px;">🧹</button>
+        <div class="sf-card-badge-relative">${s.isForeign ? '外籍生' : (s.isEmpty || !s.name ? '空床' : (s.squad || '無班級'))}</div>
       </div>
       
       <div class="sf-edit-form">
         <div style="display:flex; gap: 8px; transform-style: preserve-3d;">
             <div class="sf-form-group" style="flex: 1;">
               <label>姓名</label>
-              <input type="text" class="sf-input-name styled-input" value="${s.name || ''}" placeholder="未登記">
+              <input type="text" class="sf-input-name styled-input" value="${s.name || ''}" placeholder="未登記" onchange="debouncedAutoSave(this)">
             </div>
             <div class="sf-form-group" style="flex: 1;">
               <label>學號</label>
-              <input type="text" class="sf-input-id styled-input" value="${s.studentId || ''}" placeholder="無">
+              <input type="text" class="sf-input-id styled-input" value="${s.studentId || ''}" placeholder="無" onchange="debouncedAutoSave(this)">
             </div>
         </div>
         <div style="display:flex; gap: 8px; align-items: flex-end; transform-style: preserve-3d;">
             <div class="sf-form-group" style="flex: 1;">
               <label>班別</label>
-              <input type="text" class="sf-input-class styled-input" value="${s.squad || ''}" placeholder="無">
+              <input type="text" class="sf-input-class styled-input" value="${s.squad || ''}" placeholder="無" onchange="debouncedAutoSave(this)">
             </div>
             <div class="sf-toggles" style="flex: 1; padding-bottom: 6px; padding-left: 8px; gap: 8px;">
-              <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-foreign" ${s.isForeign ? 'checked' : ''}> 外籍</label>
-              <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-empty" ${s.isEmpty || !s.name ? 'checked' : ''}> 空床</label>
+              <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-foreign" ${s.isForeign ? 'checked' : ''} onchange="debouncedAutoSave(this)"> 外籍</label>
+              <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-empty" ${s.isEmpty || !s.name ? 'checked' : ''} onchange="debouncedAutoSave(this)"> 空床</label>
             </div>
         </div>
-        <div class="sf-form-group" style="margin-top: 4px;">
+        <div class="sf-form-group" style="flex: 1; margin-top: 8px;">
           <label>備註 (情況註記)</label>
-          <textarea class="sf-input-remarks styled-input" style="height: 55px; resize: none; font-size: 13px; line-height: 1.4; padding: 10px;" placeholder="在此新增該床位的備註...">${s.remarks || ''}</textarea>
+          <textarea class="sf-input-remarks styled-input" style="flex: 1; resize: none; font-size: 13px; line-height: 1.4; padding: 10px;" placeholder="住宿生備註欄" onchange="debouncedAutoSave(this)">${s.remarks || ''}</textarea>
         </div>
-        
-        <button class="sf-save-action-btn" onclick="saveStudentFile(this)">💾 儲存變更</button>
+        <button class="sf-save-action-btn" onclick="autoSaveStudentFile(this)" style="margin-top: 16px;">💾 儲存修改</button>
       </div>
     `;
     
@@ -3597,13 +3612,13 @@ function setup2DCarouselInteraction() {
         }
     }
     
-    // 依據拖曳速度計算慣性滑動距離 (摩擦力模擬)
-    const friction = 0.002;
+    // 依據拖曳速度計算慣性滑動距離 (摩擦力模擬 - 阻力提高以避免隨便飄走)
+    const friction = 0.005;
     let momentumDist = (velocityX * Math.abs(velocityX)) / (2 * friction);
     
-    // 上下限保護 (物理極限降至 4000px，約 13 張卡速度極限，避免穿透 DOM 預算邊界)
-    if (momentumDist > 4000) momentumDist = 4000;
-    if (momentumDist < -4000) momentumDist = -4000;
+    // 上下限保護 (降低極限距離，保持絲滑同時避免輕碰就噴走)
+    if (momentumDist > 1500) momentumDist = 1500;
+    if (momentumDist < -1500) momentumDist = -1500;
 
     let targetX = _currentX + momentumDist;
     const maxIdx = track.children.length - 1;
@@ -3652,12 +3667,19 @@ window.clearStudentData = function() {
    activeCard.querySelector('.sf-input-remarks').value = '';
    activeCard.querySelector('.sf-chk-foreign').checked = false;
    activeCard.querySelector('.sf-chk-empty').checked = true;
+   
+   debouncedAutoSave(activeCard.querySelector('.sf-chk-empty'));
 };
 
-window.saveStudentFile = async function() {
-   const cardArea = document.getElementById('sf-card-area');
-   const cards = cardArea.querySelectorAll('.sf-student-card-2d');
-   const activeCard = Array.from(cards).find(c => c.classList.contains('active')) || cards[0];
+window.debouncedAutoSave = function(elem) {
+   if (elem.dataset.timeout) clearTimeout(elem.dataset.timeout);
+   elem.dataset.timeout = setTimeout(() => {
+      autoSaveStudentFile(elem);
+   }, 300);
+}
+
+window.autoSaveStudentFile = async function(elem) {
+   const activeCard = elem.closest('.sf-student-card-2d');
    if (!activeCard) return;
 
    const studentObj = _sfRenderMap.get(activeCard);
@@ -3671,9 +3693,14 @@ window.saveStudentFile = async function() {
    const isEmpty = activeCard.querySelector('.sf-chk-empty').checked;
 
    const btn = activeCard.querySelector('.sf-save-action-btn');
-   const oldHtml = btn.innerHTML;
-   btn.innerHTML = '🔄 儲存中...';
-   btn.disabled = true;
+   let oldHtml = '';
+   if (btn) {
+       oldHtml = btn.innerHTML;
+       btn.innerHTML = '🔄 儲存中...';
+       btn.disabled = true;
+   } else {
+       showToast('自動儲存中...', 'info');
+   }
 
    try {
      const updatePayload = {
@@ -3682,14 +3709,16 @@ window.saveStudentFile = async function() {
             name: isEmpty ? '' : newName,
             class: newClass,
             studentId: isEmpty ? '' : newId,
-            isForeign: isForeign,
-            remarks: newRemarks
+            isForeign: isForeign
         },
         markEmpty: isEmpty
      };
      if (isEmpty) updatePayload.clearProfile = true;
 
-     await window._api.updateAttendance([updatePayload]);
+     await Promise.all([
+        window._api.updateAttendance([updatePayload]),
+        window._api.updateRemark(studentObj.id, newRemarks).catch(() => {}) // 即使尚未初始化資料庫也不阻斷
+     ]);
 
      // Update Local Cache Reference
      studentObj.name = isEmpty ? '' : newName;
@@ -3701,6 +3730,7 @@ window.saveStudentFile = async function() {
      studentObj.isEmpty = isEmpty;
      
      // 同步更新畫面上所有複製人的顯示內容
+     const cards = document.querySelectorAll('.sf-student-card-2d');
      cards.forEach(c => {
          const obj = _sfRenderMap.get(c);
          if (obj === studentObj) {
@@ -3715,33 +3745,35 @@ window.saveStudentFile = async function() {
      
      localStorage.setItem('biyuan_temp_students_update', JSON.stringify(state.students));
 
-     // Visual Feedback
-     btn.innerHTML = '✅ 已連動總表並儲存';
-     btn.style.background = '#10b981';
-     btn.style.color = '#fff';
-
-     setTimeout(() => {
-         btn.innerHTML = oldHtml;
-         btn.disabled = false;
-         btn.style.background = '';
-         btn.style.color = '';
-         renderStudentFileCards(); // 重新渲染更新徽章
-     }, 1500);
+     if (btn) {
+         btn.innerHTML = '✅ 已儲存';
+         btn.style.background = '#10b981';
+         btn.style.color = '#fff';
+         setTimeout(() => {
+             btn.innerHTML = oldHtml;
+             btn.disabled = false;
+             btn.style.background = '';
+             btn.style.color = '';
+         }, 1500);
+     } else {
+         showToast('資料已自動同步至總表 ✅', 'success');
+     }
 
      if (typeof playClickSound === 'function') playClickSound('all_present');
 
    } catch (err) {
-     btn.innerHTML = '❌ 儲存失敗';
-     btn.style.background = '#ef4444';
-     btn.style.color = '#fff';
-     showToast('連動 Notion 失敗：' + err.message, 'error');
-     
-     setTimeout(() => {
-         btn.innerHTML = oldHtml;
-         btn.disabled = false;
-         btn.style.background = '';
-         btn.style.color = '';
-     }, 2000);
+     if (btn) {
+         btn.innerHTML = '❌ 儲存失敗';
+         btn.style.background = '#ef4444';
+         btn.style.color = '#fff';
+         setTimeout(() => {
+             btn.innerHTML = oldHtml;
+             btn.disabled = false;
+             btn.style.background = '';
+             btn.style.color = '';
+         }, 2000);
+     }
+     showToast('自動連動 Notion 失敗：' + err.message, 'error');
    }
 };
 

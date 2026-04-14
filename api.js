@@ -48,6 +48,14 @@ class ApiClient {
   // 建立備註資料庫
   setupRemarksDB() { return this._fetch('/api/setup-remarks-db', 'POST'); }
 
+  // 取得備註資料
+  getRemarks() { return this._fetch('/api/remarks'); }
+
+  // 更新備註資料
+  updateRemark(pageId, remark) {
+    return this._fetch('/api/remarks', 'POST', { pageId, remark });
+  }
+
   // 換床位（整行資料交換）
   // pageIdA: 來源學生的 Notion pageId
   // pageIdB: 目標床位的 Notion pageId（可以是空床）

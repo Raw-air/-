@@ -3351,35 +3351,6 @@ html.vt-active *:not(.bottom-nav):not(.bottom-nav-glow):not(.nav-item):not(.nav-
 }
 
 /* ── 潘仔模式 (簡潔視角) ── */
-body.panzi-mode .sqd-stat-item.green,
-body.panzi-mode .sqd-stat-item.yellow,
-body.panzi-mode .sqd-stat-item.red {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-
-body.panzi-mode .sm-stat.green,
-body.panzi-mode .sm-stat.yellow,
-body.panzi-mode .sm-stat.red {
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-/* 強制覆蓋內部 b 標籤與上面的大數字 (.sm-stat) 的顏色為普通文字 */
-body.panzi-mode .sqd-stat-item b,
-body.panzi-mode .sm-stat b {
-  color: var(--text-main, #fff) !important;
-  -webkit-text-fill-color: var(--text-main, #fff) !important;
-  background: none !important;
-  text-shadow: none !important;
-}
-body.panzi-mode.light-mode .sqd-stat-item b,
-body.panzi-mode.light-mode .sm-stat b {
-  color: #333 !important;
-  -webkit-text-fill-color: #333 !important;
-}
-
 body.panzi-mode .sqd-meta { display: none !important; }
 /* ========================================================
    GLASS-NEUMORPHISM OVERRIDES (Appended by Agent)
@@ -3953,7 +3924,7 @@ body.light-mode .focus-indicator { background: #6366f1; }
 .sf-scene-2d {
   position: relative;
   width: 100%;
-  height: 480px; /* Taller to fit editing inputs */
+  height: 620px; /* Extends vertically to ensure box-shadows are NEVER clipped by parent */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4013,7 +3984,7 @@ body.light-mode .focus-indicator { background: #6366f1; }
 }
 .sf-fake-card {
   flex: 0 0 300px;
-  height: 440px;
+  height: 470px;
   border-radius: 32px;
   background: var(--card);
   border: 1px solid var(--border2);
@@ -4036,7 +4007,7 @@ body.light-mode .focus-indicator { background: #6366f1; }
 
 .sf-student-card-2d {
   flex: 0 0 300px;
-  height: 440px;
+  height: 470px;
   border-radius: 32px;
   padding: 24px 24px;
   display: flex; flex-direction: column;
@@ -4258,12 +4229,29 @@ body.light-mode .focus-indicator { background: #6366f1; }
 }
 
 .sf-student-card-2d.is-3d-active .sf-icon-btn {
-  transform: translateZ(25px);
+  transform: translateZ(10px);
   box-shadow: var(--neu-out), 0 5px 10px rgba(239, 68, 68, 0.1);
 }
 .sf-student-card-2d.is-3d-active .sf-icon-btn:hover {
-  transform: translateZ(40px) scale(1.1);
+  transform: translateZ(20px) scale(1.1);
   box-shadow: var(--neu-out), 0 10px 20px rgba(239, 68, 68, 0.2);
+}
+
+.sf-student-card-2d.is-3d-active .sf-broom-btn {
+  transform: translateZ(35px) !important; /* Pops higher! */
+  box-shadow: 0 5px 15px rgba(239, 68, 68, 0.2) !important;
+}
+.sf-student-card-2d.is-3d-active .sf-broom-btn:hover {
+  transform: translateZ(55px) scale(1.15) !important;
+}
+
+.sf-student-card-2d.is-3d-active .sf-card-badge-relative {
+  transform: translateZ(45px);
+  box-shadow: 0 5px 12px rgba(0,0,0,0.15);
+}
+.sf-student-card-2d.is-3d-active .sf-card-badge-relative:hover {
+  transform: translateZ(65px);
+  box-shadow: 0 12px 25px rgba(0,0,0,0.25);
 }
 
 .sf-student-card-2d.is-3d-active .sf-save-action-btn {
@@ -4284,11 +4272,7 @@ body.light-mode .focus-indicator { background: #6366f1; }
   box-shadow: 0 10px 20px rgba(0,0,0,0.2);
 }
 
-.sf-save-container {
-  width: 100%;
-  padding: 0 20px 20px;
-  display: flex; justify-content: center;
-}
+/* Save container removed — auto-save */
 
 /* Indicator dots */
 .sf-card-dots {
@@ -4362,9 +4346,68 @@ body.light-mode .sf-student-card-2d {
   border-color: rgba(0,0,0,0.1);
   box-shadow: 0 15px 35px rgba(0,0,0,0.1);
 }
+body.light-mode .sf-student-card-2d::after {
+  background: linear-gradient(90deg, #6366f1, #d946ef, #8b5cf6) top/100% 4px no-repeat, rgba(255,255,255,0.92);
+}
 body.light-mode .sf-form-group input[type="text"],
+body.light-mode .sf-form-group textarea,
 body.light-mode .sf-toggles {
   background: rgba(0,0,0,0.04);
   border-color: rgba(0,0,0,0.1);
   color: #333;
+  box-shadow: inset 2px 2px 4px rgba(0,0,0,0.06), inset -2px -2px 4px rgba(255,255,255,0.8);
+}
+body.light-mode .sf-card-badge-relative {
+  background: rgba(99,102,241,0.1);
+  color: #6366f1;
+}
+body.light-mode .sf-icon-btn {
+  background: rgba(0,0,0,0.04);
+  border-color: rgba(0,0,0,0.1);
+  color: #333;
+}
+body.light-mode .sf-card-title {
+  color: #1a1a2e;
+}
+body.light-mode .sf-form-group label {
+  color: #666;
+}
+body.light-mode .sf-save-action-btn {
+  background: rgba(0,0,0,0.04);
+  color: #333;
+  border-color: rgba(0,0,0,0.1);
+  box-shadow: 2px 2px 4px rgba(0,0,0,0.06), -2px -2px 4px rgba(255,255,255,0.8);
+}
+body.light-mode .sf-save-action-btn:hover {
+  background: rgba(59,130,246,0.1);
+  color: #2563eb;
+  border-color: rgba(59,130,246,0.2);
+}
+
+/* ========================================================
+   POWER SAVE MODE (2D FLAT)
+   ======================================================== */
+body.power-save-mode * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+body.power-save-mode .sf-student-card-2d::after,
+body.power-save-mode .sf-form-group input,
+body.power-save-mode .sf-form-group textarea,
+body.power-save-mode .sf-save-action-btn,
+body.power-save-mode .sf-icon-btn,
+body.power-save-mode .sq-card,
+body.power-save-mode .sqd-card,
+body.power-save-mode .sf-fake-card,
+body.power-save-mode .sm-stat,
+body.power-save-mode .big-stat,
+body.power-save-mode .nav-item {
+  box-shadow: none !important;
+  border: 1px solid var(--border2) !important;
+}
+body.power-save-mode .sf-student-card-2d.is-3d-active * {
+  text-shadow: none !important;
+}
+body.power-save-mode .sf-scene-2d .sf-student-card-2d.is-3d-active * {
+  transform: translateZ(0) !important; /* Only kill 3D internal pops, let carousel rotate */
 }
