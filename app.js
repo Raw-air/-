@@ -3183,7 +3183,8 @@ function onStudentFileSearch(query) {
     
     _sfRandomDefaults = [];
     _sfActiveIndex = 0;
-    renderStudentFileCards();
+    // 如果有結果產生，就觸發「切換為真實找尋」的高速滑入效果
+    renderStudentFileCards(true);
     
     // 追加一個過渡動畫：從「假找」切換成「找到了！」的 pop 動畫
     const area = document.getElementById('sf-card-area');
@@ -3195,7 +3196,7 @@ function onStudentFileSearch(query) {
   }, 1000); // 打字防抖 1 秒
 }
 
-function renderStudentFileCards() {
+function renderStudentFileCards(sweepIn = false) {
   const cardArea = document.getElementById('sf-card-area');
   const track = document.getElementById('sf-card-track');
 
@@ -3215,7 +3216,7 @@ function renderStudentFileCards() {
   track.innerHTML = '';
   
   // 無限滑動：將結果陣列大量的重複，配合 JS 自動校正做到「地球是圓的」無盡迴圈
-  const repeats = Math.max( 160, Math.ceil(160 / _sfResults.length) );
+  const repeats = Math.max( 12, Math.ceil(20 / _sfResults.length) );
   let renderList = [];
   for (let i = 0; i < repeats; i++) {
      renderList.push(..._sfResults);
@@ -3269,11 +3270,43 @@ function renderStudentFileCards() {
   setup2DCarouselInteraction();
 
   const middleIndex = Math.floor(repeats / 2) * _sfResults.length;
-  
   _sfActiveIndex = middleIndex;
   _currentX = -(_sfActiveIndex * _cardWidth);
-  track.style.transition = 'none';
-  track.style.transform = `translateX(${_currentX}px)`;
+  
+  if (sweepIn && window._updateContinuousScale) {
+      // 模擬從假裝找的右側（或左邊）高速滑入，這裡我們讓它從右邊飛進來（+8張卡片）
+      let startX = -((_sfActiveIndex - 8) * _cardWidth);
+      track.style.transition = 'none';
+      track.style.transform = `translateX(${startX}px)`;
+      
+      void track.offsetWidth; // force reflow
+      
+      // 刷刷刷飛向目標
+      track.style.transition = 'transform 0.9s cubic-bezier(0.1, 0.95, 0.2, 1)';
+      track.style.transform = `translateX(${_currentX}px)`;
+      
+      const startTime = performance.now();
+      if (window._sfSearchAnimFrame) cancelAnimationFrame(window._sfSearchAnimFrame);
+      function step() {
+          const transformStr = window.getComputedStyle(track).transform;
+          if (transformStr !== 'none') {
+              const matrix = new DOMMatrix(transformStr);
+              window._updateContinuousScale(matrix.m41);
+          }
+          if (performance.now() - startTime < 1000) {
+              window._sfSearchAnimFrame = requestAnimationFrame(step);
+          } else {
+              window._updateContinuousScale(_currentX);
+          }
+      }
+      window._sfSearchAnimFrame = requestAnimationFrame(step);
+  } else {
+      track.style.transition = 'none';
+      track.style.transform = `translateX(${_currentX}px)`;
+      if (window._updateContinuousScale) {
+          window._updateContinuousScale(_currentX);
+      }
+  }
   
   Array.from(track.children).forEach((c, i) => {
      c.classList.toggle('active', i === _sfActiveIndex);
@@ -3306,8 +3339,8 @@ function setup2DCarouselInteraction() {
     // 無限滑動（地球是圓的）核心：如果在上次滑行結束後太靠近邊緣，就無縫瞬間傳送到中間
     const total = track.children.length;
     const baseN = _sfResults.length;
-    if (baseN > 0 && total > baseN * 10) {
-      if (_sfActiveIndex < total * 0.3 || _sfActiveIndex > total * 0.7) {
+    if (baseN > 0 && total >= baseN * 5) {
+      if (_sfActiveIndex < total * 0.2 || _sfActiveIndex > total * 0.8) {
         const targetCenterBase = Math.floor((total / 2) / baseN) * baseN;
         const localOffset = _sfActiveIndex % baseN;
         _sfActiveIndex = targetCenterBase + localOffset;
@@ -3343,9 +3376,32 @@ function setup2DCarouselInteraction() {
     
     _currentX = trackStartX + deltaX;
     track.style.transform = `translateX(${_currentX}px)`;
+    updateContinuousScale();
   }
   
   let _currentTransitionTime = 0.5;
+
+  let _animFrame = null;
+
+  function updateContinuousScale(trackXStr) {
+    let currentTrackX = trackXStr !== undefined ? parseFloat(trackXStr) : _currentX;
+    const centerIdxFloat = -currentTrackX / _cardWidth;
+    
+    for (let i = 0; i < track.children.length; i++) {
+        const c = track.children[i];
+        if (!c) continue;
+        const diff = Math.abs(centerIdxFloat - i);
+        
+        // Soft continuous interpolation using a simple quadratic curve
+        let t = Math.max(0, 1 - diff * 0.45); // diff=0 => 1, diff=2.2 => 0
+        let scale = 0.85 + 0.15 * (t * t);   // diff=0 => 1.0, diff>2.2 => 0.85
+        let brightness = 0.8 + 0.2 * t;      // diff=0 => 1.0, diff>2.2 => 0.8
+        
+        c.style.transform = `scale(${scale})`;
+        c.style.filter = `brightness(${brightness})`;
+    }
+  }
+  window._updateContinuousScale = updateContinuousScale;
 
   function snapToNearest() {
     const maxIdx = track.children.length - 1;
@@ -3365,6 +3421,40 @@ function setup2DCarouselInteraction() {
     Array.from(track.children).forEach((c, i) => {
         c.classList.toggle('active', i === _sfActiveIndex);
     });
+
+    if (_animFrame) cancelAnimationFrame(_animFrame);
+    
+    const startTime = performance.now();
+    const duration = _currentTransitionTime * 1000;
+    
+    function step() {
+        const transformStr = window.getComputedStyle(track).transform;
+        if (transformStr !== 'none') {
+            const matrix = new DOMMatrix(transformStr);
+            updateContinuousScale(matrix.m41);
+        }
+        
+        if (performance.now() - startTime < duration + 50) {
+            _animFrame = requestAnimationFrame(step);
+        } else {
+            updateContinuousScale(_currentX);
+            
+            // 無縫瞬間傳送校正（地球是圓的）
+            const total = track.children.length;
+            const baseN = _sfResults.length;
+            if (baseN > 0 && total >= baseN * 5) {
+                if (_sfActiveIndex < total * 0.2 || _sfActiveIndex > total * 0.8) {
+                    const targetCenterBase = Math.floor((total / 2) / baseN) * baseN;
+                    const localOffset = _sfActiveIndex % baseN;
+                    _sfActiveIndex = targetCenterBase + localOffset;
+                    _currentX = -(_sfActiveIndex * _cardWidth);
+                    track.style.transition = 'none';
+                    track.style.transform = `translateX(${_currentX}px)`;
+                }
+            }
+        }
+    }
+    _animFrame = requestAnimationFrame(step);
   }
 
   function onUp(e) {
@@ -3440,38 +3530,73 @@ window.saveStudentFile = async function() {
    const isForeign = activeCard.querySelector('.sf-chk-foreign').checked;
    const isEmpty = activeCard.querySelector('.sf-chk-empty').checked;
 
-   // Update Local Cache Reference
-   studentObj.name = isEmpty ? '' : newName;
-   studentObj.studentId = isEmpty ? '' : newId;
-   studentObj.isForeign = isForeign;
-   studentObj.isEmpty = isEmpty;
-   
-   // 同步更新畫面上所有複製人的顯示內容
-   cards.forEach(c => {
-       const obj = _sfRenderMap.get(c);
-       if (obj === studentObj) {
-           c.querySelector('.sf-input-name').value = studentObj.name;
-           c.querySelector('.sf-input-id').value = studentObj.studentId;
-           c.querySelector('.sf-chk-foreign').checked = studentObj.isForeign;
-           c.querySelector('.sf-chk-empty').checked = studentObj.isEmpty;
-       }
-   });
-   
-   localStorage.setItem('biyuan_temp_students_update', JSON.stringify(state.students));
-
-   // Visual Feedback
    const btn = document.querySelector('.sf-save-container button');
    const oldHtml = btn.innerHTML;
-   btn.innerHTML = '✅ 已儲存此卡片修改';
-   btn.style.background = '#10b981';
-   btn.style.color = '#fff';
+   btn.innerHTML = '🔄 儲存中...';
+   btn.disabled = true;
 
-   setTimeout(() => {
-       btn.innerHTML = oldHtml;
-       btn.style.background = '';
-       btn.style.color = '';
-       renderStudentFileCards(); // 重新渲染更新徽章
-   }, 1500);
+   try {
+     const updatePayload = {
+        pageId: studentObj.id,
+        updateProfile: {
+            name: isEmpty ? '' : newName,
+            class: studentObj.class || '',
+            studentId: isEmpty ? '' : newId,
+            isForeign: isForeign
+        },
+        markEmpty: isEmpty
+     };
+     if (isEmpty) updatePayload.clearProfile = true;
+
+     await window._api.updateAttendance([updatePayload]);
+
+     // Update Local Cache Reference
+     studentObj.name = isEmpty ? '' : newName;
+     studentObj.studentId = isEmpty ? '' : newId;
+     studentObj.isForeign = isForeign;
+     studentObj.isEmpty = isEmpty;
+     
+     // 同步更新畫面上所有複製人的顯示內容
+     cards.forEach(c => {
+         const obj = _sfRenderMap.get(c);
+         if (obj === studentObj) {
+             c.querySelector('.sf-input-name').value = studentObj.name;
+             c.querySelector('.sf-input-id').value = studentObj.studentId;
+             c.querySelector('.sf-chk-foreign').checked = studentObj.isForeign;
+             c.querySelector('.sf-chk-empty').checked = studentObj.isEmpty;
+         }
+     });
+     
+     localStorage.setItem('biyuan_temp_students_update', JSON.stringify(state.students));
+
+     // Visual Feedback
+     btn.innerHTML = '✅ 已連動總表並儲存';
+     btn.style.background = '#10b981';
+     btn.style.color = '#fff';
+
+     setTimeout(() => {
+         btn.innerHTML = oldHtml;
+         btn.disabled = false;
+         btn.style.background = '';
+         btn.style.color = '';
+         renderStudentFileCards(); // 重新渲染更新徽章
+     }, 1500);
+
+     if (typeof playClickSound === 'function') playClickSound('all_present');
+
+   } catch (err) {
+     btn.innerHTML = '❌ 儲存失敗';
+     btn.style.background = '#ef4444';
+     btn.style.color = '#fff';
+     showToast('連動 Notion 失敗：' + err.message, 'error');
+     
+     setTimeout(() => {
+         btn.innerHTML = oldHtml;
+         btn.disabled = false;
+         btn.style.background = '';
+         btn.style.color = '';
+     }, 2000);
+   }
 };
 
 window.onStudentFileSearch = onStudentFileSearch;

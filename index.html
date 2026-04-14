@@ -162,7 +162,7 @@
     </div>
 
     <div style="padding: 16px;">
-      <button class="empty-bed-action" style="border-left: 4px solid var(--orange);" onclick="openReviewPage()">
+      <button class="empty-bed-action" onclick="openReviewPage()">
         <span class="eb-icon">📝</span>
         <div class="eb-content">
           <span class="eb-title" style="color:var(--orange)">住宿生新增進總表審核</span>
@@ -171,7 +171,7 @@
         <span class="eb-arrow">›</span>
       </button>
 
-      <button id="manage-repair-btn" class="empty-bed-action" style="border-left: 4px solid var(--purple);" onclick="openRepairReview()">
+      <button id="manage-repair-btn" class="empty-bed-action" onclick="openRepairReview()">
         <span class="eb-icon">🔧</span>
         <div class="eb-content">
           <span class="eb-title" style="color:var(--purple)">報修審核</span>
@@ -426,7 +426,7 @@
     <div id="summary-squad-grid" class="squad-detail-grid"></div>
 
     <!-- 更多選項按鈕 -->
-    <button class="empty-bed-action" style="border-left:none; justify-content:center; padding:18px;" onclick="navigateTo('tools')">
+    <button class="empty-bed-action" style="justify-content:center; padding:18px;" onclick="navigateTo('tools')">
       <span style="font-size:16px; font-weight:700; letter-spacing:1px;">更多選項</span>
     </button>
 
@@ -478,7 +478,7 @@
     </button>
 
     <!-- 櫃台請假按鈕 -->
-    <button class="empty-bed-action" style="border-left: 4px solid var(--green);" onclick="openCounterLeaveModal()">
+    <button class="empty-bed-action" onclick="openCounterLeaveModal()">
       <span class="eb-icon">📞</span>
       <div class="eb-content">
         <span class="eb-title" style="color:var(--green)">櫃台請假填寫</span>
@@ -488,7 +488,7 @@
     </button>
 
     <!-- 通知報修按鈕 -->
-    <button class="empty-bed-action" style="border-left: 4px solid var(--purple);" onclick="openRepairForm()">
+    <button class="empty-bed-action" onclick="openRepairForm()">
       <span class="eb-icon">🔧</span>
       <div class="eb-content">
         <span class="eb-title" style="color:var(--purple)">通知報修</span>
@@ -498,7 +498,7 @@
     </button>
 
     <!-- 住宿生檔案管理 -->
-    <button class="empty-bed-action" style="border-left: 4px solid #6366f1;" onclick="navigateTo('student-files'); initStudentFiles()">
+    <button class="empty-bed-action" onclick="navigateTo('student-files'); initStudentFiles()">
       <span class="eb-icon">📋</span>
       <div class="eb-content">
         <span class="eb-title" style="color:#6366f1">住宿生檔案管理</span>
@@ -574,6 +574,11 @@
       <div id="sf-fake-search-train" class="sf-fake-train" style="opacity: 0; pointer-events: none;">
         <div class="sf-fake-track">
           <!-- Create enough dummy cards to loop infinitely -->
+          <div class="sf-fake-card"></div><div class="sf-fake-card"></div>
+          <div class="sf-fake-card"></div><div class="sf-fake-card"></div>
+          <div class="sf-fake-card"></div><div class="sf-fake-card"></div>
+          <div class="sf-fake-card"></div><div class="sf-fake-card"></div>
+          <div class="sf-fake-card"></div><div class="sf-fake-card"></div>
           <div class="sf-fake-card"></div><div class="sf-fake-card"></div>
           <div class="sf-fake-card"></div><div class="sf-fake-card"></div>
           <div class="sf-fake-card"></div><div class="sf-fake-card"></div>

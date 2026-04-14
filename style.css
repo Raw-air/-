@@ -3967,6 +3967,8 @@ body.light-mode .focus-indicator { background: #6366f1; }
   display: flex;
   align-items: center;
   touch-action: pan-y;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 15%, black 85%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, black 15%, black 85%, transparent 100%);
 }
 .sf-card-track {
   display: flex;
@@ -3995,18 +3997,24 @@ body.light-mode .focus-indicator { background: #6366f1; }
   gap: 8px;
   height: 100%;
   padding-left: calc(50% - 150px);
-  animation: magic-fake-scan 1.5s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
-  filter: blur(8px) brightness(0.6) opacity(0.8);
+  animation: magic-fake-scan 2.8s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+  filter: blur(4px) brightness(0.8) opacity(0.8);
   pointer-events: none;
 }
 @keyframes magic-fake-scan {
-  0% { transform: translateX(308px); }
-  100% { transform: translateX(-1232px); } /* Slide wildly back and forth */
+  0% { transform: translateX(0px); }
+  15% { transform: translateX(-616px); }      /* Fast move 2 cards */
+  25% { transform: translateX(-616px); }      /* Pause / Scan */
+  40% { transform: translateX(-1232px); }     /* Moderate move 2 cards */
+  50% { transform: translateX(-1232px); }     /* Pause / Scan */
+  65% { transform: translateX(-2772px); }     /* Super fast rush 5 cards! */
+  85% { transform: translateX(-3080px); }     /* Slow crawl 1 card */
+  100% { transform: translateX(-3080px); }    /* End of exactly 10 cards loop */
 }
 .sf-fake-card {
   flex: 0 0 300px;
   height: 440px;
-  border-radius: 24px;
+  border-radius: 32px;
   background: var(--card);
   border: 1px solid var(--border2);
   box-shadow: var(--neu-out);
@@ -4029,7 +4037,7 @@ body.light-mode .focus-indicator { background: #6366f1; }
 .sf-student-card-2d {
   flex: 0 0 300px;
   height: 440px;
-  border-radius: 24px;
+  border-radius: 32px;
   background: var(--card);
   border: 1px solid var(--border2);
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
@@ -4038,14 +4046,9 @@ body.light-mode .focus-indicator { background: #6366f1; }
   position: relative;
   overflow: hidden;
   box-shadow: var(--neu-out);
-  transition: transform 0.3s ease, filter 0.3s ease;
-  transform: scale(0.9);
-  filter: brightness(0.9) opacity(0.8);
 }
 
 .sf-student-card-2d.active {
-  transform: scale(1);
-  filter: brightness(1);
 }
 
 .sf-student-card-2d::before {
