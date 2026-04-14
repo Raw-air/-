@@ -1474,10 +1474,12 @@ function computeDailyStats(date) {
   // 4. 住宿率公式: round((住宿人數/總床數)*100*10)/10
   const rate = totalBeds > 0 ? Math.round((residents / totalBeds) * 100 * 10) / 10 : 0;
 
+  const foreignOffset = parseInt(state.config['foreign_offset']) || 0;
+
   return {
     totalBeds, totalEmpty, residents, rate, bedOffset,
     present: gPresent, leave: gLeave, absent: gAbsent,
-    shouldAttend: gShouldAttend, foreign: gForeignCount,
+    shouldAttend: gShouldAttend, foreign: gForeignCount + foreignOffset,
     squads,
   };
 }
@@ -1522,20 +1524,20 @@ function renderSummary() {
   const grid = document.getElementById('summary-squad-grid');
   grid.innerHTML = st.squads.map(sq => {
     const isConfirmed = state.confirmedSquads.includes(sq.id) && date === getTodayColumnName();
-    const confHtml = isConfirmed ? `<div class="sqd-conf-badge"><div class="conf-ring">✓</div><span>已回報</span></div>` : '';
+    const confHtml = isConfirmed ? `<div class="sqd-conf-badge-inline"><span class="conf-ring-sm">✓</span>已回報</div>` : '';
     return `
     <div class="sqd-card" style="--sq-c:${sq.color}">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
-        <div class="sqd-title" style="margin-bottom:0">${sq.id}</div>
+      <div class="sqd-header-row">
+        <div class="sqd-title">${sq.id}</div>
         ${confHtml}
       </div>
-      <div class="sqd-row">
-        <span>應到 <b>${sq.shouldAttend}</b></span>
-        <span style="color:var(--green)">到 <b>${sq.present}</b></span>
-        <span style="color:var(--yellow)">假 <b>${sq.leave}</b></span>
-        <span style="color:var(--red)">缺 <b>${sq.absent}</b></span>
+      <div class="sqd-stats-grid">
+        <div class="sqd-stat-item">應到 <b>${sq.shouldAttend}</b></div>
+        <div class="sqd-stat-item green">到 <b>${sq.present}</b></div>
+        <div class="sqd-stat-item yellow">假 <b>${sq.leave}</b></div>
+        <div class="sqd-stat-item red">缺 <b>${sq.absent}</b></div>
       </div>
-      <div class="sqd-foreign">🌏 外籍 ${sq.foreign} ・ 🛏️ 空床 ${sq.empty}</div>
+      <div class="sqd-meta">🌏 ${sq.foreign} ・ 🛏️ ${sq.empty}</div>
     </div>`;
   }).join('');
 
@@ -1626,8 +1628,11 @@ function renderSettings() {
   // 宿舍參數
   const totalBeds = parseInt(state.config['total_beds']) || visibleStudents.length;
   const bedOffset = parseInt(state.config['bed_offset']) || 0;
+  const foreignOffset = parseInt(state.config['foreign_offset']) || 0;
   document.getElementById('cfg-total-beds').value = totalBeds;
   document.getElementById('cfg-bed-offset').value = bedOffset;
+  const foreignInput = document.getElementById('cfg-foreign-offset');
+  if (foreignInput) foreignInput.value = foreignOffset;
 
 }
 
@@ -1635,6 +1640,7 @@ function adjustSetting(key, delta) {
   const map = {
     'total_beds': 'cfg-total-beds',
     'bed_offset': 'cfg-bed-offset',
+    'foreign_offset': 'cfg-foreign-offset',
   };
   const input = document.getElementById(map[key]);
   if (!input) return;
@@ -1643,7 +1649,7 @@ function adjustSetting(key, delta) {
   const newVal = key === 'total_beds' ? Math.max(0, oldVal + delta) : oldVal + delta;
   if (newVal === oldVal) return;
 
-  // 立即更新邏輯值（表單永遠正確）
+  // 立即更新邏輯值
   input.value = newVal;
 
   const stepper = input.closest('.stepper');
@@ -1654,12 +1660,26 @@ function adjustSetting(key, delta) {
   const w = rect.width;
   const left = rect.left - sRect.left;
   const top = rect.top - sRect.top;
-  const dir = delta > 0 ? -1 : 1;
+  const dir = delta > 0 ? -1 : 1; // +1 → 數字從下方進來 (向上滾)
 
-  // 清除舊動畫盒（上一次留下的最終幀）
-  stepper.querySelectorAll('.stepper-anim-box').forEach(b => b.remove());
+  // 清除舊動畫盒
+  let isInterrupt = false;
+  stepper.querySelectorAll('.stepper-anim-box').forEach(b => {
+    isInterrupt = true;
+    b.getAnimations({ subtree: true }).forEach(a => {
+      try { a.cancel(); } catch (_) {}
+    });
+    b.remove();
+  });
 
-  // 動畫容器
+  // 拆分新舊數字為位數陣列（統一長度，前方補空格）
+  const oldStr = String(oldVal);
+  const newStr = String(newVal);
+  const maxLen = Math.max(oldStr.length, newStr.length);
+  const oldDigits = oldStr.padStart(maxLen, ' ').split('');
+  const newDigits = newStr.padStart(maxLen, ' ').split('');
+
+  // 動畫容器（完整覆蓋 input 區域）
   const box = document.createElement('div');
   box.className = 'stepper-anim-box';
   box.style.cssText = `
@@ -1668,66 +1688,157 @@ function adjustSetting(key, delta) {
     left: ${left}px; top: ${top}px;
     pointer-events: none; z-index: 10;
     clip-path: inset(0 round ${style.borderRadius});
+    display: flex;
+    align-items: center;
+    justify-content: center;
   `;
 
-  const spanCSS = `
-    display: flex; align-items: center; justify-content: center;
-    width: 100%; height: 100%;
-    position: absolute; left: 0;
-    font-family: ${style.fontFamily};
-    font-size: ${style.fontSize};
-    font-weight: ${style.fontWeight};
-    color: var(--text);
-    letter-spacing: ${style.letterSpacing};
-    padding: ${style.padding};
-    box-sizing: border-box;
-    font-variant-numeric: tabular-nums;
+  // 所有位數的容器
+  const digitsWrapper = document.createElement('div');
+  digitsWrapper.style.cssText = `
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 0px;
   `;
 
-  const oldSpan = document.createElement('span');
-  oldSpan.textContent = oldVal;
-  oldSpan.style.cssText = spanCSS + `top: 0;`;
+  // 找出從右到左第一個變化的位數（用來判斷進位延遲）
+  // 進位連鎖：個位先動，十位稍後，百位最後
+  const changedIndices = [];
+  for (let i = maxLen - 1; i >= 0; i--) {
+    if (oldDigits[i] !== newDigits[i]) changedIndices.push(i);
+  }
 
-  const newSpan = document.createElement('span');
-  newSpan.textContent = newVal;
-  newSpan.style.cssText = spanCSS + `top: ${-dir * h}px;`;
+  // 動畫參數：若是中斷動畫則縮短時長，否則絲滑過渡
+  const baseDur = isInterrupt ? 250 : 450;
+  const stagger = isInterrupt ? 30 : 80;
+  const ease = 'cubic-bezier(0.23, 1, 0.32, 1)';
+  
+  // 建立輔助測量器，用來獲取每個字元精確的真實寬度
+  const measurer = document.createElement('span');
+  measurer.style.cssText = `
+    position: absolute; visibility: hidden; white-space: pre; pointer-events: none;
+    font-family: ${style.fontFamily}; font-size: ${style.fontSize}; font-weight: ${style.fontWeight};
+  `;
+  document.body.appendChild(measurer);
+  const getW = (ch) => {
+    if (ch === ' ') return 0;
+    measurer.textContent = ch;
+    return measurer.getBoundingClientRect().width;
+  };
 
-  box.appendChild(oldSpan);
-  box.appendChild(newSpan);
+  const animations = [];
+
+  for (let i = 0; i < maxLen; i++) {
+    const oldD = oldDigits[i];
+    const newD = newDigits[i];
+    const changed = oldD !== newD;
+    
+    const cw = getW(newD !== ' ' ? newD : (oldD !== ' ' ? oldD : '0'));
+
+    // ★ 容器直接用最終寬度，不做寬度動畫
+    //   這樣連點時不會因為中斷寬度動畫而彈回
+    const digitContainer = document.createElement('div');
+    digitContainer.style.cssText = `
+      position: relative;
+      height: ${h}px;
+      overflow: hidden;
+      display: inline-block;
+      width: ${cw}px;
+    `;
+
+    const digitStyle = `
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: ${cw}px;
+      height: 100%;
+      position: absolute;
+      left: 0; top: 0;
+      font-family: ${style.fontFamily};
+      font-size: ${style.fontSize};
+      font-weight: ${style.fontWeight};
+      color: var(--text);
+      box-sizing: border-box;
+    `;
+
+    if (!changed) {
+      const staticSpan = document.createElement('span');
+      staticSpan.textContent = oldD;
+      staticSpan.style.cssText = digitStyle;
+      digitContainer.appendChild(staticSpan);
+    } else {
+      const oldSpan = document.createElement('span');
+      oldSpan.textContent = oldD;
+      oldSpan.style.cssText = digitStyle;
+      if (oldD === ' ') oldSpan.style.visibility = 'hidden';
+
+      const newSpan = document.createElement('span');
+      newSpan.textContent = newD;
+      newSpan.style.cssText = digitStyle;
+      newSpan.style.transform = `translateY(${-dir * h}px)`;
+      if (newD === ' ') newSpan.style.visibility = 'hidden';
+
+      digitContainer.appendChild(oldSpan);
+      digitContainer.appendChild(newSpan);
+
+      const orderInChain = changedIndices.indexOf(i);
+      const delay = orderInChain * stagger;
+
+      animations.push(() => {
+        // 舊位數滾出
+        if (oldD !== ' ') {
+          oldSpan.animate(
+            [
+              { transform: 'translateY(0)' },
+              { transform: `translateY(${dir * h}px)` }
+            ],
+            { duration: baseDur, easing: ease, fill: 'both', delay }
+          );
+        }
+
+        // 新位數滾入
+        if (newD !== ' ') {
+          newSpan.animate(
+            [
+              { transform: `translateY(${-dir * h}px)` },
+              { transform: 'translateY(0)' }
+            ],
+            { duration: baseDur, easing: ease, fill: 'both', delay }
+          );
+        }
+      });
+    }
+
+    digitsWrapper.appendChild(digitContainer);
+  }
+
+  box.appendChild(digitsWrapper);
   stepper.appendChild(box);
+  
+  // 啟動所有漸變
+  animations.forEach(anim => anim());
+  
+  document.body.removeChild(measurer);
 
-  // 隱藏實體文字（永久隱藏，不再切換回來）
+  // 隱藏實體文字
   input.classList.add('stepper-input-hiding');
-
-  // QQ 彈跳動畫
-  const dur = 220;
-  const ease = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
-
-  oldSpan.animate(
-    [{ transform: 'translateY(0)' }, { transform: `translateY(${dir * h}px)` }],
-    { duration: dur, easing: ease, fill: 'forwards' }
-  );
-
-  newSpan.animate(
-    [{ transform: 'translateY(0)' }, { transform: `translateY(${dir * h}px)` }],
-    { duration: dur, easing: ease, fill: 'forwards' }
-  );
-
-  // ⚡ 關鍵：動畫結束後什麼都不做。
-  // newSpan 永遠留在原地當視覺顯示，直到下一次點擊時才被清除。
-  // 這徹底消除了 span→input 渲染切換帶來的閃爍。
 }
 
 async function saveDormSettings() {
   const totalBeds = parseInt(document.getElementById('cfg-total-beds').value) || 0;
   const bedOffset = parseInt(document.getElementById('cfg-bed-offset').value) || 0;
+  const foreignOffset = parseInt(document.getElementById('cfg-foreign-offset')?.value) || 0;
   try {
     await window._api.setConfig({
       total_beds: String(totalBeds),
       bed_offset: String(bedOffset),
+      foreign_offset: String(foreignOffset),
     });
     state.config['total_beds'] = String(totalBeds);
     state.config['bed_offset'] = String(bedOffset);
+    state.config['foreign_offset'] = String(foreignOffset);
     showToast('宿舍參數已儲存', 'success');
   } catch (err) {
     showToast('儲存失敗：' + err.message, 'error');
@@ -1979,6 +2090,7 @@ function openDevAuth() {
         pinAuthCheckbox.checked = state.config['global_pin_auth'] !== 'false';
       }
       initDevChangelog();
+      checkUnreadFeedback();
       panel.classList.add('open');
     } else {
       panel.classList.remove('open');
@@ -2630,6 +2742,7 @@ async function submitRepair() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         reporter: reporter,
+        name: reporter, // Fallback for backend that checks 'name'
         reason: reason,
         photos: repairPhotos
       })
@@ -2678,6 +2791,7 @@ async function renderRepairReviewList() {
 
       html += `
         <div class="repair-record-card">
+          <div class="repair-record-reporter">🗣️ 報修人：${rec.reporter || rec.name || rec.title || rec.Name || rec.author || '（未知填寫人）'}</div>
           <div class="repair-record-reason">${rec.reason || '（無描述）'}</div>
           ${photosHtml ? `<div class="repair-record-photos">${photosHtml}</div>` : ''}
           <div class="repair-record-time">⏰ ${timeStr}</div>
@@ -2721,3 +2835,203 @@ window.submitRepair = submitRepair;
 window.openRepairReview = openRepairReview;
 window.renderRepairReviewList = renderRepairReviewList;
 window.markRepairDone = markRepairDone;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 意見回饋系統
+// ═══════════════════════════════════════════════════════════════════════════════
+let feedbackPhotos = []; // base64 array
+
+function openFeedbackForm() {
+  feedbackPhotos = [];
+  navigateTo('feedback-form');
+  const nameInput = document.getElementById('feedback-name');
+  if (nameInput) nameInput.value = '';
+  const content = document.getElementById('feedback-content');
+  if (content) content.value = '';
+  const grid = document.getElementById('feedback-preview-grid');
+  if (grid) grid.innerHTML = '';
+  // 重置送出按鈕狀態
+  const btn = document.getElementById('feedback-submit-btn');
+  if (btn) btn.classList.remove('sent');
+}
+
+function handleFeedbackPhotos(input) {
+  const files = Array.from(input.files);
+  files.forEach(file => {
+    if (feedbackPhotos.length >= 3) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 600;
+        let w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+          else { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const compressed = canvas.toDataURL('image/jpeg', 0.6);
+        feedbackPhotos.push(compressed);
+        renderFeedbackPreviews();
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value = '';
+}
+
+function renderFeedbackPreviews() {
+  const grid = document.getElementById('feedback-preview-grid');
+  if (!grid) return;
+  grid.innerHTML = feedbackPhotos.map((src, i) => `
+    <div class="repair-preview-item">
+      <img src="${src}" alt="截圖${i + 1}">
+      <button class="repair-preview-remove" onclick="removeFeedbackPhoto(${i})">✕</button>
+    </div>
+  `).join('');
+}
+
+function removeFeedbackPhoto(index) {
+  feedbackPhotos.splice(index, 1);
+  renderFeedbackPreviews();
+}
+
+async function submitFeedback() {
+  const name = document.getElementById('feedback-name')?.value?.trim() || '匿名';
+  const content = document.getElementById('feedback-content')?.value?.trim();
+  const btn = document.getElementById('feedback-submit-btn');
+
+  if (!content) {
+    showToast('請填寫您的建議或意見', 'error');
+    // 確保按鈕沒有被 focus 所以不會觸發紙飛機動畫
+    if (btn) btn.blur();
+    return;
+  }
+
+  // 通過驗證才觸發送出動畫
+  if (btn) btn.focus();
+  
+  try {
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name,
+        content: content,
+        photos: feedbackPhotos
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      playClickSound('all_present');
+      showToast('感謝您的回饋！我們會認真閱讀 💜', 'success');
+      feedbackPhotos = [];
+      // 延遲跳轉讓送出動畫播完
+      setTimeout(() => navigateTo('home'), 2000);
+    } else {
+      if (btn) btn.blur();
+      throw new Error(data.error || '送出失敗');
+    }
+  } catch (err) {
+    if (btn) btn.blur();
+    showToast('送出失敗：' + err.message, 'error');
+  }
+}
+
+function openFeedbackReview() {
+  navigateTo('feedback-review');
+  renderFeedbackReviewList();
+}
+
+async function renderFeedbackReviewList() {
+  const container = document.getElementById('feedback-review-list');
+  if (!container) return;
+  container.innerHTML = '<div style="color:var(--dim);text-align:center;padding:20px;">讀取中...</div>';
+
+  try {
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records');
+    const records = await res.json();
+
+    // 隱藏未讀紅點
+    const dot = document.getElementById('feedback-unread-dot');
+    const badge = document.getElementById('feedback-badge');
+    if (dot) dot.style.display = 'none';
+    if (badge) badge.style.display = 'none';
+
+    if (!records || records.length === 0) {
+      container.innerHTML = '<div style="color:var(--dim);text-align:center;padding:40px;">目前沒有任何用戶回饋 🎉</div>';
+      return;
+    }
+
+    let html = '';
+    records.forEach(rec => {
+      const timeStr = rec.createdAt ? new Date(rec.createdAt).toLocaleString() : '未知';
+      const photosHtml = (rec.photos || []).map(src =>
+        `<img src="${src}" alt="回饋截圖" style="width:80px;height:80px;object-fit:cover;border-radius:8px;cursor:pointer;" onclick="window.open('${src}','_blank')">`
+      ).join('');
+
+      html += `
+        <div class="repair-record-card">
+          <div class="repair-record-reporter">🙋 ${rec.name || '匿名'}</div>
+          <div class="repair-record-reason">${rec.content || '（無內容）'}</div>
+          ${photosHtml ? `<div class="repair-record-photos">${photosHtml}</div>` : ''}
+          <div class="repair-record-time">⏰ ${timeStr}</div>
+          <button class="repair-done-btn" onclick="markFeedbackRead('${rec.id}')">✅ 已讀並歸檔</button>
+        </div>
+      `;
+    });
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<div style="color:var(--red);text-align:center;padding:20px;">讀取失敗：${err.message}</div>`;
+  }
+}
+
+async function markFeedbackRead(id) {
+  if (!confirm('確定要將此回饋標記為已讀並歸檔嗎？')) return;
+  showLoading(true);
+  try {
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('已標記為已讀', 'success');
+      renderFeedbackReviewList();
+    } else {
+      throw new Error(data.error || '操作失敗');
+    }
+  } catch (err) {
+    showToast('操作失敗：' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+// 檢查是否有未讀回饋（在開發者面板開啟時檢查）
+async function checkUnreadFeedback() {
+  try {
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records');
+    const records = await res.json();
+    if (records && records.length > 0) {
+      const dot = document.getElementById('feedback-unread-dot');
+      const badge = document.getElementById('feedback-badge');
+      if (dot) dot.style.display = 'inline-block';
+      if (badge) badge.style.display = 'block';
+    }
+  } catch (_) {}
+}
+
+window.openFeedbackForm = openFeedbackForm;
+window.handleFeedbackPhotos = handleFeedbackPhotos;
+window.removeFeedbackPhoto = removeFeedbackPhoto;
+window.submitFeedback = submitFeedback;
+window.openFeedbackReview = openFeedbackReview;
+window.renderFeedbackReviewList = renderFeedbackReviewList;
+window.markFeedbackRead = markFeedbackRead;
+window.checkUnreadFeedback = checkUnreadFeedback;
