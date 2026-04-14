@@ -3215,9 +3215,8 @@ function renderStudentFileCards(sweepIn = false) {
 
   track.innerHTML = '';
   
-  // 無限滑動：將結果陣列重複，配合 JS 自動校正做到無盡迴圈
-  // 必須確保最少 3 次重複才能首尾相連，如果長度短則補足至最少 20 張以供緩衝
-  const repeats = Math.max( 3, Math.ceil(20 / _sfResults.length) );
+  // 為了承受超極速慣性滑動不穿幫，環狀緩衝長度從 50 提升至 60 跨度 (前後各 30 張緩衝)
+  const repeats = Math.max( 5, Math.ceil(60 / _sfResults.length) );
   let renderList = [];
   for (let i = 0; i < repeats; i++) {
      renderList.push(..._sfResults);
@@ -3228,39 +3227,40 @@ function renderStudentFileCards(sweepIn = false) {
     card.className = 'sf-student-card-2d';
     card.dataset.index = i;
     
-    let badgeHtml = '';
-    if (s.isForeign) badgeHtml = `<div class="sf-card-badge foreign">外籍生</div>`;
-    else if (s.isEmpty || !s.name) badgeHtml = `<div class="sf-card-badge empty">空床</div>`;
-    else badgeHtml = `<div class="sf-card-badge">${s.squad || ''}</div>`;
-
     card.innerHTML = `
-      ${badgeHtml}
-      <div style="font-size: 16px; color: var(--purple); font-weight: 800; margin-bottom: 8px;">
-        🏠 ${s.room || ''}${s.bed || ''}
+      <div class="sf-card-title" style="display: flex; align-items: center; gap: 8px;">
+        <span style="flex:1;">${s.room || ''} ${s.bed || ''}</span>
+        <button class="sf-icon-btn" onclick="clearStudentData(this)" title="清空床位資料">🧹</button>
+        <div class="sf-card-badge-relative">${s.isForeign ? '外籍生' : (s.isEmpty || !s.name ? '空床' : (s.squad || '無班級'))}</div>
       </div>
       
       <div class="sf-edit-form">
-        <div class="sf-form-group">
-          <label>名稱</label>
-          <input type="text" class="sf-input-name" value="${s.name || ''}" placeholder="未登記">
+        <div style="display:flex; gap: 8px;">
+            <div class="sf-form-group" style="flex: 1;">
+              <label>姓名</label>
+              <input type="text" class="sf-input-name styled-input" value="${s.name || ''}" placeholder="未登記">
+            </div>
+            <div class="sf-form-group" style="flex: 1;">
+              <label>學號</label>
+              <input type="text" class="sf-input-id styled-input" value="${s.studentId || ''}" placeholder="無">
+            </div>
         </div>
-        <div class="sf-form-group">
-          <label>學號</label>
-          <input type="text" class="sf-input-id" value="${s.studentId || ''}" placeholder="無">
+        <div style="display:flex; gap: 8px; align-items: flex-end;">
+            <div class="sf-form-group" style="flex: 1;">
+              <label>班別</label>
+              <input type="text" class="sf-input-class styled-input" value="${s.squad || ''}" placeholder="無">
+            </div>
+            <div class="sf-toggles" style="flex: 1; padding-bottom: 6px; padding-left: 8px; gap: 8px;">
+              <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-foreign" ${s.isForeign ? 'checked' : ''}> 外籍</label>
+              <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-empty" ${s.isEmpty || !s.name ? 'checked' : ''}> 空床</label>
+            </div>
+        </div>
+        <div class="sf-form-group" style="margin-top: 4px;">
+          <label>備註 (情況註記)</label>
+          <textarea class="sf-input-remarks styled-input" style="height: 55px; resize: none; font-size: 13px; line-height: 1.4; padding: 10px;" placeholder="在此新增該床位的備註...">${s.remarks || ''}</textarea>
         </div>
         
-        <div class="sf-toggles">
-          <label class="sf-toggle-item">
-            <input type="checkbox" class="sf-chk-foreign" ${s.isForeign ? 'checked' : ''}>
-            外籍生
-          </label>
-          <label class="sf-toggle-item">
-            <input type="checkbox" class="sf-chk-empty" ${s.isEmpty || !s.name ? 'checked' : ''}>
-            空床
-          </label>
-        </div>
-        
-        <button class="sf-clear-btn" onclick="clearStudentData()">清空此床位資料</button>
+        <button class="sf-save-action-btn" onclick="saveStudentFile(this)">💾 儲存變更</button>
       </div>
     `;
     
@@ -3312,6 +3312,7 @@ function renderStudentFileCards(sweepIn = false) {
   Array.from(track.children).forEach((c, i) => {
      c.classList.toggle('active', i === _sfActiveIndex);
   });
+  if (window._restart3DTimer) window._restart3DTimer();
 }
 
 let _currentX = 0;
@@ -3330,6 +3331,45 @@ function setup2DCarouselInteraction() {
   let trackStartX = 0;
   let isDragging = false;
   
+  let _3dTimer = null;
+  
+  window._restart3DTimer = function() {
+      disable3D();
+      _3dTimer = setTimeout(enable3D, 2000);
+  };
+
+  function enable3D() {
+    const activeCard = Array.from(track.children).find(c => c.classList.contains('active'));
+    if (activeCard) {
+       activeCard.classList.add('is-3d-active');
+       window._is3dMode = true;
+       if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
+    }
+  }
+
+  function disable3D() {
+    window._is3dMode = false;
+    if (_3dTimer) {
+      clearTimeout(_3dTimer);
+      _3dTimer = null;
+    }
+    let changed = false;
+    Array.from(track.children).forEach(c => {
+       if (c.classList.contains('is-3d-active')) {
+          c.classList.remove('is-3d-active');
+          
+          c.dataset.was3d = 'true';
+          setTimeout(() => { c.dataset.was3d = 'false'; }, 500);
+          changed = true;
+       } else {
+          c.dataset.wasAway = 'true';
+          setTimeout(() => { c.dataset.wasAway = 'false'; }, 500);
+          changed = true;
+       }
+    });
+    if (changed && window._updateContinuousScale) window._updateContinuousScale(_currentX);
+  }
+
   let velocityX = 0;
   let lastMoveX = 0;
   let lastMoveTime = 0;
@@ -3337,10 +3377,19 @@ function setup2DCarouselInteraction() {
   function onDown(e) {
     if (scene.classList.contains('is-searching')) return; 
     
+    const targetCard = e.target.closest('.sf-student-card-2d');
+    
+    // 只要點到目前的有效(Active)卡片，就絕對不要中斷 3D 體驗！讓使用者安心點擊輸入框
+    const isClickOnActive = targetCard && targetCard.classList.contains('active');
+    
+    if (!isClickOnActive) {
+        disable3D();
+    }
+    
     // 無限滑動（地球是圓的）核心：如果在上次滑行結束後太靠近邊緣，就無縫瞬間傳送到中間
     const total = track.children.length;
     const baseN = _sfResults.length;
-    if (baseN > 0 && total >= baseN * 5) {
+    if (baseN > 0 && total >= baseN * 3) {
       if (_sfActiveIndex < total * 0.2 || _sfActiveIndex > total * 0.8) {
         const targetCenterBase = Math.floor((total / 2) / baseN) * baseN;
         const localOffset = _sfActiveIndex % baseN;
@@ -3348,6 +3397,7 @@ function setup2DCarouselInteraction() {
         _currentX = -(_sfActiveIndex * _cardWidth);
         track.style.transition = 'none';
         track.style.transform = `translateX(${_currentX}px)`;
+        if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
       }
     }
 
@@ -3366,6 +3416,10 @@ function setup2DCarouselInteraction() {
     if (!isDragging) return;
     const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
     const deltaX = clientX - startX;
+    
+    if (Math.abs(deltaX) > 15) {
+       disable3D(); 
+    }
     
     const now = performance.now();
     const dt = now - lastMoveTime;
@@ -3416,11 +3470,9 @@ function setup2DCarouselInteraction() {
         // 這裡設定唯有靠近畫面中心的 4 張卡片會被算繪並分配給 GPU，其餘直接被隱藏與釋放，零卡頓！
         if (absDiff > 4) {
             c.style.visibility = 'hidden';
-            c.style.willChange = 'auto'; 
             continue;
         } else {
             c.style.visibility = 'visible';
-            c.style.willChange = 'transform';
         }
         
         // Soft continuous interpolation using a simple quadratic curve
@@ -3428,25 +3480,39 @@ function setup2DCarouselInteraction() {
         let scale = 0.85 + 0.15 * (t * t);   
         let brightness = 0.8 + 0.2 * t;      
         
-        // 假 3D 張力旋轉：既然只要「稍微的角度與弧度」：
-        // 角度不用太大，避免兩側被強硬壓縮導致邊界裁切
-        let rotateY = rawDiff * 4; 
-        if (rotateY > 8) rotateY = 8;
-        if (rotateY < -8) rotateY = -8;
-        
         // 確保中間卡片絕對在最上層，兩側往後排
         c.style.zIndex = Math.round(100 - absDiff * 10);
-        
-        // 恢復使用 inline perspective，因為放在父元素時因為軌道非常長會導致消失點偏移造成奇怪的拉伸
-        // 拿掉 overflow: hidden 後就不會出現邊緣裁切了！
-        c.style.transform = `perspective(800px) rotateY(${rotateY}deg) scale(${scale})`;
         c.style.filter = `brightness(${brightness})`;
+        if (c.classList.contains('is-3d-active')) {
+            c.style.transition = 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
+            c.style.transform = `perspective(1000px) rotate3d(0.5, 1, 0, 15deg) scale(${scale + 0.05})`;
+            c.style.filter = 'none'; // CRITICAL: remove filter to un-flatten 3D space
+            c.style.opacity = '1';
+        } else {
+            if (isDragging) {
+                if (c.dataset.was3d === 'true' || c.dataset.wasAway === 'true') {
+                    c.style.transition = 'transform 0.5s cubic-bezier(0.2, 0.9, 0.3, 1)';
+                } else {
+                    c.style.transition = 'none';
+                }
+            } else {
+                c.style.transition = 'transform 0.5s cubic-bezier(0.3, 0.9, 0.4, 1)';
+            }
+            
+            if (window._is3dMode && !isDragging) {
+                let spread = rawDiff < 0 ? -1500 : 1500;
+                c.style.transform = `translateX(${spread}px) scale(${scale})`;
+            } else {
+                c.style.transform = `translateX(0px) scale(${scale})`; 
+            }
+        }
     }
   }
   window._updateContinuousScale = updateContinuousScale;
 
   function snapToNearest() {
     const maxIdx = track.children.length - 1;
+
     let newIndex = Math.round(-_currentX / _cardWidth);
     
     if (newIndex < 0) newIndex = 0;
@@ -3492,8 +3558,11 @@ function setup2DCarouselInteraction() {
                     _currentX = -(_sfActiveIndex * _cardWidth);
                     track.style.transition = 'none';
                     track.style.transform = `translateX(${_currentX}px)`;
+                    updateContinuousScale(_currentX);
                 }
             }
+
+            if (window._restart3DTimer) window._restart3DTimer();
         }
     }
     _animFrame = requestAnimationFrame(step);
@@ -3503,13 +3572,36 @@ function setup2DCarouselInteraction() {
     if (!isDragging) return;
     isDragging = false;
     
+    // 如果手指僅僅是「點擊」或微小滑動（例如點擊輸入區域），不要觸發強制 snapping 與 disable3D
+    const totalDeltaX = Math.abs(lastMoveX - startX);
+    if (totalDeltaX < 5 && velocityX === 0) {
+        return;
+    }
+    
+    // Check teleport BEFORE setting targetX, so we always stay in safe bounding center
+    const total = track.children.length;
+    const baseN = _sfResults.length;
+    if (baseN > 0 && total >= baseN * 3) {
+        const centerPos = -Math.floor(total / 2) * _cardWidth;
+        const diff = centerPos - _currentX;
+        const shiftMultiples = Math.round(diff / (baseN * _cardWidth));
+        const shiftDist = shiftMultiples * baseN * _cardWidth;
+        
+        if (shiftDist !== 0) {
+            _currentX += shiftDist;
+            track.style.transition = 'none';
+            track.style.transform = `translateX(${_currentX}px)`;
+            void track.offsetWidth; 
+        }
+    }
+    
     // 依據拖曳速度計算慣性滑動距離 (摩擦力模擬)
     const friction = 0.002;
     let momentumDist = (velocityX * Math.abs(velocityX)) / (2 * friction);
     
-    // 上下限保護
-    if (momentumDist > 8000) momentumDist = 8000;
-    if (momentumDist < -8000) momentumDist = -8000;
+    // 上下限保護 (物理極限降至 4000px，約 13 張卡速度極限，避免穿透 DOM 預算邊界)
+    if (momentumDist > 4000) momentumDist = 4000;
+    if (momentumDist < -4000) momentumDist = -4000;
 
     let targetX = _currentX + momentumDist;
     const maxIdx = track.children.length - 1;
@@ -3554,6 +3646,8 @@ window.clearStudentData = function() {
 
    activeCard.querySelector('.sf-input-name').value = '';
    activeCard.querySelector('.sf-input-id').value = '';
+   activeCard.querySelector('.sf-input-class').value = '';
+   activeCard.querySelector('.sf-input-remarks').value = '';
    activeCard.querySelector('.sf-chk-foreign').checked = false;
    activeCard.querySelector('.sf-chk-empty').checked = true;
 };
@@ -3569,10 +3663,12 @@ window.saveStudentFile = async function() {
 
    const newName = activeCard.querySelector('.sf-input-name').value.trim();
    const newId = activeCard.querySelector('.sf-input-id').value.trim();
+   const newClass = activeCard.querySelector('.sf-input-class').value.trim();
+   const newRemarks = activeCard.querySelector('.sf-input-remarks').value.trim();
    const isForeign = activeCard.querySelector('.sf-chk-foreign').checked;
    const isEmpty = activeCard.querySelector('.sf-chk-empty').checked;
 
-   const btn = document.querySelector('.sf-save-container button');
+   const btn = activeCard.querySelector('.sf-save-action-btn');
    const oldHtml = btn.innerHTML;
    btn.innerHTML = '🔄 儲存中...';
    btn.disabled = true;
@@ -3582,9 +3678,10 @@ window.saveStudentFile = async function() {
         pageId: studentObj.id,
         updateProfile: {
             name: isEmpty ? '' : newName,
-            class: studentObj.class || '',
+            class: newClass,
             studentId: isEmpty ? '' : newId,
-            isForeign: isForeign
+            isForeign: isForeign,
+            remarks: newRemarks
         },
         markEmpty: isEmpty
      };
@@ -3595,6 +3692,9 @@ window.saveStudentFile = async function() {
      // Update Local Cache Reference
      studentObj.name = isEmpty ? '' : newName;
      studentObj.studentId = isEmpty ? '' : newId;
+     studentObj.squad = newClass;
+     studentObj.class = newClass;
+     studentObj.remarks = newRemarks;
      studentObj.isForeign = isForeign;
      studentObj.isEmpty = isEmpty;
      
@@ -3604,6 +3704,8 @@ window.saveStudentFile = async function() {
          if (obj === studentObj) {
              c.querySelector('.sf-input-name').value = studentObj.name;
              c.querySelector('.sf-input-id').value = studentObj.studentId;
+             c.querySelector('.sf-input-class').value = studentObj.class;
+             c.querySelector('.sf-input-remarks').value = studentObj.remarks;
              c.querySelector('.sf-chk-foreign').checked = studentObj.isForeign;
              c.querySelector('.sf-chk-empty').checked = studentObj.isEmpty;
          }

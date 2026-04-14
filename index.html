@@ -1018,6 +1018,13 @@
         <button class="action-btn wide warning" onclick="setupFeedbackDB()">⚙️ 自動建立回饋資料庫</button>
       </div>
 
+      <!-- 備註欄位資料庫設定 -->
+      <div class="dev-card" style="margin-top:16px;">
+        <div class="dev-card-header">📝 備註欄位資料庫設定</div>
+        <p class="dev-card-hint">設定住宿生卡片專用的「備註」獨立資料庫，自動串接回學生總表系統以便記錄學生狀況。</p>
+        <button class="action-btn wide warning" onclick="setupRemarksDB()">⚙️ 自動建立備註資料庫</button>
+      </div>
+
       <!-- 查看回饋 -->
       <div class="dev-card" style="margin-top:16px;">
         <div class="dev-card-header" style="display:flex;align-items:center;gap:8px;">📬 查看用戶回饋 <span id="feedback-unread-dot" style="display:none;width:10px;height:10px;background:var(--red);border-radius:50%;"></span></div>
@@ -1083,6 +1090,21 @@
         const data = await res.json();
         if (data.success) {
           prompt('🎉 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 FEEDBACK_DB_ID：', data.FEEDBACK_DB_ID);
+        } else {
+          alert('建立失敗: ' + data.error);
+        }
+      } catch (err) {
+        alert('發生錯誤: ' + err.message);
+      }
+    }
+
+    async function setupRemarksDB() {
+      if (!confirm("這將會在 Notion 自動建立一個新的備註專用資料庫。確定要執行嗎？")) return;
+      try {
+        const res = await fetch(window.CONFIG.WORKER_URL + '/api/setup-remarks-db', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          prompt('🎉 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 REMARKS_DB_ID：', data.REMARKS_DB_ID);
         } else {
           alert('建立失敗: ' + data.error);
         }
