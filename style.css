@@ -3967,8 +3967,8 @@ body.light-mode .focus-indicator { background: #6366f1; }
   display: flex;
   align-items: center;
   touch-action: pan-y;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 15%, black 85%, transparent 100%);
-  mask-image: linear-gradient(90deg, transparent 0%, black 15%, black 85%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 5%, black 95%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, black 5%, black 95%, transparent 100%);
 }
 .sf-card-track {
   display: flex;
@@ -4044,8 +4044,9 @@ body.light-mode .focus-indicator { background: #6366f1; }
   padding: 24px 20px;
   display: flex; flex-direction: column;
   position: relative;
-  overflow: hidden;
   box-shadow: var(--neu-out);
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 .sf-student-card-2d.active {

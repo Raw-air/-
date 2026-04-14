@@ -3215,8 +3215,9 @@ function renderStudentFileCards(sweepIn = false) {
 
   track.innerHTML = '';
   
-  // 無限滑動：將結果陣列大量的重複，配合 JS 自動校正做到「地球是圓的」無盡迴圈
-  const repeats = Math.max( 12, Math.ceil(20 / _sfResults.length) );
+  // 無限滑動：將結果陣列重複，配合 JS 自動校正做到無盡迴圈
+  // 必須確保最少 3 次重複才能首尾相連，如果長度短則補足至最少 20 張以供緩衝
+  const repeats = Math.max( 3, Math.ceil(20 / _sfResults.length) );
   let renderList = [];
   for (let i = 0; i < repeats; i++) {
      renderList.push(..._sfResults);
@@ -3375,8 +3376,26 @@ function setup2DCarouselInteraction() {
     lastMoveTime = now;
     
     _currentX = trackStartX + deltaX;
+    
+    // 即時無縫瞬間傳送校正（避免滑太快或滑到底出現空白斷層）
+    const total = track.children.length;
+    const baseN = _sfResults.length;
+    if (baseN > 0 && total >= baseN * 3) {
+        let thresholdLeft = -_cardWidth * (total * 0.3);  // 往右滑
+        let thresholdRight = -_cardWidth * (total * 0.7); // 往左滑 
+        if (_currentX > thresholdLeft || _currentX < thresholdRight) {
+            const centerPos = -Math.floor(total / 2) * _cardWidth;
+            const diff = centerPos - _currentX;
+            const shiftMultiples = Math.round(diff / (baseN * _cardWidth));
+            const shiftDist = shiftMultiples * baseN * _cardWidth;
+            
+            _currentX += shiftDist;
+            trackStartX += shiftDist;
+        }
+    }
+    
     track.style.transform = `translateX(${_currentX}px)`;
-    updateContinuousScale();
+    if (window._updateContinuousScale) window._updateContinuousScale();
   }
   
   let _currentTransitionTime = 0.5;
@@ -3390,14 +3409,37 @@ function setup2DCarouselInteraction() {
     for (let i = 0; i < track.children.length; i++) {
         const c = track.children[i];
         if (!c) continue;
-        const diff = Math.abs(centerIdxFloat - i);
+        const rawDiff = i - centerIdxFloat; // positive means card is to the right
+        const absDiff = Math.abs(rawDiff);
+        
+        // 【虛擬化渲染優化】：當搜尋出大量資料（如全校 300 筆），不該讓瀏覽器同時算繪幾千張卡片
+        // 這裡設定唯有靠近畫面中心的 4 張卡片會被算繪並分配給 GPU，其餘直接被隱藏與釋放，零卡頓！
+        if (absDiff > 4) {
+            c.style.visibility = 'hidden';
+            c.style.willChange = 'auto'; 
+            continue;
+        } else {
+            c.style.visibility = 'visible';
+            c.style.willChange = 'transform';
+        }
         
         // Soft continuous interpolation using a simple quadratic curve
-        let t = Math.max(0, 1 - diff * 0.45); // diff=0 => 1, diff=2.2 => 0
-        let scale = 0.85 + 0.15 * (t * t);   // diff=0 => 1.0, diff>2.2 => 0.85
-        let brightness = 0.8 + 0.2 * t;      // diff=0 => 1.0, diff>2.2 => 0.8
+        let t = Math.max(0, 1 - absDiff * 0.45); 
+        let scale = 0.85 + 0.15 * (t * t);   
+        let brightness = 0.8 + 0.2 * t;      
         
-        c.style.transform = `scale(${scale})`;
+        // 假 3D 張力旋轉：既然只要「稍微的角度與弧度」：
+        // 角度不用太大，避免兩側被強硬壓縮導致邊界裁切
+        let rotateY = rawDiff * 4; 
+        if (rotateY > 8) rotateY = 8;
+        if (rotateY < -8) rotateY = -8;
+        
+        // 確保中間卡片絕對在最上層，兩側往後排
+        c.style.zIndex = Math.round(100 - absDiff * 10);
+        
+        // 恢復使用 inline perspective，因為放在父元素時因為軌道非常長會導致消失點偏移造成奇怪的拉伸
+        // 拿掉 overflow: hidden 後就不會出現邊緣裁切了！
+        c.style.transform = `perspective(800px) rotateY(${rotateY}deg) scale(${scale})`;
         c.style.filter = `brightness(${brightness})`;
     }
   }
@@ -3442,8 +3484,8 @@ function setup2DCarouselInteraction() {
             // 無縫瞬間傳送校正（地球是圓的）
             const total = track.children.length;
             const baseN = _sfResults.length;
-            if (baseN > 0 && total >= baseN * 5) {
-                if (_sfActiveIndex < total * 0.2 || _sfActiveIndex > total * 0.8) {
+            if (baseN > 0 && total >= baseN * 3) {
+                if (_sfActiveIndex < total * 0.3 || _sfActiveIndex > total * 0.7) {
                     const targetCenterBase = Math.floor((total / 2) / baseN) * baseN;
                     const localOffset = _sfActiveIndex % baseN;
                     _sfActiveIndex = targetCenterBase + localOffset;
