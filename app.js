@@ -16,15 +16,35 @@ const state = {
   confirmedSquads: [],
 };
 
-// ─── 觸覺回饋 (Android vibrate API) ────────────────────────────────────────
+// ─── 音訊上下文 (全域共用) ───────────────────────────────────────────
+let audioCtx = null;
+
+// ─── 觸覺回饋 (Android vibrate + iOS AudioContext fallback) ──────────────
 function haptic(type = 'light') {
-  if (!navigator.vibrate) return;
-  switch(type) {
-    case 'light':  navigator.vibrate(10); break;
-    case 'medium': navigator.vibrate(20); break;
-    case 'heavy':  navigator.vibrate([10, 30, 10]); break;
-    case 'error':  navigator.vibrate([50, 30, 50, 30, 50]); break;
+  // Android: native vibration
+  if (navigator.vibrate) {
+    switch(type) {
+      case 'light':  navigator.vibrate(10); break;
+      case 'medium': navigator.vibrate(20); break;
+      case 'heavy':  navigator.vibrate([10, 30, 10]); break;
+      case 'error':  navigator.vibrate([50, 30, 50, 30, 50]); break;
+    }
+    return;
   }
+  // iOS fallback: use a very short, nearly-silent AudioContext pulse as tactile feedback
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1, t); // Sub-audible frequency
+    gain.gain.setValueAtTime(0.01, t);  // Nearly silent
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.02);
+    osc.start(t); osc.stop(t + 0.03);
+  } catch(e) {}
 }
 
 // ─── 自訂確認對話框 (替代原生 confirm) ─────────────────────────────────────
@@ -63,21 +83,22 @@ function launchConfetti() {
   const container = document.createElement('div');
   container.className = 'confetti-container';
   const colors = ['#8b5cf6','#6366f1','#d946ef','#f59e0b','#22c55e','#0ea5e9','#ef4444','#f472b6'];
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 60; i++) {
     const piece = document.createElement('div');
     piece.className = 'confetti-piece';
     piece.style.left = Math.random() * 100 + '%';
     piece.style.background = colors[Math.floor(Math.random() * colors.length)];
-    piece.style.setProperty('--fall-dur', (2 + Math.random() * 2).toFixed(1) + 's');
-    piece.style.setProperty('--fall-delay', (Math.random() * 0.6).toFixed(2) + 's');
+    piece.style.setProperty('--fall-dur', (2.2 + Math.random() * 2).toFixed(1) + 's');
+    piece.style.setProperty('--fall-delay', (Math.random() * 0.8).toFixed(2) + 's');
     piece.style.setProperty('--conf-rot', (360 + Math.random() * 720).toFixed(0) + 'deg');
+    piece.style.setProperty('--conf-sway', (10 + Math.random() * 30).toFixed(0) + 'px');
     piece.style.width = (6 + Math.random() * 8) + 'px';
     piece.style.height = (6 + Math.random() * 8) + 'px';
     piece.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
     container.appendChild(piece);
   }
   document.body.appendChild(container);
-  setTimeout(() => container.remove(), 4500);
+  setTimeout(() => container.remove(), 5000);
 }
 
 // ─── 初始化 ─────────────────────────────────────────────────────────────────
@@ -99,7 +120,6 @@ window.addEventListener('pointerdown', (e) => {
   }
 }, { passive: true });
 // ─── UI 清脆音效 (Web Audio API) ───────────────────────────────────────────
-let audioCtx = null;
 function playClickSound(type = 'default') {
   if (localStorage.getItem('mute_sound') === 'true') return;
   try {
@@ -3494,10 +3514,26 @@ function setup2DCarouselInteraction() {
   _carouselAttached = true;
   
   let startX = 0;
+  let startY = 0;
   let trackStartX = 0;
   let isDragging = false;
+  let isHorizontalSwipe = null; // null = undecided, true = horizontal, false = vertical
   
   let _3dTimer = null;
+  
+  // ═══════ Instagram-like swipe physics constants ═══════
+  const DRAG_THRESHOLD = 8;          // px before we consider it a drag
+  const DECEL_RATE = 0.985;          // per-frame deceleration (exponential decay) — higher = smoother/longer glide
+  const MIN_VELOCITY = 0.08;         // px/ms — stop momentum below this
+  const SNAP_SPRING_TENSION = 0.08;  // spring tension for final snap
+  const SNAP_SPRING_DAMPING = 0.82;  // damping ratio for snap spring
+  const MAX_FLICK_CARDS = 6;         // max cards a single flick can travel
+  const VELOCITY_SAMPLES = 6;        // number of recent touch samples to average
+  const VELOCITY_WEIGHT_DECAY = 0.7; // exponential weight decay for older samples
+  
+  // Velocity tracking ring buffer — last N samples
+  let _velocitySamples = [];
+  let _momentumFrame = null;
   
   window._restart3DTimer = function() {
       disable3D();
@@ -3536,23 +3572,29 @@ function setup2DCarouselInteraction() {
     if (changed && window._updateContinuousScale) window._updateContinuousScale(_currentX);
   }
 
-  let velocityX = 0;
-  let lastMoveX = 0;
-  let lastMoveTime = 0;
-  
-  function onDown(e) {
-    if (scene.classList.contains('is-searching')) return; 
+  // ═══════ Weighted velocity calculation from recent samples ═══════
+  function getWeightedVelocity() {
+    if (_velocitySamples.length === 0) return 0;
     
-    const targetCard = e.target.closest('.sf-student-card-2d');
+    // Filter out stale samples (older than 100ms from last sample)
+    const now = performance.now();
+    const recent = _velocitySamples.filter(s => now - s.time < 100);
+    if (recent.length === 0) return 0;
     
-    // 只要點到目前的有效(Active)卡片，就絕對不要中斷 3D 體驗！讓使用者安心點擊輸入框
-    const isClickOnActive = targetCard && targetCard.classList.contains('active');
+    let weightedSum = 0;
+    let weightTotal = 0;
     
-    if (!isClickOnActive) {
-        disable3D();
+    for (let i = 0; i < recent.length; i++) {
+      // More recent samples get exponentially higher weight
+      const weight = Math.pow(VELOCITY_WEIGHT_DECAY, recent.length - 1 - i);
+      weightedSum += recent[i].velocity * weight;
+      weightTotal += weight;
     }
     
-    // 無限滑動（地球是圓的）核心：如果在上次滑行結束後太靠近邊緣，就無縫瞬間傳送到中間
+    return weightTotal > 0 ? weightedSum / weightTotal : 0;
+  }
+  
+  function teleportToCenterIfNeeded() {
     const total = track.children.length;
     const baseN = _sfResults.length;
     if (baseN > 0 && total >= baseN * 3) {
@@ -3566,14 +3608,42 @@ function setup2DCarouselInteraction() {
         if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
       }
     }
+  }
+
+  function onDown(e) {
+    if (scene.classList.contains('is-searching')) return; 
+    
+    // Stop any ongoing momentum animation immediately (like IG — touching stops glide)
+    if (_momentumFrame) {
+      cancelAnimationFrame(_momentumFrame);
+      _momentumFrame = null;
+    }
+    if (_animFrame) {
+      cancelAnimationFrame(_animFrame);
+      _animFrame = null;
+    }
+    
+    const targetCard = e.target.closest('.sf-student-card-2d');
+    
+    // 只要點到目前的有效(Active)卡片，就絕對不要中斷 3D 體驗！讓使用者安心點擊輸入框
+    const isClickOnActive = targetCard && targetCard.classList.contains('active');
+    
+    if (!isClickOnActive) {
+        disable3D();
+    }
+    
+    // 無縫傳送校正
+    teleportToCenterIfNeeded();
 
     isDragging = true;
-    startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    isHorizontalSwipe = null;
+    const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+    startX = clientX;
+    startY = clientY;
     trackStartX = _currentX;
     
-    lastMoveX = startX;
-    lastMoveTime = performance.now();
-    velocityX = 0;
+    _velocitySamples = [{ x: clientX, time: performance.now(), velocity: 0 }];
     
     track.style.transition = 'none';
   }
@@ -3581,29 +3651,52 @@ function setup2DCarouselInteraction() {
   function onMove(e) {
     if (!isDragging) return;
     const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
     const deltaX = clientX - startX;
+    const deltaY = clientY - startY;
+    
+    // Determine swipe direction on first meaningful movement
+    if (isHorizontalSwipe === null && (Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD)) {
+      isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
+      if (!isHorizontalSwipe) {
+        // It's a vertical scroll — release and let native scrolling happen
+        isDragging = false;
+        return;
+      }
+    }
+    
+    // Don't process until direction is confirmed
+    if (isHorizontalSwipe !== true && Math.abs(deltaX) < DRAG_THRESHOLD) return;
+    
+    // Prevent vertical scrolling when swiping horizontally
+    if (e.cancelable) e.preventDefault();
     
     // 如果滑動量明顯，才取消 3D 狀態避免使用者點擊輸入框誤觸
     if (Math.abs(deltaX) > 40) {
        disable3D(); 
     }
     
+    // Record velocity sample
     const now = performance.now();
-    const dt = now - lastMoveTime;
+    const lastSample = _velocitySamples[_velocitySamples.length - 1];
+    const dt = now - lastSample.time;
     if (dt > 0) {
-       velocityX = (clientX - lastMoveX) / dt;
+      const v = (clientX - lastSample.x) / dt;
+      _velocitySamples.push({ x: clientX, time: now, velocity: v });
+      // Keep only recent samples
+      if (_velocitySamples.length > VELOCITY_SAMPLES) {
+        _velocitySamples.shift();
+      }
     }
-    lastMoveX = clientX;
-    lastMoveTime = now;
     
     _currentX = trackStartX + deltaX;
     
-    // 即時無縫瞬間傳送校正（避免滑太快或滑到底出現空白斷層）
+    // 即時無縫瞬間傳送校正
     const total = track.children.length;
     const baseN = _sfResults.length;
     if (baseN > 0 && total >= baseN * 3) {
-        let thresholdLeft = -_cardWidth * (total * 0.3);  // 往右滑
-        let thresholdRight = -_cardWidth * (total * 0.7); // 往左滑 
+        let thresholdLeft = -_cardWidth * (total * 0.3);
+        let thresholdRight = -_cardWidth * (total * 0.7);
         if (_currentX > thresholdLeft || _currentX < thresholdRight) {
             const centerPos = -Math.floor(total / 2) * _cardWidth;
             const diff = centerPos - _currentX;
@@ -3620,7 +3713,6 @@ function setup2DCarouselInteraction() {
   }
   
   let _currentTransitionTime = 0.5;
-
   let _animFrame = null;
 
   function updateContinuousScale(trackXStr) {
@@ -3630,11 +3722,10 @@ function setup2DCarouselInteraction() {
     for (let i = 0; i < track.children.length; i++) {
         const c = track.children[i];
         if (!c) continue;
-        const rawDiff = i - centerIdxFloat; // positive means card is to the right
+        const rawDiff = i - centerIdxFloat;
         const absDiff = Math.abs(rawDiff);
         
-        // 【虛擬化渲染優化】：當搜尋出大量資料（如全校 300 筆），不該讓瀏覽器同時算繪幾千張卡片
-        // 這裡設定唯有靠近畫面中心的 4 張卡片會被算繪並分配給 GPU，其餘直接被隱藏與釋放，零卡頓！
+        // 虛擬化渲染優化
         if (absDiff > 4) {
             c.style.visibility = 'hidden';
             continue;
@@ -3642,15 +3733,13 @@ function setup2DCarouselInteraction() {
             c.style.visibility = 'visible';
         }
         
-        // Soft continuous interpolation using a simple quadratic curve
         let t = Math.max(0, 1 - absDiff * 0.45); 
         let scale = 0.85 + 0.15 * (t * t);   
         let alpha = 0.8 + 0.2 * t;      
         
-        // 確保中間卡片絕對在最上層，兩側往後排
         c.style.zIndex = Math.round(100 - absDiff * 10);
-        c.style.opacity = alpha; // use hardware-accelerated opacity instead of blur/brightness!
-        c.style.filter = 'none'; // IMPORTANT: completely remove heavy CSS filters during drag!
+        c.style.opacity = alpha;
+        c.style.filter = 'none';
         
         if (c.classList.contains('is-3d-active')) {
             c.style.transition = 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
@@ -3678,75 +3767,85 @@ function setup2DCarouselInteraction() {
   }
   window._updateContinuousScale = updateContinuousScale;
 
-  function snapToNearest() {
+  // ═══════ Spring-based snap to nearest card ═══════
+  function springSnapTo(targetIndex) {
     const maxIdx = track.children.length - 1;
-
-    let newIndex = Math.round(-_currentX / _cardWidth);
+    if (targetIndex < 0) targetIndex = 0;
+    if (targetIndex > maxIdx) targetIndex = maxIdx;
     
-    if (newIndex < 0) newIndex = 0;
-    if (newIndex > maxIdx) newIndex = maxIdx;
-    
-    _sfActiveIndex = newIndex;
-    _currentX = -(_sfActiveIndex * _cardWidth);
-    
-    // 使用動態計算出的時間，搭配減速彈性的貝茲曲線模擬摩擦力到完全煞停
-    track.style.transition = `transform ${_currentTransitionTime}s cubic-bezier(0.2, 0.9, 0.3, 1.05)`;
-    track.style.transform = `translateX(${_currentX}px)`;
+    _sfActiveIndex = targetIndex;
+    const targetX = -(_sfActiveIndex * _cardWidth);
     
     // Update active visual class
     Array.from(track.children).forEach((c, i) => {
         c.classList.toggle('active', i === _sfActiveIndex);
     });
 
+    if (_momentumFrame) cancelAnimationFrame(_momentumFrame);
     if (_animFrame) cancelAnimationFrame(_animFrame);
     
+    // Spring physics: position approaches target with damped oscillation
+    let springVel = 0;
+    let springPos = _currentX;
     const startTime = performance.now();
-    const duration = _currentTransitionTime * 1000;
     
-    function step() {
-        const transformStr = window.getComputedStyle(track).transform;
-        if (transformStr !== 'none') {
-            const matrix = new DOMMatrix(transformStr);
-            updateContinuousScale(matrix.m41);
-        }
+    function springStep() {
+      const displacement = springPos - targetX;
+      const springForce = -SNAP_SPRING_TENSION * displacement;
+      springVel = (springVel + springForce) * SNAP_SPRING_DAMPING;
+      springPos += springVel;
+      
+      // Apply position
+      _currentX = springPos;
+      track.style.transition = 'none';
+      track.style.transform = `translateX(${_currentX}px)`;
+      updateContinuousScale(_currentX);
+      
+      // Check convergence
+      if (Math.abs(displacement) < 0.5 && Math.abs(springVel) < 0.1) {
+        // Settled — snap exactly
+        _currentX = targetX;
+        track.style.transform = `translateX(${_currentX}px)`;
+        updateContinuousScale(_currentX);
         
-        if (performance.now() - startTime < duration + 50) {
-            _animFrame = requestAnimationFrame(step);
-        } else {
-            updateContinuousScale(_currentX);
-            
-            // 無縫瞬間傳送校正（地球是圓的）
-            const total = track.children.length;
-            const baseN = _sfResults.length;
-            if (baseN > 0 && total >= baseN * 3) {
-                if (_sfActiveIndex < total * 0.3 || _sfActiveIndex > total * 0.7) {
-                    const targetCenterBase = Math.floor((total / 2) / baseN) * baseN;
-                    const localOffset = _sfActiveIndex % baseN;
-                    _sfActiveIndex = targetCenterBase + localOffset;
-                    _currentX = -(_sfActiveIndex * _cardWidth);
-                    track.style.transition = 'none';
-                    track.style.transform = `translateX(${_currentX}px)`;
-                    updateContinuousScale(_currentX);
-                }
-            }
-
-            if (window._restart3DTimer) window._restart3DTimer();
-        }
+        // 無縫傳送校正
+        teleportToCenterIfNeeded();
+        
+        if (window._restart3DTimer) window._restart3DTimer();
+        return;
+      }
+      
+      // Safety timeout (2.5s max)
+      if (performance.now() - startTime > 2500) {
+        _currentX = targetX;
+        track.style.transform = `translateX(${_currentX}px)`;
+        updateContinuousScale(_currentX);
+        teleportToCenterIfNeeded();
+        if (window._restart3DTimer) window._restart3DTimer();
+        return;
+      }
+      
+      _animFrame = requestAnimationFrame(springStep);
     }
-    _animFrame = requestAnimationFrame(step);
+    
+    _animFrame = requestAnimationFrame(springStep);
   }
 
   function onUp(e) {
     if (!isDragging) return;
     isDragging = false;
     
-    // 如果手指僅僅是「點擊」或微小滑動（例如點擊輸入區域），不要觸發強制 snapping 與 disable3D
-    const totalDeltaX = Math.abs(lastMoveX - startX);
-    if (totalDeltaX < 5 && velocityX === 0) {
+    const clientX = e.type.includes('touch') 
+      ? (e.changedTouches ? e.changedTouches[0].clientX : startX) 
+      : e.clientX;
+    
+    // 如果手指僅僅是「點擊」或微小滑動（例如點擊輸入區域），不要觸發強制 snapping
+    const totalDeltaX = Math.abs(clientX - startX);
+    if (totalDeltaX < DRAG_THRESHOLD) {
         return;
     }
     
-    // Check teleport BEFORE setting targetX, so we always stay in safe bounding center
+    // Teleport check before momentum
     const total = track.children.length;
     const baseN = _sfResults.length;
     if (baseN > 0 && total >= baseN * 3) {
@@ -3763,29 +3862,88 @@ function setup2DCarouselInteraction() {
         }
     }
     
-    // 依據拖曳速度計算慣性滑動距離 (摩擦力模擬 - 阻力提高以避免隨便飄走)
-    const friction = 0.005;
-    let momentumDist = (velocityX * Math.abs(velocityX)) / (2 * friction);
+    // ═══════ Instagram-like momentum with exponential decay ═══════
+    const flickVelocity = getWeightedVelocity(); // px/ms
+    const absVel = Math.abs(flickVelocity);
     
-    // 上下限保護 (降低極限距離，保持絲滑同時避免輕碰就噴走)
-    if (momentumDist > 1500) momentumDist = 1500;
-    if (momentumDist < -1500) momentumDist = -1500;
-
-    let targetX = _currentX + momentumDist;
-    const maxIdx = track.children.length - 1;
-    let newIndex = Math.round(-targetX / _cardWidth);
-    if (newIndex < 0) newIndex = 0;
-    if (newIndex > maxIdx) newIndex = maxIdx;
+    if (absVel < MIN_VELOCITY) {
+      // No meaningful velocity — just snap to nearest
+      const nearestIdx = Math.round(-_currentX / _cardWidth);
+      springSnapTo(nearestIdx);
+      return;
+    }
     
-    // 根據要滑動的實際距離動態計算動畫時間
-    const distToTravel = Math.abs((newIndex * _cardWidth) + _currentX);
-    let time = 0.4 + (distToTravel / 2500); 
-    if (time > 1.2) time = 1.2;
-    if (time < 0.4) time = 0.4;
-    _currentTransitionTime = time;
-
-    _currentX += momentumDist;
-    snapToNearest();
+    // Estimate how far the momentum will carry us (integral of exponential decay)
+    // distance = v0 * decelRate / (1 - decelRate) — geometric series with 60fps assumption
+    const frameTime = 16.67; // ~60fps
+    const momentumDist = flickVelocity * frameTime * DECEL_RATE / (1 - DECEL_RATE);
+    
+    // Target position after momentum
+    let projectedX = _currentX + momentumDist;
+    let targetIdx = Math.round(-projectedX / _cardWidth);
+    
+    // Clamp flick distance to MAX_FLICK_CARDS
+    const currentIdx = Math.round(-_currentX / _cardWidth);
+    const maxDelta = MAX_FLICK_CARDS;
+    if (targetIdx > currentIdx + maxDelta) targetIdx = currentIdx + maxDelta;
+    if (targetIdx < currentIdx - maxDelta) targetIdx = currentIdx - maxDelta;
+    
+    // Ensure minimum 1 card movement for any meaningful flick
+    if (absVel > 0.3) {
+      if (flickVelocity < 0 && targetIdx <= currentIdx) targetIdx = currentIdx + 1; // swipe left → next card
+      if (flickVelocity > 0 && targetIdx >= currentIdx) targetIdx = currentIdx - 1; // swipe right → prev card
+    }
+    
+    // ═══════ Deceleration phase → spring snap ═══════
+    // Run rAF-based exponential decay until velocity drops, then spring snap
+    if (_momentumFrame) cancelAnimationFrame(_momentumFrame);
+    if (_animFrame) cancelAnimationFrame(_animFrame);
+    
+    let vel = flickVelocity * frameTime; // convert to px/frame
+    const targetX = -(targetIdx * _cardWidth);
+    
+    function momentumStep() {
+      vel *= DECEL_RATE;
+      _currentX += vel;
+      
+      track.style.transition = 'none';
+      track.style.transform = `translateX(${_currentX}px)`;
+      updateContinuousScale(_currentX);
+      
+      // Teleport during momentum if needed
+      const total2 = track.children.length;
+      const baseN2 = _sfResults.length;
+      if (baseN2 > 0 && total2 >= baseN2 * 3) {
+          let thresholdLeft = -_cardWidth * (total2 * 0.3);
+          let thresholdRight = -_cardWidth * (total2 * 0.7);
+          if (_currentX > thresholdLeft || _currentX < thresholdRight) {
+              const centerPos = -Math.floor(total2 / 2) * _cardWidth;
+              const diff = centerPos - _currentX;
+              const shiftMultiples = Math.round(diff / (baseN2 * _cardWidth));
+              const shiftDist = shiftMultiples * baseN2 * _cardWidth;
+              _currentX += shiftDist;
+          }
+      }
+      
+      // When velocity is low enough, transition to spring snap for the final approach
+      if (Math.abs(vel) < 1.5) {
+        // Switch to spring-based snap for buttery final settle
+        springSnapTo(targetIdx);
+        return;
+      }
+      
+      // If we've passed the target substantially, start spring snap early
+      const distToTarget = targetX - _currentX;
+      if ((vel > 0 && distToTarget > _cardWidth * 0.5) || (vel < 0 && distToTarget < -_cardWidth * 0.5)) {
+        // Overshot — spring back
+        springSnapTo(targetIdx);
+        return;
+      }
+      
+      _momentumFrame = requestAnimationFrame(momentumStep);
+    }
+    
+    _momentumFrame = requestAnimationFrame(momentumStep);
   }
 
   area.addEventListener('mousedown', onDown);
@@ -3793,10 +3951,7 @@ function setup2DCarouselInteraction() {
   window.addEventListener('mouseup', onUp);
   
   area.addEventListener('touchstart', onDown, { passive: true });
-  area.addEventListener('touchmove', (e) => {
-      if (isDragging) e.preventDefault(); 
-      onMove(e);
-  }, { passive: false });
+  area.addEventListener('touchmove', onMove, { passive: false });
   window.addEventListener('touchend', onUp);
 }
 

@@ -3373,8 +3373,7 @@ body.panzi-mode .sqd-meta { display: none !important; }
    HIGH-END UI/UX NEUMORPHIC-GLASS OVERRIDES
    ======================================================== */
 
-/* Elegant Base Glass Cards with Soft Pop-out */
-.sq-card, .modal-card, .settings-card,
+.sq-card, .settings-card,
 .sqd-card, .big-stat, .sm-stat, .rc-stat, .student-row,
 .empty-bed-action, .fab-empty-bed {
   background: var(--card);
@@ -3385,12 +3384,12 @@ body.panzi-mode .sqd-meta { display: none !important; }
   transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* Modals should be extremely soft */
+/* Modals should be extremely soft — NO neumorphic glow */
 .modal-card {
   border-radius: 32px;
-  background: var(--bg2); /* solid base to avoid muddy stacking blur */
-  border: 1px solid var(--border);
-  box-shadow: var(--neu-out), 0 24px 64px rgba(0,0,0,0.1);
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  box-shadow: 0 24px 64px rgba(0,0,0,0.5);
 }
 
 .bottom-nav {
@@ -3842,7 +3841,7 @@ body.light-mode .focus-indicator { background: #6366f1; }
   overflow: hidden;
   display: flex;
   align-items: center;
-  touch-action: pan-y;
+  touch-action: manipulation;
   -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 5%, black 95%, transparent 100%);
   mask-image: linear-gradient(90deg, transparent 0%, black 5%, black 95%, transparent 100%);
 }
@@ -3923,6 +3922,7 @@ body.light-mode .focus-indicator { background: #6366f1; }
   box-shadow: none;
 }
 
+/* Card back-face (main visual surface) */
 .sf-student-card-2d::after {
   content: '';
   position: absolute;
@@ -3937,8 +3937,33 @@ body.light-mode .focus-indicator { background: #6366f1; }
   transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* Card thickness layer — visible only in 3D mode, creates extrusion depth */
+.sf-student-card-2d::before {
+  content: '';
+  position: absolute;
+  top: 2px; left: 2px; right: 2px; bottom: 2px;
+  border-radius: 30px;
+  background: linear-gradient(180deg, rgba(60,60,70,0.9) 0%, rgba(35,35,42,0.95) 100%);
+  z-index: -2;
+  transform: translateZ(-8px);
+  opacity: 0;
+  box-shadow: 
+    -2px 0 0 rgba(50,50,60,0.9),
+    -4px 2px 0 rgba(40,40,50,0.85),
+    -6px 4px 0 rgba(30,30,40,0.8),
+    -8px 6px 0 rgba(25,25,35,0.75),
+    -12px 10px 20px rgba(0,0,0,0.5);
+  transition: opacity 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
 .sf-student-card-2d.is-3d-active::after {
   box-shadow: rgba(0, 0, 0, 0.45) -15px 25px 30px -10px;
+}
+
+/* Show thickness extrusion in 3D mode */
+.sf-student-card-2d.is-3d-active::before {
+  opacity: 1;
+  transform: translateZ(-8px);
 }
 
 .sf-card-title {
@@ -3976,12 +4001,14 @@ body.light-mode .focus-indicator { background: #6366f1; }
   box-shadow: var(--neu-in);
   width: 100%;
   box-sizing: border-box;
-  transition: all 0.3s;
+  transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .sf-form-group input[type="text"]:focus,
 .sf-form-group textarea:focus {
-  box-shadow: var(--neu-in), 0 0 0 2px var(--blue);
+  box-shadow: var(--neu-out), 0 0 0 2px var(--blue);
+  transform: translateY(-2px);
+  border-color: rgba(99, 102, 241, 0.3);
 }
 
 .sf-toggles {
@@ -4098,28 +4125,51 @@ body.light-mode .focus-indicator { background: #6366f1; }
   transform: translateZ(20px);
   background: var(--card); /* ensure solidity */
   border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
   box-shadow: 
     -1px 1px 0 rgba(80,80,80,0.8),
     -2px 2px 0 rgba(70,70,70,0.8),
     -3px 3px 0 rgba(60,60,60,0.8),
     -4px 4px 0 rgba(50,50,50,0.8),
     -12px 18px 25px rgba(0,0,0,0.4);
+  /* Smooth tectonic plate transition */
+  transition: 
+    transform 1s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 1s cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.5s ease;
 }
 .sf-student-card-2d.is-3d-active .sf-form-group input:hover,
-.sf-student-card-2d.is-3d-active .sf-form-group input:focus,
-.sf-student-card-2d.is-3d-active .sf-form-group textarea:hover,
-.sf-student-card-2d.is-3d-active .sf-form-group textarea:focus {
-  transform: translateZ(35px);
+.sf-student-card-2d.is-3d-active .sf-form-group textarea:hover {
+  transform: translateZ(28px);
   background: var(--card);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
   box-shadow: 
     -1px 1px 0 rgba(80,80,80,0.8),
     -2px 2px 0 rgba(70,70,70,0.8),
-    -3px 3px 0 rgba(60,60,60,0.8),
-    -4px 4px 0 rgba(50,50,50,0.8),
-    -5px 5px 0 rgba(40,40,40,0.8),
-    -6px 6px 0 rgba(30,30,30,0.8),
-    -15px 25px 35px rgba(0,0,0,0.5);
+    -3px 3px 0 rgba(60,60,60,0.75),
+    -4px 4px 0 rgba(55,55,55,0.7),
+    -5px 5px 0 rgba(50,50,50,0.65),
+    -14px 22px 30px rgba(0,0,0,0.45);
+}
+.sf-student-card-2d.is-3d-active .sf-form-group input:focus,
+.sf-student-card-2d.is-3d-active .sf-form-group textarea:focus {
+  transform: translateZ(40px);
+  background: var(--card);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: 16px;
+  box-shadow: 
+    -1px 1px 0 rgba(80,80,80,0.85),
+    -2px 2px 0 rgba(72,72,72,0.8),
+    -3px 3px 0 rgba(64,64,64,0.75),
+    -4px 4px 0 rgba(56,56,56,0.7),
+    -5px 5px 0 rgba(48,48,48,0.65),
+    -6px 6px 0 rgba(40,40,40,0.6),
+    -7px 7px 0 rgba(35,35,35,0.55),
+    -8px 8px 0 rgba(30,30,30,0.5),
+    -18px 28px 40px rgba(0,0,0,0.55),
+    0 0 0 2px rgba(99, 102, 241, 0.2);
 }
 
 .sf-student-card-2d.is-3d-active .sf-toggles {
@@ -4258,12 +4308,46 @@ body.light-mode .sf-student-card-2d {
 body.light-mode .sf-student-card-2d::after {
   background: linear-gradient(90deg, #6366f1, #d946ef, #8b5cf6) top/100% 4px no-repeat, rgba(255,255,255,0.92);
 }
+/* Light mode 3D thickness */
+body.light-mode .sf-student-card-2d::before {
+  background: linear-gradient(180deg, rgba(200,200,210,0.95) 0%, rgba(180,180,195,0.9) 100%);
+  box-shadow: 
+    -2px 0 0 rgba(190,190,200,0.9),
+    -4px 2px 0 rgba(175,175,185,0.85),
+    -6px 4px 0 rgba(160,160,170,0.8),
+    -8px 6px 0 rgba(150,150,160,0.75),
+    -12px 10px 20px rgba(0,0,0,0.15);
+}
 body.light-mode .sf-form-group input[type="text"],
 body.light-mode .sf-form-group textarea {
   background: rgba(0,0,0,0.04);
   border-color: rgba(0,0,0,0.1);
   color: #333;
-  box-shadow: inset 2px 2px 4px rgba(0,0,0,0.06), inset -2px -2px 4px rgba(255,255,255,0.8);
+  box-shadow: var(--neu-in);
+}
+/* Light mode 3D tectonic plate */
+body.light-mode .sf-student-card-2d.is-3d-active .sf-form-group input,
+body.light-mode .sf-student-card-2d.is-3d-active .sf-form-group textarea {
+  box-shadow:
+    -1px 1px 0 rgba(180,180,195,0.9),
+    -2px 2px 0 rgba(170,170,185,0.85),
+    -3px 3px 0 rgba(160,160,175,0.8),
+    -4px 4px 0 rgba(150,150,165,0.75),
+    -10px 15px 20px rgba(0,0,0,0.12);
+}
+body.light-mode .sf-student-card-2d.is-3d-active .sf-form-group input:focus,
+body.light-mode .sf-student-card-2d.is-3d-active .sf-form-group textarea:focus {
+  box-shadow:
+    -1px 1px 0 rgba(180,180,195,0.9),
+    -2px 2px 0 rgba(170,170,185,0.85),
+    -3px 3px 0 rgba(160,160,175,0.8),
+    -4px 4px 0 rgba(150,150,165,0.75),
+    -5px 5px 0 rgba(140,140,155,0.7),
+    -6px 6px 0 rgba(130,130,145,0.65),
+    -7px 7px 0 rgba(120,120,135,0.6),
+    -8px 8px 0 rgba(110,110,125,0.55),
+    -16px 24px 35px rgba(0,0,0,0.18),
+    0 0 0 2px rgba(99, 102, 241, 0.25);
 }
 body.light-mode .sf-card-badge-relative {
   background: rgba(99,102,241,0.1);
@@ -4451,6 +4535,7 @@ body.light-mode .confirm-btn.cancel-btn {
 }
 .confetti-piece {
   position: absolute;
+  top: -10px;
   width: 10px; height: 10px;
   border-radius: 2px;
   animation: confettiFall var(--fall-dur, 2.5s) var(--fall-delay, 0s) cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
@@ -4458,14 +4543,20 @@ body.light-mode .confirm-btn.cancel-btn {
 @keyframes confettiFall {
   0% {
     opacity: 1;
-    transform: translateY(-20vh) rotate(0deg) scale(1);
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  25% {
+    transform: translateY(25vh) rotate(180deg) translateX(var(--conf-sway, 15px)) scale(0.9);
+  }
+  50% {
+    transform: translateY(50vh) rotate(360deg) translateX(calc(-1 * var(--conf-sway, 15px))) scale(0.8);
   }
   80% {
     opacity: 1;
   }
   100% {
     opacity: 0;
-    transform: translateY(105vh) rotate(var(--conf-rot, 720deg)) scale(0.4);
+    transform: translateY(105vh) rotate(var(--conf-rot, 720deg)) scale(0.3);
   }
 }
 
