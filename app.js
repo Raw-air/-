@@ -3534,22 +3534,35 @@ function setup2DCarouselInteraction() {
   // Velocity tracking ring buffer — last N samples
   let _velocitySamples = [];
   let _momentumFrame = null;
+  let _isAnimating = false; // true while momentum/spring is running
+  
+  // Helper: cancel all running animations and clean up frame IDs
+  function cancelAllAnimations() {
+    if (_momentumFrame) { cancelAnimationFrame(_momentumFrame); _momentumFrame = null; }
+    if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null; }
+    _isAnimating = false;
+  }
   
   window._restart3DTimer = function() {
       disable3D();
-      _3dTimer = setTimeout(enable3D, 2000);
+      _3dTimer = setTimeout(enable3D, 1200);
   };
 
   function enable3D() {
+    // Guard: don't enter 3D if user is dragging or animations still running
+    if (isDragging || _isAnimating) return;
+    
     const activeCard = Array.from(track.children).find(c => c.classList.contains('active'));
     if (activeCard) {
        activeCard.classList.add('is-3d-active');
+       _3dCardIndex = _sfActiveIndex;
        window._is3dMode = true;
        if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
     }
   }
 
   function disable3D() {
+    const was3dMode = window._is3dMode;
     window._is3dMode = false;
     if (_3dTimer) {
       clearTimeout(_3dTimer);
@@ -3561,11 +3574,13 @@ function setup2DCarouselInteraction() {
           c.classList.remove('is-3d-active');
           
           c.dataset.was3d = 'true';
-          setTimeout(() => { c.dataset.was3d = 'false'; }, 500);
+          // Extended timeout: give the CSS transition enough time to fully complete (1s transition + buffer)
+          setTimeout(() => { c.dataset.was3d = 'false'; }, 1200);
           changed = true;
-       } else {
+       } else if (was3dMode) {
+          // Only mark wasAway if we were actually in 3D mode (side cards were spread out)
           c.dataset.wasAway = 'true';
-          setTimeout(() => { c.dataset.wasAway = 'false'; }, 500);
+          setTimeout(() => { c.dataset.wasAway = 'false'; }, 1200);
           changed = true;
        }
     });
@@ -3593,6 +3608,21 @@ function setup2DCarouselInteraction() {
     
     return weightTotal > 0 ? weightedSum / weightTotal : 0;
   }
+  // Track which card index is in 3D, for displacement calculation
+  let _3dCardIndex = -1;
+  
+  // Softly stop the side-card spread without removing is-3d-active from active card
+  function softDisable3DSpread() {
+    window._is3dMode = false;
+    if (_3dTimer) { clearTimeout(_3dTimer); _3dTimer = null; }
+    // Mark side cards for smooth return transition
+    Array.from(track.children).forEach(c => {
+       if (!c.classList.contains('is-3d-active')) {
+          c.dataset.wasAway = 'true';
+          setTimeout(() => { c.dataset.wasAway = 'false'; }, 1200);
+       }
+    });
+  }
   
   function teleportToCenterIfNeeded() {
     const total = track.children.length;
@@ -3614,25 +3644,16 @@ function setup2DCarouselInteraction() {
     if (scene.classList.contains('is-searching')) return; 
     
     // Stop any ongoing momentum animation immediately (like IG — touching stops glide)
-    if (_momentumFrame) {
-      cancelAnimationFrame(_momentumFrame);
-      _momentumFrame = null;
-    }
-    if (_animFrame) {
-      cancelAnimationFrame(_animFrame);
-      _animFrame = null;
-    }
+    cancelAllAnimations();
     
     const targetCard = e.target.closest('.sf-student-card-2d');
-    
-    // 只要點到目前的有效(Active)卡片，就絕對不要中斷 3D 體驗！讓使用者安心點擊輸入框
     const isClickOnActive = targetCard && targetCard.classList.contains('active');
     
+    // If clicking on non-active card, fully disable 3D
     if (!isClickOnActive) {
         disable3D();
     }
     
-    // 無縫傳送校正
     teleportToCenterIfNeeded();
 
     isDragging = true;
@@ -3659,22 +3680,17 @@ function setup2DCarouselInteraction() {
     if (isHorizontalSwipe === null && (Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD)) {
       isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
       if (!isHorizontalSwipe) {
-        // It's a vertical scroll — release and let native scrolling happen
         isDragging = false;
         return;
       }
+      // First confirmed horizontal swipe — softly retract side cards but keep active card's 3D
+      if (window._is3dMode) {
+        softDisable3DSpread();
+      }
     }
     
-    // Don't process until direction is confirmed
     if (isHorizontalSwipe !== true && Math.abs(deltaX) < DRAG_THRESHOLD) return;
-    
-    // Prevent vertical scrolling when swiping horizontally
     if (e.cancelable) e.preventDefault();
-    
-    // 如果滑動量明顯，才取消 3D 狀態避免使用者點擊輸入框誤觸
-    if (Math.abs(deltaX) > 40) {
-       disable3D(); 
-    }
     
     // Record velocity sample
     const now = performance.now();
@@ -3683,7 +3699,6 @@ function setup2DCarouselInteraction() {
     if (dt > 0) {
       const v = (clientX - lastSample.x) / dt;
       _velocitySamples.push({ x: clientX, time: now, velocity: v });
-      // Keep only recent samples
       if (_velocitySamples.length > VELOCITY_SAMPLES) {
         _velocitySamples.shift();
       }
@@ -3742,18 +3757,49 @@ function setup2DCarouselInteraction() {
         c.style.filter = 'none';
         
         if (c.classList.contains('is-3d-active')) {
-            c.style.transition = 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
-            c.style.transform = `perspective(1000px) rotate3d(0.5, 1, 0, 15deg) scale(${scale + 0.05})`;
-            c.style.opacity = '1';
+            // ═══════ Progressive 3D rotation based on displacement ═══════
+            // Calculate how far this card has moved from its snap position
+            const snapIdx = _3dCardIndex >= 0 ? _3dCardIndex : _sfActiveIndex;
+            const displacement = Math.abs(i - centerIdxFloat); // how far from center
+            
+            // Interpolate rotation: full 15deg at center, 0deg at 0.6 cards away
+            const rotProgress = Math.max(0, Math.min(1, 1 - displacement / 0.6));
+            const rotAngle = 15 * rotProgress;
+            const scaleBoost = 0.05 * rotProgress;
+            
+            // If too far from home, fully flatten and remove 3D
+            if (displacement > 0.65 && isDragging) {
+                c.classList.remove('is-3d-active');
+                c.dataset.was3d = 'true';
+                _3dCardIndex = -1;
+                setTimeout(() => { c.dataset.was3d = 'false'; }, 1200);
+                // Apply flat transform immediately
+                c.style.transition = 'transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s';
+                c.style.transform = `translateX(0px) scale(${scale})`;
+            } else {
+                // Smooth responsive transition during drag
+                c.style.transition = isDragging 
+                    ? 'transform 0.15s ease-out' 
+                    : 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
+                c.style.transform = `perspective(1000px) rotate3d(0.5, 1, 0, ${rotAngle}deg) scale(${scale + scaleBoost})`;
+                c.style.opacity = '1';
+            }
         } else {
+            // ═══════ 2D card transitions ═══════
             if (isDragging) {
-                if (c.dataset.was3d === 'true' || c.dataset.wasAway === 'true') {
-                    c.style.transition = 'transform 0.5s cubic-bezier(0.2, 0.9, 0.3, 1)';
+                if (c.dataset.was3d === 'true') {
+                    c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
+                } else if (c.dataset.wasAway === 'true') {
+                    c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
                 } else {
                     c.style.transition = 'none';
                 }
             } else {
-                c.style.transition = 'transform 0.5s cubic-bezier(0.3, 0.9, 0.4, 1)';
+                if (c.dataset.was3d === 'true' || c.dataset.wasAway === 'true') {
+                    c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
+                } else {
+                    c.style.transition = 'transform 0.5s cubic-bezier(0.3, 0.9, 0.4, 1)';
+                }
             }
             
             if (window._is3dMode && !isDragging) {
@@ -3776,15 +3822,13 @@ function setup2DCarouselInteraction() {
     _sfActiveIndex = targetIndex;
     const targetX = -(_sfActiveIndex * _cardWidth);
     
-    // Update active visual class
     Array.from(track.children).forEach((c, i) => {
         c.classList.toggle('active', i === _sfActiveIndex);
     });
 
-    if (_momentumFrame) cancelAnimationFrame(_momentumFrame);
-    if (_animFrame) cancelAnimationFrame(_animFrame);
+    cancelAllAnimations();
+    _isAnimating = true;
     
-    // Spring physics: position approaches target with damped oscillation
     let springVel = 0;
     let springPos = _currentX;
     const startTime = performance.now();
@@ -3795,31 +3839,28 @@ function setup2DCarouselInteraction() {
       springVel = (springVel + springForce) * SNAP_SPRING_DAMPING;
       springPos += springVel;
       
-      // Apply position
       _currentX = springPos;
       track.style.transition = 'none';
       track.style.transform = `translateX(${_currentX}px)`;
       updateContinuousScale(_currentX);
       
-      // Check convergence
       if (Math.abs(displacement) < 0.5 && Math.abs(springVel) < 0.1) {
-        // Settled — snap exactly
         _currentX = targetX;
         track.style.transform = `translateX(${_currentX}px)`;
         updateContinuousScale(_currentX);
-        
-        // 無縫傳送校正
+        _animFrame = null;
+        _isAnimating = false;
         teleportToCenterIfNeeded();
-        
         if (window._restart3DTimer) window._restart3DTimer();
         return;
       }
       
-      // Safety timeout (2.5s max)
       if (performance.now() - startTime > 2500) {
         _currentX = targetX;
         track.style.transform = `translateX(${_currentX}px)`;
         updateContinuousScale(_currentX);
+        _animFrame = null;
+        _isAnimating = false;
         teleportToCenterIfNeeded();
         if (window._restart3DTimer) window._restart3DTimer();
         return;
@@ -3839,13 +3880,13 @@ function setup2DCarouselInteraction() {
       ? (e.changedTouches ? e.changedTouches[0].clientX : startX) 
       : e.clientX;
     
-    // 如果手指僅僅是「點擊」或微小滑動（例如點擊輸入區域），不要觸發強制 snapping
+    // 點擊不觸發 snapping
     const totalDeltaX = Math.abs(clientX - startX);
     if (totalDeltaX < DRAG_THRESHOLD) {
         return;
     }
     
-    // Teleport check before momentum
+    // Teleport check
     const total = track.children.length;
     const baseN = _sfResults.length;
     if (baseN > 0 && total >= baseN * 3) {
@@ -3853,7 +3894,6 @@ function setup2DCarouselInteraction() {
         const diff = centerPos - _currentX;
         const shiftMultiples = Math.round(diff / (baseN * _cardWidth));
         const shiftDist = shiftMultiples * baseN * _cardWidth;
-        
         if (shiftDist !== 0) {
             _currentX += shiftDist;
             track.style.transition = 'none';
@@ -3862,45 +3902,24 @@ function setup2DCarouselInteraction() {
         }
     }
     
-    // ═══════ Instagram-like momentum with exponential decay ═══════
+    // ═══════ Pure velocity-driven momentum ═══════
     const flickVelocity = getWeightedVelocity(); // px/ms
-    const absVel = Math.abs(flickVelocity);
     
-    if (absVel < MIN_VELOCITY) {
-      // No meaningful velocity — just snap to nearest
-      const nearestIdx = Math.round(-_currentX / _cardWidth);
-      springSnapTo(nearestIdx);
+    if (Math.abs(flickVelocity) < MIN_VELOCITY) {
+      springSnapTo(Math.round(-_currentX / _cardWidth));
       return;
     }
     
-    // Estimate how far the momentum will carry us (integral of exponential decay)
-    // distance = v0 * decelRate / (1 - decelRate) — geometric series with 60fps assumption
-    const frameTime = 16.67; // ~60fps
-    const momentumDist = flickVelocity * frameTime * DECEL_RATE / (1 - DECEL_RATE);
+    cancelAllAnimations();
+    _isAnimating = true;
     
-    // Target position after momentum
-    let projectedX = _currentX + momentumDist;
-    let targetIdx = Math.round(-projectedX / _cardWidth);
+    const frameTime = 16.67;
+    let vel = flickVelocity * frameTime; // px/frame
     
-    // Clamp flick distance to MAX_FLICK_CARDS
-    const currentIdx = Math.round(-_currentX / _cardWidth);
-    const maxDelta = MAX_FLICK_CARDS;
-    if (targetIdx > currentIdx + maxDelta) targetIdx = currentIdx + maxDelta;
-    if (targetIdx < currentIdx - maxDelta) targetIdx = currentIdx - maxDelta;
-    
-    // Ensure minimum 1 card movement for any meaningful flick
-    if (absVel > 0.3) {
-      if (flickVelocity < 0 && targetIdx <= currentIdx) targetIdx = currentIdx + 1; // swipe left → next card
-      if (flickVelocity > 0 && targetIdx >= currentIdx) targetIdx = currentIdx - 1; // swipe right → prev card
-    }
-    
-    // ═══════ Deceleration phase → spring snap ═══════
-    // Run rAF-based exponential decay until velocity drops, then spring snap
-    if (_momentumFrame) cancelAnimationFrame(_momentumFrame);
-    if (_animFrame) cancelAnimationFrame(_animFrame);
-    
-    let vel = flickVelocity * frameTime; // convert to px/frame
-    const targetX = -(targetIdx * _cardWidth);
+    // Clamp maximum initial velocity to prevent explosion on fast flicks
+    const maxVel = _cardWidth * 0.4; // max ~0.4 card widths per frame
+    if (vel > maxVel) vel = maxVel;
+    if (vel < -maxVel) vel = -maxVel;
     
     function momentumStep() {
       vel *= DECEL_RATE;
@@ -3925,18 +3944,11 @@ function setup2DCarouselInteraction() {
           }
       }
       
-      // When velocity is low enough, transition to spring snap for the final approach
-      if (Math.abs(vel) < 1.5) {
-        // Switch to spring-based snap for buttery final settle
-        springSnapTo(targetIdx);
-        return;
-      }
-      
-      // If we've passed the target substantially, start spring snap early
-      const distToTarget = targetX - _currentX;
-      if ((vel > 0 && distToTarget > _cardWidth * 0.5) || (vel < 0 && distToTarget < -_cardWidth * 0.5)) {
-        // Overshot — spring back
-        springSnapTo(targetIdx);
+      // When velocity drops low, spring-snap to whatever card is nearest NOW
+      if (Math.abs(vel) < 0.5) {
+        _momentumFrame = null;
+        const nearestIdx = Math.round(-_currentX / _cardWidth);
+        springSnapTo(nearestIdx);
         return;
       }
       
