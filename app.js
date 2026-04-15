@@ -16,6 +16,91 @@ const state = {
   confirmedSquads: [],
 };
 
+// ─── 音訊上下文 (全域共用) ───────────────────────────────────────────
+let audioCtx = null;
+
+// ─── 觸覺回饋 (Android vibrate + iOS AudioContext fallback) ──────────────
+function haptic(type = 'light') {
+  // Android: native vibration
+  if (navigator.vibrate) {
+    switch(type) {
+      case 'light':  navigator.vibrate(10); break;
+      case 'medium': navigator.vibrate(20); break;
+      case 'heavy':  navigator.vibrate([10, 30, 10]); break;
+      case 'error':  navigator.vibrate([50, 30, 50, 30, 50]); break;
+    }
+    return;
+  }
+  // iOS fallback: use a very short, nearly-silent AudioContext pulse as tactile feedback
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1, t); // Sub-audible frequency
+    gain.gain.setValueAtTime(0.01, t);  // Nearly silent
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.02);
+    osc.start(t); osc.stop(t + 0.03);
+  } catch(e) {}
+}
+
+// ─── 自訂確認對話框 (替代原生 confirm) ─────────────────────────────────────
+function showConfirmDialog({ title, message, confirmText = '確定', cancelText = '取消', danger = false, icon = '⚠️' }) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    overlay.innerHTML = `
+      <div class="confirm-card">
+        <div class="confirm-icon">${icon}</div>
+        <div class="confirm-title">${title}</div>
+        <div class="confirm-msg">${message}</div>
+        <div class="confirm-actions">
+          <button class="confirm-btn cancel-btn" id="cfd-cancel">${cancelText}</button>
+          <button class="confirm-btn ${danger ? 'danger-btn' : 'primary-btn'}" id="cfd-confirm">${confirmText}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('visible'));
+
+    const cleanup = (result) => {
+      overlay.classList.remove('visible');
+      setTimeout(() => overlay.remove(), 300);
+      resolve(result);
+    };
+
+    overlay.querySelector('#cfd-cancel').onclick = () => { playClickSound('back'); cleanup(false); };
+    overlay.querySelector('#cfd-confirm').onclick = () => { playClickSound('confirm'); haptic('medium'); cleanup(true); };
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(false); });
+  });
+}
+
+// ─── 🎊 撒花慶祝效果 ──────────────────────────────────────────────────────
+function launchConfetti() {
+  const container = document.createElement('div');
+  container.className = 'confetti-container';
+  const colors = ['#8b5cf6','#6366f1','#d946ef','#f59e0b','#22c55e','#0ea5e9','#ef4444','#f472b6'];
+  for (let i = 0; i < 60; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = Math.random() * 100 + '%';
+    piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.setProperty('--fall-dur', (2.2 + Math.random() * 2).toFixed(1) + 's');
+    piece.style.setProperty('--fall-delay', (Math.random() * 0.8).toFixed(2) + 's');
+    piece.style.setProperty('--conf-rot', (360 + Math.random() * 720).toFixed(0) + 'deg');
+    piece.style.setProperty('--conf-sway', (10 + Math.random() * 30).toFixed(0) + 'px');
+    piece.style.width = (6 + Math.random() * 8) + 'px';
+    piece.style.height = (6 + Math.random() * 8) + 'px';
+    piece.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    container.appendChild(piece);
+  }
+  document.body.appendChild(container);
+  setTimeout(() => container.remove(), 5000);
+}
+
 // ─── 初始化 ─────────────────────────────────────────────────────────────────
 window.addEventListener('error', (e) => {
   showLoading(false);
@@ -35,7 +120,6 @@ window.addEventListener('pointerdown', (e) => {
   }
 }, { passive: true });
 // ─── UI 清脆音效 (Web Audio API) ───────────────────────────────────────────
-let audioCtx = null;
 function playClickSound(type = 'default') {
   if (localStorage.getItem('mute_sound') === 'true') return;
   try {
@@ -426,25 +510,33 @@ function toggleWhiteMode(el, event) {
     const clipPathStart = `circle(${startRadius}px at ${x}px ${y}px)`;
     const clipPathEnd = `circle(${targetRadius}px at ${x}px ${y}px)`;
 
-    // 改用全環境最穩定的 CSS @keyframes 動態注入，徹底取代有 Bug 的 WAAPI pseudoElement
-    let fallbackStyle = document.getElementById('vt-fallback');
-    if (!fallbackStyle) {
-      fallbackStyle = document.createElement('style');
-      fallbackStyle.id = 'vt-fallback';
-      document.head.appendChild(fallbackStyle);
-    }
-    const prefix = isDark ? 'html.transition-dark' : '';
+    // ⚡ 使用 Web Animations API 直接驅動偽元素，避免動態注入 @keyframes 觸發 style recalc
     const pseudo = isDark ? '::view-transition-old(root)' : '::view-transition-new(root)';
-    const animName = 'vt-circle-anim-' + Date.now();
-    fallbackStyle.textContent = `
-      @keyframes ${animName} {
-        from { clip-path: ${clipPathStart}; }
-        to   { clip-path: ${clipPathEnd}; }
+    try {
+      document.documentElement.animate(
+        { clipPath: [clipPathStart, clipPathEnd] },
+        { duration, easing: 'ease-out', fill: 'forwards', pseudoElement: pseudo }
+      );
+    } catch (_) {
+      // 降級方案：若 Web Animations API 不支援 pseudoElement，用注入 style 方式
+      let fallbackStyle = document.getElementById('vt-fallback');
+      if (!fallbackStyle) {
+        fallbackStyle = document.createElement('style');
+        fallbackStyle.id = 'vt-fallback';
+        document.head.appendChild(fallbackStyle);
       }
-      ${prefix}${pseudo} {
-        animation: ${animName} ${duration}ms ease-out forwards !important;
-      }
-    `;
+      const prefix = isDark ? 'html.transition-dark' : '';
+      const animName = 'vt-circle-anim-' + Date.now();
+      fallbackStyle.textContent = `
+        @keyframes ${animName} {
+          from { clip-path: ${clipPathStart}; }
+          to   { clip-path: ${clipPathEnd}; }
+        }
+        ${prefix}${pseudo} {
+          animation: ${animName} ${duration}ms ease-out forwards !important;
+        }
+      `;
+    }
   }).catch(() => {});
 
   transition.finished.finally(() => {
@@ -796,6 +888,12 @@ function navigateTo(page) {
   const fromPage = currentPage;
   currentPage = page;
 
+  // 判斷導航方向
+  const navOrder = ['home', 'rollcall', 'summary', 'history', 'settings'];
+  const fromIdx = navOrder.indexOf(fromPage);
+  const toIdx = navOrder.indexOf(page);
+  const isForward = toIdx > fromIdx;  // 沒找到的頁面(-1)一律視為前進
+
   // 立刻更新導覽列 & 按鈕狀態
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
@@ -815,14 +913,21 @@ function navigateTo(page) {
   if (customBg) customBg.classList.toggle('hidden-bg', !isHome);
   if (animBg) animBg.classList.toggle('hidden-bg', !isHome);
 
+  // 選擇方向性動畫
+  const enterAnim = fromIdx < 0 || toIdx < 0 ? 'fadeUp' : (isForward ? 'slideInRight' : 'slideInLeft');
+  const exitAnim = fromIdx < 0 || toIdx < 0 ? 'pageExit' : (isForward ? 'pageExitLeft' : 'pageExitRight');
+
   function showNewPage() {
     document.querySelectorAll('.page').forEach(p => { p.classList.remove('active'); p.style.animation = ''; });
-    if (toEl) toEl.classList.add('active');
+    if (toEl) {
+      toEl.classList.add('active');
+      toEl.style.animation = `${enterAnim} 0.28s cubic-bezier(0.16, 1, 0.3, 1)`;
+    }
     renderCurrentPage();
   }
 
   if (fromEl && fromEl.classList.contains('active')) {
-    fromEl.style.animation = 'pageExit 0.18s ease forwards';
+    fromEl.style.animation = `${exitAnim} 0.18s ease forwards`;
     setTimeout(showNewPage, 170);
   } else {
     showNewPage();
@@ -906,7 +1011,7 @@ function renderHome() {
 
     const animClass = isInitialHomeRender ? 'pop-initial' : 'pop-return';
 
-    const baseDelay = isInitialHomeRender ? 3.0 : 0; // 折衷給您 3.0 秒
+    const baseDelay = isInitialHomeRender ? 0.3 : 0; // 快速卡片進場
     const delay = (baseDelay + i * 0.03).toFixed(2) + 's';
 
     return `
@@ -939,7 +1044,7 @@ function renderHome() {
     const squadCount = CONFIG.SQUADS.length;
     managementGrid.innerHTML = roles.map((role, i) => {
       const animClass = isInitialHomeRender ? 'pop-initial' : 'pop-return';
-      const baseDelay = isInitialHomeRender ? 3.0 : 0;
+      const baseDelay = isInitialHomeRender ? 0.3 : 0;
       const delay = (baseDelay + (squadCount + i) * 0.03).toFixed(2) + 's';
 
       return `
@@ -1055,6 +1160,10 @@ function renderRollCall() {
   const submitBtn = document.getElementById('submit-btn');
   if (submitBtn) submitBtn.textContent = `✅ 提交 ${state.currentDate} 點名`;
 
+  // 記住捲動位置
+  const listEl = document.getElementById('rc-student-list');
+  const scrollTop = listEl ? listEl.scrollTop : 0;
+
   const students = state.students.filter(s => s.squad === state.currentSquad && !s.hidden);
   students.sort((a, b) => a.room.localeCompare(b.room) || a.bed.localeCompare(b.bed));
 
@@ -1084,9 +1193,12 @@ function renderRollCall() {
         </div>
       </div>`;
   }
-  document.getElementById('rc-student-list').innerHTML = html;
+  listEl.innerHTML = html;
   updateRollCallStats();
   setupSubmitButton();
+
+  // 恢復捲動位置
+  requestAnimationFrame(() => { if (listEl) listEl.scrollTop = scrollTop; });
 }
 
 // 每位學生的 debounce timer
@@ -1123,6 +1235,11 @@ function toggleStatus(pageId) {
     if (badge) {
       badge.style.cssText = `background:${si.color}20;color:${si.color};border:1px solid ${si.color}40`;
       badge.innerHTML = `${si.icon} ${si.label}`;
+      // 彈跳微動畫 + 觸覺回饋
+      badge.classList.remove('switching');
+      void badge.offsetWidth; // force reflow
+      badge.classList.add('switching');
+      haptic('light');
     }
     const syncDot = row.querySelector('.sync-dot');
     if (syncDot) syncDot.classList.add('pending');
@@ -1163,71 +1280,14 @@ function showSyncDot(pageId, state) {
   }
 }
 
-function animateStatRoll(element, newVal) {
-  if (!element) return;
-  const oldText = element.getAttribute('data-val') || element.textContent;
-  const oldVal = parseInt(oldText) || 0;
-  if (oldVal === newVal) return;
-  const isUp = newVal > oldVal;
-  
-  element.setAttribute('data-val', newVal);
-  
-  if (getComputedStyle(element).position === 'static') {
-     element.style.position = 'relative';
-  }
-  element.style.display = 'inline-block';
-  element.style.overflow = 'hidden';
-  element.style.verticalAlign = 'top';
-  
-  const h = element.offsetHeight || 20;
-  
-  const wrapper = document.createElement('div');
-  wrapper.style.transition = 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
-  
-  const spanOld = document.createElement('div');
-  spanOld.textContent = oldVal;
-  spanOld.style.height = h + 'px';
-  spanOld.style.lineHeight = h + 'px';
-  
-  const spanNew = document.createElement('div');
-  spanNew.textContent = newVal;
-  spanNew.style.height = h + 'px';
-  spanNew.style.lineHeight = h + 'px';
-  
-  if (isUp) {
-    wrapper.appendChild(spanOld);
-    wrapper.appendChild(spanNew);
-    wrapper.style.transform = `translateY(0px)`;
-  } else {
-    wrapper.appendChild(spanNew);
-    wrapper.appendChild(spanOld);
-    wrapper.style.transform = `translateY(-${h}px)`;
-  }
-  
-  element.innerHTML = '';
-  element.appendChild(wrapper);
-  
-  void wrapper.offsetWidth;
-  
-  if (isUp) {
-    wrapper.style.transform = `translateY(-${h}px)`;
-  } else {
-    wrapper.style.transform = `translateY(0px)`;
-  }
-  
-  setTimeout(() => {
-    element.innerHTML = newVal;
-  }, 350);
-}
-
 function updateRollCallStats() {
   const ss = state.students.filter(s => s.squad === state.currentSquad && !s.isEmpty && !s.hidden);
   let p = 0, l = 0, a = 0;
   for (const s of ss) { const v = s.attendance[state.currentDate] || '✓'; if (v === '✓') p++; else if (v === '◎' || v === '△') l++; else a++; }
-  animateStatRoll(document.getElementById('rc-stat-should'), ss.length);
-  animateStatRoll(document.getElementById('rc-stat-present'), p);
-  animateStatRoll(document.getElementById('rc-stat-leave'), l);
-  animateStatRoll(document.getElementById('rc-stat-absent'), a);
+  document.getElementById('rc-stat-should').textContent = ss.length;
+  document.getElementById('rc-stat-present').textContent = p;
+  document.getElementById('rc-stat-leave').textContent = l;
+  document.getElementById('rc-stat-absent').textContent = a;
 
   const confirmBtn = document.getElementById('rc-confirm-btn');
   if (state.currentDate === getTodayColumnName()) {
@@ -1273,9 +1333,8 @@ async function toggleSquadConfirm() {
 
     showToast(isCurrentlyConfirmed ? '已取消回報' : '✅ 點名回報成功！已即時同步至總表', 'success');
 
-    // 確認點名後永遠播放 Do-Mi-Sol 三連音，並噴發彩帶
+    // 確認點名後永遠播放 Do-Mi-Sol 三連音
     if (!isCurrentlyConfirmed) {
-      if (typeof window.confetti === 'function') window.confetti({ particleCount: 150, spread: 80, origin: { y: 0.7 } });
       setTimeout(() => playClickSound('all_present'), 100);
     }
   } catch (e) {
@@ -1297,7 +1356,6 @@ function setupSubmitButton() {
       for (let i = 0; i < state.changes.length; i += 45)
         await window._api.updateAttendance(state.changes.slice(i, i + 45));
       showToast(`已提交 ${state.changes.length} 筆變更`, 'success');
-      if (typeof window.confetti === 'function') window.confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
       showSubmitSuccess();
       state.changes = [];
     } catch (err) { showToast('提交失敗：' + err.message, 'error'); }
@@ -1315,6 +1373,13 @@ function showSubmitSuccess() {
   document.getElementById('submit-absent').textContent = a;
   const m = document.getElementById('submit-success-modal');
   m.classList.add('visible'); setTimeout(() => m.classList.remove('visible'), 3000);
+
+  // 🎊 撒花慶祝 + 觸覺
+  launchConfetti();
+  haptic('heavy');
+
+  // 全員到齊額外音效
+  if (a === 0 && l === 0) playClickSound('all_present');
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -2135,7 +2200,18 @@ function showLoading(show) {
 
 function showToast(msg, type = 'info') {
   const c = document.getElementById('toast-container'); if (!c) return;
+  // Toast 堆疊限制：最多 3 條，移除最舊的
+  while (c.children.length >= 3) {
+    const oldest = c.children[0];
+    oldest.classList.remove('visible');
+    oldest.remove();
+  }
   const t = document.createElement('div'); t.className = `toast toast-${type}`; t.textContent = msg;
+  // 錯誤類型增加搖晃提醒
+  if (type === 'error') {
+    t.classList.add('toast-error');
+    haptic('error');
+  }
   c.appendChild(t); setTimeout(() => t.classList.add('visible'), 10);
   setTimeout(() => { t.classList.remove('visible'); setTimeout(() => t.remove(), 300); }, 3000);
 }
@@ -2416,7 +2492,14 @@ async function clearBgVideo() {
 
 // 清理所有空床的殘留資料（針對過往遺留資料）
 async function cleanUpEmptyBeds() {
-  if (!confirm("確定要將所有空床的「姓名、學號、班級」清空，並「所有日期的請假紀錄」覆寫為 ✅ 嗎？此操作無法還原！")) return;
+  const ok = await showConfirmDialog({
+    title: '清理空床資料',
+    message: '確定要將所有空床的「姓名、學號、班級」清空，並「所有日期的請假紀錄」覆寫為 ✅？此操作無法還原！',
+    confirmText: '確定清理',
+    danger: true,
+    icon: '🧹'
+  });
+  if (!ok) return;
 
   const emptyBeds = state.students.filter(s => s.isEmpty);
   if (emptyBeds.length === 0) {
@@ -2465,7 +2548,14 @@ async function cleanUpEmptyBeds() {
 
 // 暫時按鈕：將所有空床的請假紀錄覆蓋為空床專用的勾勾
 async function fillEmptyBedsWithCheckmarks() {
-  if (!confirm("確定要將「目前所有空床」的請假紀錄全部強制補上「✓」嗎？")) return;
+  const ok = await showConfirmDialog({
+    title: '補上勾勾',
+    message: '確定要將「目前所有空床」的請假紀錄全部強制補上「✓」嗎？',
+    confirmText: '確定執行',
+    danger: false,
+    icon: '✅'
+  });
+  if (!ok) return;
 
   const emptyBeds = state.students.filter(s => s.isEmpty);
   if (emptyBeds.length === 0) {
@@ -2561,7 +2651,14 @@ async function renderResidentReviewList() {
 }
 
 async function approveResidentAddReq(reqId) {
-  if (!confirm('確定要通過申請，將該學生正式寫入總表床位嗎？')) return;
+  const ok = await showConfirmDialog({
+    title: '核准申請',
+    message: '確定要通過申請，將該學生正式寫入總表床位嗎？',
+    confirmText: '✅ 通過並寫入',
+    danger: false,
+    icon: '📝'
+  });
+  if (!ok) return;
   showLoading(true);
   try {
     const config = await window._api.getConfig();
@@ -2608,7 +2705,14 @@ async function approveResidentAddReq(reqId) {
 }
 
 async function rejectResidentAddReq(reqId) {
-  if (!confirm('確定要駁回此申請嗎？紀錄將被刪除。')) return;
+  const ok = await showConfirmDialog({
+    title: '駁回申請',
+    message: '確定要駁回此申請嗎？紀錄將被刪除。',
+    confirmText: '駁回',
+    danger: true,
+    icon: '❌'
+  });
+  if (!ok) return;
   showLoading(true);
   try {
     await window._api.setConfig({ [reqId]: '' });
@@ -2945,7 +3049,7 @@ async function renderRepairReviewList() {
     records.forEach(rec => {
       const timeStr = rec.createdAt ? new Date(rec.createdAt).toLocaleString() : '未知';
       const photosHtml = (rec.photos || []).map(src =>
-        `<img src="${src}" alt="報修照片" onclick="window.open('${src}','_blank')">`
+        `<img src="${src}" alt="報修照片" onclick="openImagePreview('${src}')">`
       ).join('');
 
       html += `
@@ -2965,7 +3069,14 @@ async function renderRepairReviewList() {
 }
 
 async function markRepairDone(id) {
-  if (!confirm('確定此報修已經回報處理完畢？紀錄將會被刪除。')) return;
+  const ok = await showConfirmDialog({
+    title: '確認處理完畢',
+    message: '確定此報修已經回報處理完畢？紀錄將會被刪除。',
+    confirmText: '確認完成',
+    danger: false,
+    icon: '🛠️'
+  });
+  if (!ok) return;
   showLoading(true);
   try {
     const res = await fetch(window.CONFIG.WORKER_URL + '/api/repair-records', {
@@ -3130,7 +3241,7 @@ async function renderFeedbackReviewList() {
     records.forEach(rec => {
       const timeStr = rec.createdAt ? new Date(rec.createdAt).toLocaleString() : '未知';
       const photosHtml = (rec.photos || []).map(src =>
-        `<img src="${src}" alt="回饋截圖" style="width:80px;height:80px;object-fit:cover;border-radius:8px;cursor:pointer;" onclick="window.open('${src}','_blank')">`
+        `<img src="${src}" alt="回饋截圖" style="width:80px;height:80px;object-fit:cover;border-radius:8px;cursor:pointer;" onclick="openImagePreview('${src}')">`
       ).join('');
 
       html += `
@@ -3150,7 +3261,14 @@ async function renderFeedbackReviewList() {
 }
 
 async function markFeedbackRead(id) {
-  if (!confirm('確定要將此回饋標記為已讀並歸檔嗎？')) return;
+  const ok = await showConfirmDialog({
+    title: '歸檔回饋',
+    message: '確定要將此回饋標記為已讀並歸檔嗎？',
+    confirmText: '已讀歸檔',
+    danger: false,
+    icon: '📨'
+  });
+  if (!ok) return;
   showLoading(true);
   try {
     const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records', {
@@ -3300,7 +3418,7 @@ function renderStudentFileCards(sweepIn = false) {
       <div class="sf-card-title" style="display: flex; align-items: flex-start; position: relative;">
         <span class="sf-title-text" style="flex:1;">${s.room || ''} ${s.bed || ''}</span>
         <button class="sf-icon-btn sf-broom-btn" onclick="clearStudentData(this)" title="清空床位資料" style="margin-top: 2px; margin-right: 6px;">🧹</button>
-        <div class="sf-card-badge-relative" style="margin-top: 10px; margin-right: 18px; transform-origin: center right;">${s.isForeign ? '外籍生' : (s.isEmpty || !s.name ? '空床' : (s.squad || '無班級'))}</div>
+        <div class="sf-card-badge-relative" style="margin-top: 4px; margin-right: 4px; transform-origin: center right;">${s.isForeign ? '外籍生' : (s.isEmpty || !s.name ? '空床' : (s.squad || '無班級'))}</div>
       </div>
       
       <div class="sf-edit-form">
@@ -3396,26 +3514,55 @@ function setup2DCarouselInteraction() {
   _carouselAttached = true;
   
   let startX = 0;
+  let startY = 0;
   let trackStartX = 0;
   let isDragging = false;
+  let isHorizontalSwipe = null; // null = undecided, true = horizontal, false = vertical
   
   let _3dTimer = null;
   
+  // ═══════ Instagram-like swipe physics constants ═══════
+  const DRAG_THRESHOLD = 8;          // px before we consider it a drag
+  const DECEL_RATE = 0.985;          // per-frame deceleration (exponential decay) — higher = smoother/longer glide
+  const MIN_VELOCITY = 0.08;         // px/ms — stop momentum below this
+  const SNAP_SPRING_TENSION = 0.08;  // spring tension for final snap
+  const SNAP_SPRING_DAMPING = 0.82;  // damping ratio for snap spring
+  const MAX_FLICK_CARDS = 6;         // max cards a single flick can travel
+  const VELOCITY_SAMPLES = 6;        // number of recent touch samples to average
+  const VELOCITY_WEIGHT_DECAY = 0.7; // exponential weight decay for older samples
+  
+  // Velocity tracking ring buffer — last N samples
+  let _velocitySamples = [];
+  let _momentumFrame = null;
+  let _isAnimating = false; // true while momentum/spring is running
+  
+  // Helper: cancel all running animations and clean up frame IDs
+  function cancelAllAnimations() {
+    if (_momentumFrame) { cancelAnimationFrame(_momentumFrame); _momentumFrame = null; }
+    if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null; }
+    _isAnimating = false;
+  }
+  
   window._restart3DTimer = function() {
       disable3D();
-      _3dTimer = setTimeout(enable3D, 2000);
+      _3dTimer = setTimeout(enable3D, 1200);
   };
 
   function enable3D() {
+    // Guard: don't enter 3D if user is dragging or animations still running
+    if (isDragging || _isAnimating) return;
+    
     const activeCard = Array.from(track.children).find(c => c.classList.contains('active'));
     if (activeCard) {
        activeCard.classList.add('is-3d-active');
+       _3dCardIndex = _sfActiveIndex;
        window._is3dMode = true;
        if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
     }
   }
 
   function disable3D() {
+    const was3dMode = window._is3dMode;
     window._is3dMode = false;
     if (_3dTimer) {
       clearTimeout(_3dTimer);
@@ -3427,34 +3574,57 @@ function setup2DCarouselInteraction() {
           c.classList.remove('is-3d-active');
           
           c.dataset.was3d = 'true';
-          setTimeout(() => { c.dataset.was3d = 'false'; }, 500);
+          // Extended timeout: give the CSS transition enough time to fully complete (1s transition + buffer)
+          setTimeout(() => { c.dataset.was3d = 'false'; }, 1200);
           changed = true;
-       } else {
+       } else if (was3dMode) {
+          // Only mark wasAway if we were actually in 3D mode (side cards were spread out)
           c.dataset.wasAway = 'true';
-          setTimeout(() => { c.dataset.wasAway = 'false'; }, 500);
+          setTimeout(() => { c.dataset.wasAway = 'false'; }, 1200);
           changed = true;
        }
     });
     if (changed && window._updateContinuousScale) window._updateContinuousScale(_currentX);
   }
 
-  let velocityX = 0;
-  let lastMoveX = 0;
-  let lastMoveTime = 0;
-  
-  function onDown(e) {
-    if (scene.classList.contains('is-searching')) return; 
+  // ═══════ Weighted velocity calculation from recent samples ═══════
+  function getWeightedVelocity() {
+    if (_velocitySamples.length === 0) return 0;
     
-    const targetCard = e.target.closest('.sf-student-card-2d');
+    // Filter out stale samples (older than 100ms from last sample)
+    const now = performance.now();
+    const recent = _velocitySamples.filter(s => now - s.time < 100);
+    if (recent.length === 0) return 0;
     
-    // 只要點到目前的有效(Active)卡片，就絕對不要中斷 3D 體驗！讓使用者安心點擊輸入框
-    const isClickOnActive = targetCard && targetCard.classList.contains('active');
+    let weightedSum = 0;
+    let weightTotal = 0;
     
-    if (!isClickOnActive) {
-        disable3D();
+    for (let i = 0; i < recent.length; i++) {
+      // More recent samples get exponentially higher weight
+      const weight = Math.pow(VELOCITY_WEIGHT_DECAY, recent.length - 1 - i);
+      weightedSum += recent[i].velocity * weight;
+      weightTotal += weight;
     }
     
-    // 無限滑動（地球是圓的）核心：如果在上次滑行結束後太靠近邊緣，就無縫瞬間傳送到中間
+    return weightTotal > 0 ? weightedSum / weightTotal : 0;
+  }
+  // Track which card index is in 3D, for displacement calculation
+  let _3dCardIndex = -1;
+  
+  // Softly stop the side-card spread without removing is-3d-active from active card
+  function softDisable3DSpread() {
+    window._is3dMode = false;
+    if (_3dTimer) { clearTimeout(_3dTimer); _3dTimer = null; }
+    // Mark side cards for smooth return transition
+    Array.from(track.children).forEach(c => {
+       if (!c.classList.contains('is-3d-active')) {
+          c.dataset.wasAway = 'true';
+          setTimeout(() => { c.dataset.wasAway = 'false'; }, 1200);
+       }
+    });
+  }
+  
+  function teleportToCenterIfNeeded() {
     const total = track.children.length;
     const baseN = _sfResults.length;
     if (baseN > 0 && total >= baseN * 3) {
@@ -3468,14 +3638,33 @@ function setup2DCarouselInteraction() {
         if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
       }
     }
+  }
+
+  function onDown(e) {
+    if (scene.classList.contains('is-searching')) return; 
+    
+    // Stop any ongoing momentum animation immediately (like IG — touching stops glide)
+    cancelAllAnimations();
+    
+    const targetCard = e.target.closest('.sf-student-card-2d');
+    const isClickOnActive = targetCard && targetCard.classList.contains('active');
+    
+    // If clicking on non-active card, fully disable 3D
+    if (!isClickOnActive) {
+        disable3D();
+    }
+    
+    teleportToCenterIfNeeded();
 
     isDragging = true;
-    startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    isHorizontalSwipe = null;
+    const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+    startX = clientX;
+    startY = clientY;
     trackStartX = _currentX;
     
-    lastMoveX = startX;
-    lastMoveTime = performance.now();
-    velocityX = 0;
+    _velocitySamples = [{ x: clientX, time: performance.now(), velocity: 0 }];
     
     track.style.transition = 'none';
   }
@@ -3483,29 +3672,46 @@ function setup2DCarouselInteraction() {
   function onMove(e) {
     if (!isDragging) return;
     const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
     const deltaX = clientX - startX;
+    const deltaY = clientY - startY;
     
-    // 如果滑動量明顯，才取消 3D 狀態避免使用者點擊輸入框誤觸
-    if (Math.abs(deltaX) > 40) {
-       disable3D(); 
+    // Determine swipe direction on first meaningful movement
+    if (isHorizontalSwipe === null && (Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD)) {
+      isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
+      if (!isHorizontalSwipe) {
+        isDragging = false;
+        return;
+      }
+      // First confirmed horizontal swipe — softly retract side cards but keep active card's 3D
+      if (window._is3dMode) {
+        softDisable3DSpread();
+      }
     }
     
+    if (isHorizontalSwipe !== true && Math.abs(deltaX) < DRAG_THRESHOLD) return;
+    if (e.cancelable) e.preventDefault();
+    
+    // Record velocity sample
     const now = performance.now();
-    const dt = now - lastMoveTime;
+    const lastSample = _velocitySamples[_velocitySamples.length - 1];
+    const dt = now - lastSample.time;
     if (dt > 0) {
-       velocityX = (clientX - lastMoveX) / dt;
+      const v = (clientX - lastSample.x) / dt;
+      _velocitySamples.push({ x: clientX, time: now, velocity: v });
+      if (_velocitySamples.length > VELOCITY_SAMPLES) {
+        _velocitySamples.shift();
+      }
     }
-    lastMoveX = clientX;
-    lastMoveTime = now;
     
     _currentX = trackStartX + deltaX;
     
-    // 即時無縫瞬間傳送校正（避免滑太快或滑到底出現空白斷層）
+    // 即時無縫瞬間傳送校正
     const total = track.children.length;
     const baseN = _sfResults.length;
     if (baseN > 0 && total >= baseN * 3) {
-        let thresholdLeft = -_cardWidth * (total * 0.3);  // 往右滑
-        let thresholdRight = -_cardWidth * (total * 0.7); // 往左滑 
+        let thresholdLeft = -_cardWidth * (total * 0.3);
+        let thresholdRight = -_cardWidth * (total * 0.7);
         if (_currentX > thresholdLeft || _currentX < thresholdRight) {
             const centerPos = -Math.floor(total / 2) * _cardWidth;
             const diff = centerPos - _currentX;
@@ -3522,7 +3728,6 @@ function setup2DCarouselInteraction() {
   }
   
   let _currentTransitionTime = 0.5;
-
   let _animFrame = null;
 
   function updateContinuousScale(trackXStr) {
@@ -3532,11 +3737,10 @@ function setup2DCarouselInteraction() {
     for (let i = 0; i < track.children.length; i++) {
         const c = track.children[i];
         if (!c) continue;
-        const rawDiff = i - centerIdxFloat; // positive means card is to the right
+        const rawDiff = i - centerIdxFloat;
         const absDiff = Math.abs(rawDiff);
         
-        // 【虛擬化渲染優化】：當搜尋出大量資料（如全校 300 筆），不該讓瀏覽器同時算繪幾千張卡片
-        // 這裡設定唯有靠近畫面中心的 4 張卡片會被算繪並分配給 GPU，其餘直接被隱藏與釋放，零卡頓！
+        // 虛擬化渲染優化
         if (absDiff > 4) {
             c.style.visibility = 'hidden';
             continue;
@@ -3544,29 +3748,58 @@ function setup2DCarouselInteraction() {
             c.style.visibility = 'visible';
         }
         
-        // Soft continuous interpolation using a simple quadratic curve
         let t = Math.max(0, 1 - absDiff * 0.45); 
         let scale = 0.85 + 0.15 * (t * t);   
         let alpha = 0.8 + 0.2 * t;      
         
-        // 確保中間卡片絕對在最上層，兩側往後排
         c.style.zIndex = Math.round(100 - absDiff * 10);
-        c.style.opacity = alpha; // use hardware-accelerated opacity instead of blur/brightness!
-        c.style.filter = 'none'; // IMPORTANT: completely remove heavy CSS filters during drag!
+        c.style.opacity = alpha;
+        c.style.filter = 'none';
         
         if (c.classList.contains('is-3d-active')) {
-            c.style.transition = 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
-            c.style.transform = `perspective(1000px) rotate3d(0.5, 1, 0, 15deg) scale(${scale + 0.05})`;
-            c.style.opacity = '1';
+            // ═══════ Progressive 3D rotation based on displacement ═══════
+            // Calculate how far this card has moved from its snap position
+            const snapIdx = _3dCardIndex >= 0 ? _3dCardIndex : _sfActiveIndex;
+            const displacement = Math.abs(i - centerIdxFloat); // how far from center
+            
+            // Interpolate rotation: full 15deg at center, 0deg at 0.6 cards away
+            const rotProgress = Math.max(0, Math.min(1, 1 - displacement / 0.6));
+            const rotAngle = 15 * rotProgress;
+            const scaleBoost = 0.05 * rotProgress;
+            
+            // If too far from home, fully flatten and remove 3D
+            if (displacement > 0.65 && isDragging) {
+                c.classList.remove('is-3d-active');
+                c.dataset.was3d = 'true';
+                _3dCardIndex = -1;
+                setTimeout(() => { c.dataset.was3d = 'false'; }, 1200);
+                // Apply flat transform immediately
+                c.style.transition = 'transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s';
+                c.style.transform = `translateX(0px) scale(${scale})`;
+            } else {
+                // Smooth responsive transition during drag
+                c.style.transition = isDragging 
+                    ? 'transform 0.15s ease-out' 
+                    : 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
+                c.style.transform = `perspective(1000px) rotate3d(0.5, 1, 0, ${rotAngle}deg) scale(${scale + scaleBoost})`;
+                c.style.opacity = '1';
+            }
         } else {
+            // ═══════ 2D card transitions ═══════
             if (isDragging) {
-                if (c.dataset.was3d === 'true' || c.dataset.wasAway === 'true') {
-                    c.style.transition = 'transform 0.5s cubic-bezier(0.2, 0.9, 0.3, 1)';
+                if (c.dataset.was3d === 'true') {
+                    c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
+                } else if (c.dataset.wasAway === 'true') {
+                    c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
                 } else {
                     c.style.transition = 'none';
                 }
             } else {
-                c.style.transition = 'transform 0.5s cubic-bezier(0.3, 0.9, 0.4, 1)';
+                if (c.dataset.was3d === 'true' || c.dataset.wasAway === 'true') {
+                    c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
+                } else {
+                    c.style.transition = 'transform 0.5s cubic-bezier(0.3, 0.9, 0.4, 1)';
+                }
             }
             
             if (window._is3dMode && !isDragging) {
@@ -3580,75 +3813,80 @@ function setup2DCarouselInteraction() {
   }
   window._updateContinuousScale = updateContinuousScale;
 
-  function snapToNearest() {
+  // ═══════ Spring-based snap to nearest card ═══════
+  function springSnapTo(targetIndex) {
     const maxIdx = track.children.length - 1;
-
-    let newIndex = Math.round(-_currentX / _cardWidth);
+    if (targetIndex < 0) targetIndex = 0;
+    if (targetIndex > maxIdx) targetIndex = maxIdx;
     
-    if (newIndex < 0) newIndex = 0;
-    if (newIndex > maxIdx) newIndex = maxIdx;
+    _sfActiveIndex = targetIndex;
+    const targetX = -(_sfActiveIndex * _cardWidth);
     
-    _sfActiveIndex = newIndex;
-    _currentX = -(_sfActiveIndex * _cardWidth);
-    
-    // 使用動態計算出的時間，搭配減速彈性的貝茲曲線模擬摩擦力到完全煞停
-    track.style.transition = `transform ${_currentTransitionTime}s cubic-bezier(0.2, 0.9, 0.3, 1.05)`;
-    track.style.transform = `translateX(${_currentX}px)`;
-    
-    // Update active visual class
     Array.from(track.children).forEach((c, i) => {
         c.classList.toggle('active', i === _sfActiveIndex);
     });
 
-    if (_animFrame) cancelAnimationFrame(_animFrame);
+    cancelAllAnimations();
+    _isAnimating = true;
     
+    let springVel = 0;
+    let springPos = _currentX;
     const startTime = performance.now();
-    const duration = _currentTransitionTime * 1000;
     
-    function step() {
-        const transformStr = window.getComputedStyle(track).transform;
-        if (transformStr !== 'none') {
-            const matrix = new DOMMatrix(transformStr);
-            updateContinuousScale(matrix.m41);
-        }
-        
-        if (performance.now() - startTime < duration + 50) {
-            _animFrame = requestAnimationFrame(step);
-        } else {
-            updateContinuousScale(_currentX);
-            
-            // 無縫瞬間傳送校正（地球是圓的）
-            const total = track.children.length;
-            const baseN = _sfResults.length;
-            if (baseN > 0 && total >= baseN * 3) {
-                if (_sfActiveIndex < total * 0.3 || _sfActiveIndex > total * 0.7) {
-                    const targetCenterBase = Math.floor((total / 2) / baseN) * baseN;
-                    const localOffset = _sfActiveIndex % baseN;
-                    _sfActiveIndex = targetCenterBase + localOffset;
-                    _currentX = -(_sfActiveIndex * _cardWidth);
-                    track.style.transition = 'none';
-                    track.style.transform = `translateX(${_currentX}px)`;
-                    updateContinuousScale(_currentX);
-                }
-            }
-
-            if (window._restart3DTimer) window._restart3DTimer();
-        }
+    function springStep() {
+      const displacement = springPos - targetX;
+      const springForce = -SNAP_SPRING_TENSION * displacement;
+      springVel = (springVel + springForce) * SNAP_SPRING_DAMPING;
+      springPos += springVel;
+      
+      _currentX = springPos;
+      track.style.transition = 'none';
+      track.style.transform = `translateX(${_currentX}px)`;
+      updateContinuousScale(_currentX);
+      
+      if (Math.abs(displacement) < 0.5 && Math.abs(springVel) < 0.1) {
+        _currentX = targetX;
+        track.style.transform = `translateX(${_currentX}px)`;
+        updateContinuousScale(_currentX);
+        _animFrame = null;
+        _isAnimating = false;
+        teleportToCenterIfNeeded();
+        if (window._restart3DTimer) window._restart3DTimer();
+        return;
+      }
+      
+      if (performance.now() - startTime > 2500) {
+        _currentX = targetX;
+        track.style.transform = `translateX(${_currentX}px)`;
+        updateContinuousScale(_currentX);
+        _animFrame = null;
+        _isAnimating = false;
+        teleportToCenterIfNeeded();
+        if (window._restart3DTimer) window._restart3DTimer();
+        return;
+      }
+      
+      _animFrame = requestAnimationFrame(springStep);
     }
-    _animFrame = requestAnimationFrame(step);
+    
+    _animFrame = requestAnimationFrame(springStep);
   }
 
   function onUp(e) {
     if (!isDragging) return;
     isDragging = false;
     
-    // 如果手指僅僅是「點擊」或微小滑動（例如點擊輸入區域），不要觸發強制 snapping 與 disable3D
-    const totalDeltaX = Math.abs(lastMoveX - startX);
-    if (totalDeltaX < 5 && velocityX === 0) {
+    const clientX = e.type.includes('touch') 
+      ? (e.changedTouches ? e.changedTouches[0].clientX : startX) 
+      : e.clientX;
+    
+    // 點擊不觸發 snapping
+    const totalDeltaX = Math.abs(clientX - startX);
+    if (totalDeltaX < DRAG_THRESHOLD) {
         return;
     }
     
-    // Check teleport BEFORE setting targetX, so we always stay in safe bounding center
+    // Teleport check
     const total = track.children.length;
     const baseN = _sfResults.length;
     if (baseN > 0 && total >= baseN * 3) {
@@ -3656,7 +3894,6 @@ function setup2DCarouselInteraction() {
         const diff = centerPos - _currentX;
         const shiftMultiples = Math.round(diff / (baseN * _cardWidth));
         const shiftDist = shiftMultiples * baseN * _cardWidth;
-        
         if (shiftDist !== 0) {
             _currentX += shiftDist;
             track.style.transition = 'none';
@@ -3665,29 +3902,60 @@ function setup2DCarouselInteraction() {
         }
     }
     
-    // 依據拖曳速度計算慣性滑動距離 (摩擦力模擬 - 阻力提高以避免隨便飄走)
-    const friction = 0.005;
-    let momentumDist = (velocityX * Math.abs(velocityX)) / (2 * friction);
+    // ═══════ Pure velocity-driven momentum ═══════
+    const flickVelocity = getWeightedVelocity(); // px/ms
     
-    // 上下限保護 (降低極限距離，保持絲滑同時避免輕碰就噴走)
-    if (momentumDist > 1500) momentumDist = 1500;
-    if (momentumDist < -1500) momentumDist = -1500;
-
-    let targetX = _currentX + momentumDist;
-    const maxIdx = track.children.length - 1;
-    let newIndex = Math.round(-targetX / _cardWidth);
-    if (newIndex < 0) newIndex = 0;
-    if (newIndex > maxIdx) newIndex = maxIdx;
+    if (Math.abs(flickVelocity) < MIN_VELOCITY) {
+      springSnapTo(Math.round(-_currentX / _cardWidth));
+      return;
+    }
     
-    // 根據要滑動的實際距離動態計算動畫時間
-    const distToTravel = Math.abs((newIndex * _cardWidth) + _currentX);
-    let time = 0.4 + (distToTravel / 2500); 
-    if (time > 1.2) time = 1.2;
-    if (time < 0.4) time = 0.4;
-    _currentTransitionTime = time;
-
-    _currentX += momentumDist;
-    snapToNearest();
+    cancelAllAnimations();
+    _isAnimating = true;
+    
+    const frameTime = 16.67;
+    let vel = flickVelocity * frameTime; // px/frame
+    
+    // Clamp maximum initial velocity to prevent explosion on fast flicks
+    const maxVel = _cardWidth * 0.4; // max ~0.4 card widths per frame
+    if (vel > maxVel) vel = maxVel;
+    if (vel < -maxVel) vel = -maxVel;
+    
+    function momentumStep() {
+      vel *= DECEL_RATE;
+      _currentX += vel;
+      
+      track.style.transition = 'none';
+      track.style.transform = `translateX(${_currentX}px)`;
+      updateContinuousScale(_currentX);
+      
+      // Teleport during momentum if needed
+      const total2 = track.children.length;
+      const baseN2 = _sfResults.length;
+      if (baseN2 > 0 && total2 >= baseN2 * 3) {
+          let thresholdLeft = -_cardWidth * (total2 * 0.3);
+          let thresholdRight = -_cardWidth * (total2 * 0.7);
+          if (_currentX > thresholdLeft || _currentX < thresholdRight) {
+              const centerPos = -Math.floor(total2 / 2) * _cardWidth;
+              const diff = centerPos - _currentX;
+              const shiftMultiples = Math.round(diff / (baseN2 * _cardWidth));
+              const shiftDist = shiftMultiples * baseN2 * _cardWidth;
+              _currentX += shiftDist;
+          }
+      }
+      
+      // When velocity drops low, spring-snap to whatever card is nearest NOW
+      if (Math.abs(vel) < 0.5) {
+        _momentumFrame = null;
+        const nearestIdx = Math.round(-_currentX / _cardWidth);
+        springSnapTo(nearestIdx);
+        return;
+      }
+      
+      _momentumFrame = requestAnimationFrame(momentumStep);
+    }
+    
+    _momentumFrame = requestAnimationFrame(momentumStep);
   }
 
   area.addEventListener('mousedown', onDown);
@@ -3695,10 +3963,7 @@ function setup2DCarouselInteraction() {
   window.addEventListener('mouseup', onUp);
   
   area.addEventListener('touchstart', onDown, { passive: true });
-  area.addEventListener('touchmove', (e) => {
-      if (isDragging) e.preventDefault(); 
-      onMove(e);
-  }, { passive: false });
+  area.addEventListener('touchmove', onMove, { passive: false });
   window.addEventListener('touchend', onUp);
 }
 
@@ -3833,47 +4098,23 @@ window.autoSaveStudentFile = async function(elem) {
 window.onStudentFileSearch = onStudentFileSearch;
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 住宿生卡冊 (Directory) 功能
+// 圖片預覽彈窗 (Image Preview Modal)
 // ═════════════════════════════════════════════════════════════════════════════
-window.renderStudentDirectory = function() {
-  const grid = document.getElementById('directory-grid');
-  if (!grid) return;
-  
-  // 排除隱藏與空床
-  const students = state.students
-    .filter(s => !s.hidden && !s.isEmpty && s.name)
-    .sort((a, b) => {
-      // 依房號排序 -> 床號
-      if (a.room !== b.room) return a.room.localeCompare(b.room);
-      return (a.bed || '').localeCompare(b.bed || '');
-    });
-    
-  let html = '';
-  for (const s of students) {
-    html += `
-      <div class="directory-card" onclick="previewStudentFromDirectory('${s.id}')">
-        <div class="dc-room">${s.room || ''} ${s.bed || ''}</div>
-        <div class="dc-name">${s.name || '未填寫'}</div>
-        <div class="dc-class">${s.class || s.squad || '無班級'}</div>
-      </div>
-    `;
+window.openImagePreview = function(src) {
+  const modal = document.getElementById('image-preview-modal');
+  const img = document.getElementById('image-preview-img');
+  if (modal && img) {
+    img.src = src;
+    modal.classList.add('visible');
   }
-  
-  grid.innerHTML = html || '<div style="grid-column: span 3; text-align: center; color: var(--dim); padding: 40px;">目前沒有任何住宿生資料</div>';
 };
 
-window.previewStudentFromDirectory = function(id) {
-  // 點擊後可以跳回檔案管理畫面，並尋找到該學生
-  navigateTo('student-files');
-  window.initStudentFiles();
-  
-  // 模擬在搜尋框打字並強制滑動到該人
-  const sInput = document.getElementById('sf-search-input');
-  if (sInput) {
-    const s = state.students.find(x => x.id === id);
-    if (s) {
-      sInput.value = s.room + " " + (s.name||'');
-      window.onStudentFileSearch(sInput.value);
-    }
+window.closeImagePreview = function() {
+  const modal = document.getElementById('image-preview-modal');
+  if (modal) {
+    modal.classList.remove('visible');
+    setTimeout(() => {
+      document.getElementById('image-preview-img').src = '';
+    }, 300);
   }
 };

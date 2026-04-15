@@ -19,11 +19,11 @@
   --dim: #9898a0;
   --muted: #73737a;
   
-  /* Extremely subtle Neumorphic shadow mix for elegant dark mode */
-  --shadow-dark: rgba(0, 0, 0, 0.7);
-  --shadow-light: rgba(255, 255, 255, 0.06);
-  --neu-out: 5px 5px 14px var(--shadow-dark), -3px -3px 10px var(--shadow-light);
-  --neu-in: inset 3px 3px 8px rgba(0,0,0,0.6), inset -2px -2px 6px rgba(255,255,255,0.03);
+  /* Enhanced Neumorphic shadow mix for elegant dark mode — visible but not overwhelming */
+  --shadow-dark: rgba(0, 0, 0, 0.8);
+  --shadow-light: rgba(255, 255, 255, 0.12);
+  --neu-out: 6px 6px 16px var(--shadow-dark), -4px -4px 12px var(--shadow-light);
+  --neu-in: inset 3px 3px 8px rgba(0,0,0,0.65), inset -2px -2px 6px rgba(255,255,255,0.07);
 
   --green: #30d158;
   --yellow: #ffd60a;
@@ -58,9 +58,7 @@ body.light-mode {
 }
 
 html {
-  font-size: 15px;
-  background: var(--bg);
-  min-height: 100%;
+  font-size: 15px
 }
 
 body {
@@ -330,30 +328,42 @@ body {
   animation: fadeUp .3s cubic-bezier(0.16, 1, 0.3, 1)
 }
 
-/* 頁面進入時恢復微微從下浮起 */
+/* 頁面進入：方向性滑動 */
 @keyframes fadeUp {
   from {
     opacity: 0;
     transform: translateY(16px)
   }
-
   to {
     opacity: 1;
     transform: none
   }
 }
 
-/* 頁面切換離開時如裝置藝術一般，往下掉落離開 */
-@keyframes pageExit {
-  from {
-    opacity: 1;
-    transform: translateY(0)
-  }
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
 
-  to {
-    opacity: 0;
-    transform: translateY(50px)
-  }
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* 頁面切換離開：方向性 */
+@keyframes pageExit {
+  from { opacity: 1; transform: translateY(0) }
+  to   { opacity: 0; transform: translateY(50px) }
+}
+
+@keyframes pageExitLeft {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(-30px); }
+}
+
+@keyframes pageExitRight {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(30px); }
 }
 
 /* 首頁透明，讓極光球背景窿透；其他頁面用不透明背景蓋住動畫 */
@@ -828,14 +838,19 @@ body {
 
 .rc-header-top {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
-  margin-bottom: 12px
+  margin-bottom: 12px;
+  position: relative;
+  min-height: 32px;
 }
 
 .rc-squad-name {
   font-size: 22px;
-  font-weight: 800
+  font-weight: 800;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .rc-date-pill {
@@ -3354,124 +3369,16 @@ html.vt-active *:not(.bottom-nav):not(.bottom-nav-glow):not(.nav-item):not(.nav-
 
 /* ── 潘仔模式 (簡潔視角) ── */
 body.panzi-mode .sqd-meta { display: none !important; }
-/* ========================================================
-   GLASS-NEUMORPHISM OVERRIDES (Appended by Agent)
-   ======================================================== */
 
-/* 1. Global Box Shadows & Cards */
-.sq-card,
-.sqd-card, .big-stat, .sm-stat,
-.rc-stat, .student-row,
-.changelog-content, .hist-detail {
-  background: var(--card);
-  backdrop-filter: blur(20px) saturate(120%);
-  -webkit-backdrop-filter: blur(20px) saturate(120%);
-  box-shadow: var(--neu-out);
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-}
 
-.modal-card, .dev-card, .settings-card, .date-picker-panel {
-  background: rgba(30, 30, 32, 0.85); /* More solid background to prevent transparency issues */
-  backdrop-filter: blur(20px) saturate(120%);
-  -webkit-backdrop-filter: blur(20px) saturate(120%);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); /* Clean drop shadow instead of blurry var(--neu-out) */
-  border: 1px solid rgba(255, 255, 255, 0.15); /* Clean 1px border */
-  border-radius: var(--r);
-  overflow: hidden; /* Fix fuzzy edges */
-  transform: translateZ(0); /* Hardware acceleration to clear antialiasing issues */
-}
 
-body.light-mode .modal-card,
-body.light-mode .dev-card,
-body.light-mode .settings-card,
-body.light-mode .date-picker-panel {
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-.modal-card {
-  border-radius: 28px;
-}
-
-.bottom-nav {
-  background: var(--card);
-  backdrop-filter: blur(24px) saturate(180%);
-  box-shadow: 0 -8px 24px var(--shadow-dark), 0 0 16px var(--shadow-light);
-}
-
-/* 2. Buttons - Default Pop-Out */
-.back-btn, .submit-btn, .action-btn, .empty-bed-action, .fab-empty-bed,
-.nav-arrow, .date-pill, .rc-date-clickable, .changelog-btn, .dev-trigger,
-.modal-btn, .stepper-btn {
-  background: var(--card);
-  backdrop-filter: blur(12px) saturate(120%);
-  box-shadow: var(--neu-out);
-  border: 1px solid var(--border);
-  transition: all 0.25s cubic-bezier(.175, .885, .32, 1.275);
-}
-
-/* Background resets for heavy colors */
-.submit-btn, .fab-empty-bed {
-  background: rgba(139, 92, 246, 0.15) !important;
-  color: var(--text) !important;
-  border-color: rgba(139, 92, 246, 0.4) !important;
-}
-
-/* 3. Interactive States - Inset Shadow (Depressed) */
-.back-btn:active, .submit-btn:active, .action-btn:active, .empty-bed-action:active,
-.fab-empty-bed:active, .nav-arrow:active, .rc-date-clickable:active,
-.changelog-btn:active, .dev-trigger:active, .modal-btn:active, .stepper-btn:active,
-.sq-card:active, .student-row:active {
-  box-shadow: var(--neu-in) !important;
-  transform: translateY(2px) scale(0.98) !important;
-}
-
-.empty-bed-action:hover, .sq-card:hover {
-  box-shadow: var(--neu-out), 0 16px 24px rgba(0,0,0,0.05);
-}
-
-/* 4. Inputs & Selects - Inset Trench */
-.styled-input, .styled-select, .dev-input, .stepper-input, .repair-textarea {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  box-shadow: var(--neu-in) !important;
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 14px;
-}
-
-.styled-input:focus, .styled-select:focus, .dev-input:focus, .stepper-input:focus {
-  box-shadow: var(--neu-in), 0 0 0 2px var(--shadow-light) !important;
-  outline: none;
-}
-
-/* 5. Nav Items in Bottom Bar */
-.nav-item.active .nav-icon {
-  transform: translateY(-2px);
-  color: var(--purple);
-  filter: drop-shadow(0 4px 8px var(--shadow-dark));
-}
-
-/* 6. RC Confirm Action Banner */
-.rc-confirm-action {
-  background: var(--card);
-  box-shadow: var(--neu-out);
-  border-radius: 16px;
-}
-.rc-confirm-action:active {
-  box-shadow: var(--neu-in);
-  transform: scale(0.98);
-}
 
 
 /* ========================================================
    HIGH-END UI/UX NEUMORPHIC-GLASS OVERRIDES
    ======================================================== */
 
-/* Elegant Base Glass Cards with Soft Pop-out */
-.sq-card, .modal-card, .settings-card,
+.sq-card, .settings-card,
 .sqd-card, .big-stat, .sm-stat, .rc-stat, .student-row,
 .empty-bed-action, .fab-empty-bed {
   background: var(--card);
@@ -3482,12 +3389,12 @@ body.light-mode .date-picker-panel {
   transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* Modals should be extremely soft */
+/* Modals should be extremely soft — NO neumorphic glow */
 .modal-card {
   border-radius: 32px;
-  background: var(--bg2); /* solid base to avoid muddy stacking blur */
-  border: 1px solid var(--border);
-  box-shadow: var(--neu-out), 0 24px 64px rgba(0,0,0,0.1);
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  box-shadow: 0 24px 64px rgba(0,0,0,0.5);
 }
 
 .bottom-nav {
@@ -3939,7 +3846,7 @@ body.light-mode .focus-indicator { background: #6366f1; }
   overflow: hidden;
   display: flex;
   align-items: center;
-  touch-action: pan-y;
+  touch-action: manipulation;
   -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 5%, black 95%, transparent 100%);
   mask-image: linear-gradient(90deg, transparent 0%, black 5%, black 95%, transparent 100%);
 }
@@ -4020,6 +3927,7 @@ body.light-mode .focus-indicator { background: #6366f1; }
   box-shadow: none;
 }
 
+/* Card back-face (main visual surface) */
 .sf-student-card-2d::after {
   content: '';
   position: absolute;
@@ -4031,15 +3939,39 @@ body.light-mode .focus-indicator { background: #6366f1; }
   box-shadow: var(--neu-out);
   z-index: -1;
   transform: translateZ(0); 
-  transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.5s ease;
 }
 
+/* Card thickness layer — visible only in 3D mode, creates extrusion depth */
+.sf-student-card-2d::before {
+  content: '';
+  position: absolute;
+  top: 2px; left: 2px; right: 2px; bottom: 2px;
+  border-radius: 30px;
+  background: linear-gradient(180deg, rgba(180,180,195,0.4) 0%, rgba(150,150,168,0.35) 100%);
+  z-index: -2;
+  transform: translateZ(-5px);
+  opacity: 0;
+  box-shadow: 
+    -1px 0 0 rgba(200,200,215,0.3),
+    -2px 1px 0 rgba(185,185,200,0.25),
+    -3px 2px 0 rgba(170,170,188,0.2),
+    -4px 3px 0 rgba(160,160,180,0.15),
+    -8px 8px 18px rgba(0,0,0,0.4);
+  transition: opacity 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Show thickness extrusion in 3D mode */
+.sf-student-card-2d.is-3d-active::before {
+  opacity: 1;
+  transform: translateZ(-5px);
+}
+
+/* 3D card shadow enhancement for dark mode */
 .sf-student-card-2d.is-3d-active::after {
-  box-shadow: rgba(0, 0, 0, 0.45) -15px 25px 30px -10px;
-}
-
-body:not(.light-mode) .sf-student-card-2d.is-3d-active::after {
-  box-shadow: rgba(0, 0, 0, 0.8) -15px 25px 30px -10px, -2px -2px 10px rgba(255, 255, 255, 0.12);
+  box-shadow: 
+    rgba(0, 0, 0, 0.5) -15px 25px 30px -10px,
+    rgba(139, 92, 246, 0.08) -8px 12px 20px -5px;
 }
 
 .sf-card-title {
@@ -4077,12 +4009,14 @@ body:not(.light-mode) .sf-student-card-2d.is-3d-active::after {
   box-shadow: var(--neu-in);
   width: 100%;
   box-sizing: border-box;
-  transition: all 0.3s;
+  transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .sf-form-group input[type="text"]:focus,
 .sf-form-group textarea:focus {
-  box-shadow: var(--neu-in), 0 0 0 2px var(--blue);
+  box-shadow: var(--neu-out), 0 0 0 2px var(--blue);
+  transform: translateY(-2px);
+  border-color: rgba(99, 102, 241, 0.3);
 }
 
 .sf-toggles {
@@ -4158,9 +4092,9 @@ body:not(.light-mode) .sf-student-card-2d.is-3d-active::after {
   box-shadow: var(--neu-in);
 }
 
-/* 3D Popping Interactions */
+/* 3D Popping Interactions — smooth two-way transition for both entering AND leaving 3D */
 .sf-student-card-2d * {
-  transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.8s, opacity 0.8s, text-shadow 0.8s;
+  transition: transform 1s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s, text-shadow 0.8s, border-radius 0.8s;
   transform: translateZ(0px); /* Hardware layer init for smooth transition */
 }
 
@@ -4198,29 +4132,53 @@ body:not(.light-mode) .sf-student-card-2d.is-3d-active::after {
 .sf-student-card-2d.is-3d-active .sf-form-group textarea {
   transform: translateZ(20px);
   background: var(--card); /* ensure solidity */
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
   box-shadow: 
-    -1px 1px 0 rgba(80,80,80,0.8),
-    -2px 2px 0 rgba(70,70,70,0.8),
-    -3px 3px 0 rgba(60,60,60,0.8),
-    -4px 4px 0 rgba(50,50,50,0.8),
-    -12px 18px 25px rgba(0,0,0,0.4);
+    -1px 1px 0 rgba(140,140,170,0.35),
+    -2px 2px 0 rgba(120,120,150,0.3),
+    -3px 3px 0 rgba(100,100,130,0.25),
+    -4px 4px 0 rgba(80,80,110,0.2),
+    -10px 16px 25px rgba(0,0,0,0.5);
+  /* Smooth tectonic plate transition */
+  transition: 
+    transform 1s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 1s cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.5s ease;
 }
 .sf-student-card-2d.is-3d-active .sf-form-group input:hover,
-.sf-student-card-2d.is-3d-active .sf-form-group input:focus,
-.sf-student-card-2d.is-3d-active .sf-form-group textarea:hover,
-.sf-student-card-2d.is-3d-active .sf-form-group textarea:focus {
-  transform: translateZ(35px);
+.sf-student-card-2d.is-3d-active .sf-form-group textarea:hover {
+  transform: translateZ(28px);
   background: var(--card);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 14px;
   box-shadow: 
-    -1px 1px 0 rgba(80,80,80,0.8),
-    -2px 2px 0 rgba(70,70,70,0.8),
-    -3px 3px 0 rgba(60,60,60,0.8),
-    -4px 4px 0 rgba(50,50,50,0.8),
-    -5px 5px 0 rgba(40,40,40,0.8),
-    -6px 6px 0 rgba(30,30,30,0.8),
-    -15px 25px 35px rgba(0,0,0,0.5);
+    -1px 1px 0 rgba(160,160,190,0.4),
+    -2px 2px 0 rgba(140,140,170,0.35),
+    -3px 3px 0 rgba(120,120,150,0.3),
+    -4px 4px 0 rgba(100,100,130,0.25),
+    -5px 5px 0 rgba(85,85,115,0.2),
+    -12px 20px 30px rgba(0,0,0,0.5);
+}
+.sf-student-card-2d.is-3d-active .sf-form-group input:focus,
+.sf-student-card-2d.is-3d-active .sf-form-group textarea:focus {
+  transform: translateZ(40px);
+  background: var(--card);
+  border: 1px solid rgba(139, 92, 246, 0.5);
+  border-radius: 16px;
+  box-shadow: 
+    -1px 1px 0 rgba(180,180,210,0.45),
+    -2px 2px 0 rgba(160,160,190,0.4),
+    -3px 3px 0 rgba(140,140,170,0.35),
+    -4px 4px 0 rgba(120,120,150,0.3),
+    -5px 5px 0 rgba(105,105,138,0.25),
+    -6px 6px 0 rgba(90,90,125,0.2),
+    -7px 7px 0 rgba(80,80,115,0.18),
+    -8px 8px 0 rgba(70,70,105,0.15),
+    -16px 26px 40px rgba(0,0,0,0.55),
+    0 0 0 3px rgba(139, 92, 246, 0.25),
+    0 0 20px rgba(139, 92, 246, 0.15);
 }
 
 .sf-student-card-2d.is-3d-active .sf-toggles {
@@ -4344,55 +4302,6 @@ body:not(.light-mode) .sf-student-card-2d.is-3d-active::after {
 }
 @keyframes search {
   0% { transform: translateX(0%) rotate(70deg); }
-  100% { transform: translateposition: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 100;
-  pointer-events: none;
-}
-.loader {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.loaderMiniContainer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  width: 130px;
-  height: fit-content;
-}
-.barContainer {
-  width: 100%;
-  height: fit-content;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 10px;
-  background-position: left;
-}
-.bar {
-  width: 100%;
-  height: 8px;
-  background: linear-gradient(to right, rgb(161, 94, 255), rgb(217, 190, 255), rgb(161, 94, 255));
-  background-size: 200% 100%;
-  border-radius: 10px;
-  animation: bar ease-in-out 3s infinite alternate-reverse;
-}
-@keyframes bar { 0% { background-position: left; } 100% { background-position: right; } }
-.bar2 { width: 50%; }
-.svgIcon {
-  position: absolute;
-  left: -25px;
-  margin-top: 18px;
-  z-index: 2;
-  width: 70%;
-  animation: search ease-in-out 3s infinite alternate-reverse;
-}
-@keyframes search {
-  0% { transform: translateX(0%) rotate(70deg); }
   100% { transform: translateX(100px) rotate(10deg); }
 }
 .svgIcon circle,
@@ -4408,12 +4317,46 @@ body.light-mode .sf-student-card-2d {
 body.light-mode .sf-student-card-2d::after {
   background: linear-gradient(90deg, #6366f1, #d946ef, #8b5cf6) top/100% 4px no-repeat, rgba(255,255,255,0.92);
 }
+/* Light mode 3D thickness */
+body.light-mode .sf-student-card-2d::before {
+  background: linear-gradient(180deg, rgba(200,200,210,0.95) 0%, rgba(180,180,195,0.9) 100%);
+  box-shadow: 
+    -1px 0 0 rgba(190,190,200,0.9),
+    -2px 1px 0 rgba(175,175,185,0.85),
+    -3px 2px 0 rgba(165,165,175,0.8),
+    -4px 3px 0 rgba(155,155,165,0.75),
+    -8px 8px 16px rgba(0,0,0,0.1);
+}
 body.light-mode .sf-form-group input[type="text"],
 body.light-mode .sf-form-group textarea {
   background: rgba(0,0,0,0.04);
   border-color: rgba(0,0,0,0.1);
   color: #333;
-  box-shadow: inset 2px 2px 4px rgba(0,0,0,0.06), inset -2px -2px 4px rgba(255,255,255,0.8);
+  box-shadow: var(--neu-in);
+}
+/* Light mode 3D tectonic plate */
+body.light-mode .sf-student-card-2d.is-3d-active .sf-form-group input,
+body.light-mode .sf-student-card-2d.is-3d-active .sf-form-group textarea {
+  box-shadow:
+    -1px 1px 0 rgba(180,180,195,0.9),
+    -2px 2px 0 rgba(170,170,185,0.85),
+    -3px 3px 0 rgba(160,160,175,0.8),
+    -4px 4px 0 rgba(150,150,165,0.75),
+    -10px 15px 20px rgba(0,0,0,0.12);
+}
+body.light-mode .sf-student-card-2d.is-3d-active .sf-form-group input:focus,
+body.light-mode .sf-student-card-2d.is-3d-active .sf-form-group textarea:focus {
+  box-shadow:
+    -1px 1px 0 rgba(180,180,195,0.9),
+    -2px 2px 0 rgba(170,170,185,0.85),
+    -3px 3px 0 rgba(160,160,175,0.8),
+    -4px 4px 0 rgba(150,150,165,0.75),
+    -5px 5px 0 rgba(140,140,155,0.7),
+    -6px 6px 0 rgba(130,130,145,0.65),
+    -7px 7px 0 rgba(120,120,135,0.6),
+    -8px 8px 0 rgba(110,110,125,0.55),
+    -16px 24px 35px rgba(0,0,0,0.18),
+    0 0 0 2px rgba(99, 102, 241, 0.25);
 }
 body.light-mode .sf-card-badge-relative {
   background: rgba(99,102,241,0.1);
@@ -4443,12 +4386,17 @@ body.light-mode .sf-save-action-btn:hover {
 }
 
 /* ========================================================
-   POWER SAVE MODE (2D FLAT)
+   POWER SAVE MODE — Full Effect
    ======================================================== */
 body.power-save-mode * {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
+body.power-save-mode .home-anim-bg { display: none !important; }
+body.power-save-mode #custom-video-bg { display: none !important; }
+body.power-save-mode .blob { animation: none !important; }
+body.power-save-mode .anim-line::after { animation: none !important; }
+body.power-save-mode .bottom-nav-glow { display: none !important; }
 body.power-save-mode .sf-student-card-2d::after,
 body.power-save-mode .sf-form-group input,
 body.power-save-mode .sf-form-group textarea,
@@ -4463,74 +4411,236 @@ body.power-save-mode .nav-item {
   box-shadow: none !important;
   border: 1px solid var(--border2) !important;
 }
-body.power-save-mode .nav-item {
-  box-shadow: none !important;
-  border: 1px solid var(--border2) !important;
-}
 body.power-save-mode .sf-student-card-2d.is-3d-active * {
-  box-shadow: none !important;
+  text-shadow: none !important;
 }
-
-body.power-save-mode .rc-header {
-  background: var(--bg2) !important;
-}
-
-body.power-save-mode .rc-stats {
-  background: var(--bg2) !important;
-}
-
 body.power-save-mode .sf-scene-2d .sf-student-card-2d.is-3d-active * {
-  transform: translateZ(0) !important; /* Only kill 3D internal pops, let carousel rotate */
+  transform: translateZ(0) !important;
+}
+/* 省電模式下動畫減速到幾乎無感 */
+body.power-save-mode *:not(.page):not(.toast) {
+  animation-duration: 0s !important;
+  transition-duration: 0.1s !important;
 }
 
-/* ═══════════ 住宿生卡冊 (Directory) ═══════════ */
-.directory-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  padding: 12px 16px 40px;
+/* ========================================================
+   STATUS BADGE SWITCHING ANIMATION
+   ======================================================== */
+@keyframes statusPop {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(0.7); }
+  65%  { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+.status-badge {
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.status-badge.switching {
+  animation: statusPop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.directory-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 12px 8px;
+/* ========================================================
+   CUSTOM CONFIRM DIALOG
+   ======================================================== */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, .65);
   display: flex;
-  flex-direction: column;
   align-items: center;
-  box-shadow: inset 2px 2px 4px rgba(255,255,255,0.03), 2px 2px 10px rgba(0,0,0,0.2);
-  transition: transform 0.2s;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity .25s;
+  padding: 20px;
+}
+.confirm-overlay.visible {
+  opacity: 1;
+}
+.confirm-card {
+  background: var(--bg2);
+  backdrop-filter: blur(25px) saturate(180%);
+  -webkit-backdrop-filter: blur(25px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 28px;
+  padding: 28px 24px 22px;
+  width: 100%;
+  max-width: 340px;
   text-align: center;
+  transform: scale(0.88) translateY(10px);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s;
+  opacity: 0;
 }
-
-.directory-card:active {
-  transform: scale(0.95);
+.confirm-overlay.visible .confirm-card {
+  transform: scale(1) translateY(0);
+  opacity: 1;
 }
-
-.dc-room {
-  font-size: 14px;
-  font-weight: 800;
+.confirm-icon {
+  font-size: 44px;
+  margin-bottom: 10px;
+  animation: statusPop 0.5s 0.15s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.confirm-title {
+  font-size: 17px;
+  font-weight: 700;
   color: var(--text);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
-
-.dc-name {
+.confirm-msg {
   font-size: 13px;
+  color: var(--dim);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+}
+.confirm-btn {
+  flex: 1;
+  padding: 13px;
+  border: none;
+  border-radius: 14px;
+  font-size: 14px;
   font-weight: 600;
-  color: var(--blue);
-  margin-bottom: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  width: 100%;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.confirm-btn.cancel-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+.confirm-btn.cancel-btn:active { transform: scale(0.96); }
+.confirm-btn.danger-btn {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
+}
+.confirm-btn.danger-btn:active { transform: scale(0.96); }
+.confirm-btn.primary-btn {
+  background: var(--blue);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(10, 132, 255, 0.3);
+}
+.confirm-btn.primary-btn:active { transform: scale(0.96); }
+body.light-mode .confirm-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+body.light-mode .confirm-btn.cancel-btn {
+  background: rgba(0, 0, 0, 0.06);
 }
 
-.dc-class {
-  font-size: 10px;
-  color: var(--dim);
-  white-space: nowrap;
+/* ========================================================
+   CONFETTI CELEBRATION
+   ======================================================== */
+.confetti-container {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  pointer-events: none;
+  z-index: 9999;
   overflow: hidden;
-  text-overflow: ellipsis;
-  width: 100%;
+}
+.confetti-piece {
+  position: absolute;
+  top: -10px;
+  width: 10px; height: 10px;
+  border-radius: 2px;
+  animation: confettiFall var(--fall-dur, 2.5s) var(--fall-delay, 0s) cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+@keyframes confettiFall {
+  0% {
+    opacity: 1;
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  25% {
+    transform: translateY(25vh) rotate(180deg) translateX(var(--conf-sway, 15px)) scale(0.9);
+  }
+  50% {
+    transform: translateY(50vh) rotate(360deg) translateX(calc(-1 * var(--conf-sway, 15px))) scale(0.8);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(105vh) rotate(var(--conf-rot, 720deg)) scale(0.3);
+  }
+}
+
+/* ========================================================
+   BUTTON-LEVEL LOADING SPINNER
+   ======================================================== */
+.btn-loading {
+  position: relative;
+  pointer-events: none;
+  opacity: 0.75;
+}
+.btn-loading::after {
+  content: '';
+  position: absolute;
+  width: 18px; height: 18px;
+  top: 50%; right: 14px;
+  margin-top: -9px;
+  border: 2.5px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: btnSpin 0.6s linear infinite;
+}
+@keyframes btnSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* ========================================================
+   ERROR GENTLE SHAKE
+   ======================================================== */
+@keyframes gentleShake {
+  0%, 100% { transform: translateX(0); }
+  20%  { transform: translateX(-5px); }
+  40%  { transform: translateX(5px); }
+  60%  { transform: translateX(-3px); }
+  80%  { transform: translateX(3px); }
+}
+.toast-error {
+  animation: gentleShake 0.4s ease-in-out;
+}
+
+/* ========================================================
+   IMAGE PREVIEW MODAL
+   ======================================================== */
+.image-preview-content {
+  position: relative;
+  max-width: 90vw;
+  max-height: 85vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.image-preview-content img {
+  max-width: 100%;
+  max-height: 85vh;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  object-fit: contain;
+}
+.image-preview-close {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 16px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+.image-preview-close:active {
+  transform: scale(0.9);
 }
