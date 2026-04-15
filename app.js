@@ -16,6 +16,91 @@ const state = {
   confirmedSquads: [],
 };
 
+// ─── 音訊上下文 (全域共用) ───────────────────────────────────────────
+let audioCtx = null;
+
+// ─── 觸覺回饋 (Android vibrate + iOS AudioContext fallback) ──────────────
+function haptic(type = 'light') {
+  // Android: native vibration
+  if (navigator.vibrate) {
+    switch(type) {
+      case 'light':  navigator.vibrate(10); break;
+      case 'medium': navigator.vibrate(20); break;
+      case 'heavy':  navigator.vibrate([10, 30, 10]); break;
+      case 'error':  navigator.vibrate([50, 30, 50, 30, 50]); break;
+    }
+    return;
+  }
+  // iOS fallback: use a very short, nearly-silent AudioContext pulse as tactile feedback
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1, t); // Sub-audible frequency
+    gain.gain.setValueAtTime(0.01, t);  // Nearly silent
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.02);
+    osc.start(t); osc.stop(t + 0.03);
+  } catch(e) {}
+}
+
+// ─── 自訂確認對話框 (替代原生 confirm) ─────────────────────────────────────
+function showConfirmDialog({ title, message, confirmText = '確定', cancelText = '取消', danger = false, icon = '⚠️' }) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    overlay.innerHTML = `
+      <div class="confirm-card">
+        <div class="confirm-icon">${icon}</div>
+        <div class="confirm-title">${title}</div>
+        <div class="confirm-msg">${message}</div>
+        <div class="confirm-actions">
+          <button class="confirm-btn cancel-btn" id="cfd-cancel">${cancelText}</button>
+          <button class="confirm-btn ${danger ? 'danger-btn' : 'primary-btn'}" id="cfd-confirm">${confirmText}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('visible'));
+
+    const cleanup = (result) => {
+      overlay.classList.remove('visible');
+      setTimeout(() => overlay.remove(), 300);
+      resolve(result);
+    };
+
+    overlay.querySelector('#cfd-cancel').onclick = () => { playClickSound('back'); cleanup(false); };
+    overlay.querySelector('#cfd-confirm').onclick = () => { playClickSound('confirm'); haptic('medium'); cleanup(true); };
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(false); });
+  });
+}
+
+// ─── 🎊 撒花慶祝效果 ──────────────────────────────────────────────────────
+function launchConfetti() {
+  const container = document.createElement('div');
+  container.className = 'confetti-container';
+  const colors = ['#8b5cf6','#6366f1','#d946ef','#f59e0b','#22c55e','#0ea5e9','#ef4444','#f472b6'];
+  for (let i = 0; i < 60; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = Math.random() * 100 + '%';
+    piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.setProperty('--fall-dur', (2.2 + Math.random() * 2).toFixed(1) + 's');
+    piece.style.setProperty('--fall-delay', (Math.random() * 0.8).toFixed(2) + 's');
+    piece.style.setProperty('--conf-rot', (360 + Math.random() * 720).toFixed(0) + 'deg');
+    piece.style.setProperty('--conf-sway', (10 + Math.random() * 30).toFixed(0) + 'px');
+    piece.style.width = (6 + Math.random() * 8) + 'px';
+    piece.style.height = (6 + Math.random() * 8) + 'px';
+    piece.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    container.appendChild(piece);
+  }
+  document.body.appendChild(container);
+  setTimeout(() => container.remove(), 5000);
+}
+
 // ─── 初始化 ─────────────────────────────────────────────────────────────────
 window.addEventListener('error', (e) => {
   showLoading(false);
@@ -35,7 +120,6 @@ window.addEventListener('pointerdown', (e) => {
   }
 }, { passive: true });
 // ─── UI 清脆音效 (Web Audio API) ───────────────────────────────────────────
-let audioCtx = null;
 function playClickSound(type = 'default') {
   if (localStorage.getItem('mute_sound') === 'true') return;
   try {
@@ -232,6 +316,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (muteToggle) muteToggle.checked = true;
     }
 
+    // 初始狀態：潘仔模式
+    if (localStorage.getItem('panzi_mode') === 'true') {
+      document.body.classList.add('panzi-mode');
+      const panziToggle = document.getElementById('setting-panzi');
+      if (panziToggle) panziToggle.checked = true;
+    }
+
+    // 初始狀態：省電模式
+    if (localStorage.getItem('power_save_mode') === 'true') {
+      document.body.classList.add('power-save-mode');
+      const psToggle = document.getElementById('setting-powerSave');
+      if (psToggle) psToggle.checked = true;
+    }
+
     state.currentDate = getTodayColumnName();
     setupNav();
     setupPinDialog();
@@ -239,20 +337,91 @@ document.addEventListener('DOMContentLoaded', async () => {
     navigateTo('home');
     await loadData();
 
-    // 背景輪詢同步點名狀態
-    setInterval(async () => {
+    // ⚡ 即時同步系統 — KV 信號層輪詢
+    // 取代舊的 15 秒 Notion 輪詢，改為 3 秒 KV 輪詢（回應 < 10ms）
+    let _pollTimer = null;
+    let _lastPollTs = 0;      // 上次收到的 confirm 時間戳
+    let _lastAttTs = 0;       // 上次收到的出席變動時間戳
+    let _pollPaused = false;
+
+    function getPollInterval() {
+      if (currentPage === 'summary') return 3000;   // 總表頁：3 秒
+      if (currentPage === 'rollcall') return 5000;   // 點名頁：5 秒
+      return 10000;                                    // 其他頁：10 秒
+    }
+
+    async function doPoll() {
+      if (_pollPaused) return;
       try {
-        const newConfig = await window._api.getConfig();
-        state.config = newConfig;
-        const today = getTodayColumnName();
-        const confVal = state.config['confirm_' + today];
-        const newConfirmed = confVal ? confVal.split(',').filter(Boolean) : [];
-        if (newConfirmed.join(',') !== state.confirmedSquads.join(',')) {
-          state.confirmedSquads = newConfirmed;
-          if (currentPage === 'summary') renderSummary();
+        const data = await window._api.poll();
+        if (!data) return;
+
+        // 1. 檢查確認回報狀態是否有更新
+        if (data.ts > _lastPollTs) {
+          _lastPollTs = data.ts;
+          const newConfirms = data.confirms ? data.confirms.split(',').filter(Boolean) : [];
+          if (newConfirms.join(',') !== state.confirmedSquads.join(',')) {
+            state.confirmedSquads = newConfirms;
+            const today = getTodayColumnName();
+            state.config['confirm_' + today] = data.confirms || '';
+            // 僅重新渲染，不需要 loadData
+            if (currentPage === 'summary') renderSummary();
+            if (currentPage === 'rollcall') updateRollCallStats();
+          }
         }
-      } catch (e) { }
-    }, 15000);
+
+        // 2. 檢查出席資料是否有更新（其他中隊提交了點名）
+        if (data.att_ts > _lastAttTs && _lastAttTs > 0) {
+          _lastAttTs = data.att_ts;
+          // 靜默觸發完整刷新（不顯示 loading 畫面）
+          try {
+            const [roster, config] = await Promise.all([
+              window._api.getRoster(),
+              window._api.getConfig(),
+            ]);
+            state.students = roster.students || [];
+            state.dateColumns = roster.dateColumns || [];
+            state.config = config || {};
+            applyRoomRules();
+            const today = getTodayColumnName();
+            const confVal = state.config['confirm_' + today];
+            if (confVal) state.confirmedSquads = confVal.split(',').filter(Boolean);
+            renderCurrentPage();
+          } catch (e) { console.warn('[Poll] 背景刷新失敗', e); }
+        } else if (_lastAttTs === 0) {
+          _lastAttTs = data.att_ts || 0; // 首次初始化
+        }
+      } catch (e) { /* 輪詢失敗靜默跳過 */ }
+    }
+
+    function startPoll() {
+      if (_pollTimer) clearInterval(_pollTimer);
+      _pollTimer = setInterval(doPoll, getPollInterval());
+    }
+
+    // 頁面可見性監聽：最小化/切到背景時暫停輪詢，回來時立即觸發
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        _pollPaused = true;
+        if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+      } else {
+        _pollPaused = false;
+        doPoll(); // 回到前景時立即觸發一次
+        startPoll();
+      }
+    });
+
+    // 頁面切換時重新調整輪詢頻率
+    const _origNavigateTo = window.navigateTo;
+    if (typeof _origNavigateTo === 'function') {
+      window.navigateTo = function(page) {
+        _origNavigateTo(page);
+        startPoll(); // 因為 currentPage 改變了，間隔也要跟著調整
+      };
+    }
+
+    startPoll();
+    doPoll(); // 啟動後立即執行一次
 
   } catch (err) {
     showLoading(false);
@@ -263,6 +432,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 // 個人化設定 Toggle
 function toggleMute(el) {
   localStorage.setItem('mute_sound', el.checked);
+}
+
+function togglePanzi(el) {
+  const isPanzi = el.checked;
+  localStorage.setItem('panzi_mode', isPanzi);
+  if (isPanzi) document.body.classList.add('panzi-mode');
+  else document.body.classList.remove('panzi-mode');
+}
+
+function togglePowerSave(el) {
+  const isPS = el.checked;
+  localStorage.setItem('power_save_mode', isPS);
+  if (isPS) document.body.classList.add('power-save-mode');
+  else document.body.classList.remove('power-save-mode');
 }
 
 function performAppearanceChange(isLight) {
@@ -291,6 +474,7 @@ function toggleWhiteMode(el, event) {
 
   if (!document.startViewTransition) {
     performAppearanceChange(isLight);
+    if (typeof updateAllImagesToTheme === 'function') updateAllImagesToTheme();
     return;
   }
 
@@ -312,36 +496,52 @@ function toggleWhiteMode(el, event) {
       return Math.max(0, startRadius + (targetRadius - startRadius) * progress);
   };
 
+  // ⚡ 在截圖前先暫時關閉 backdrop-filter，大幅降低光柵化成本
+  document.documentElement.classList.add('vt-active');
+
   if(isDark) document.documentElement.classList.add('transition-dark');
   
+  // 🔥 強制瀏覽器同步重繪此幀，確保 vt-active (拔除 blur/shadow) 實時生效於舊快照的截取
+  void document.documentElement.offsetHeight;
+
   const transition = document.startViewTransition(() => performAppearanceChange(isLight));
 
   transition.ready.then(() => {
     const clipPathStart = `circle(${startRadius}px at ${x}px ${y}px)`;
     const clipPathEnd = `circle(${targetRadius}px at ${x}px ${y}px)`;
 
-    let fallbackStyle = document.getElementById('vt-fallback');
-    if (!fallbackStyle) {
-      fallbackStyle = document.createElement('style');
-      fallbackStyle.id = 'vt-fallback';
-      document.head.appendChild(fallbackStyle);
-    }
+    // ⚡ 使用 Web Animations API 直接驅動偽元素，避免動態注入 @keyframes 觸發 style recalc
     const pseudo = isDark ? '::view-transition-old(root)' : '::view-transition-new(root)';
-    const prefix = isDark ? 'html.transition-dark' : '';
-    const animName = 'vt-circle-anim-' + Date.now();
-    fallbackStyle.innerHTML = `
-      @keyframes ${animName} {
-        0% { clip-path: ${clipPathStart}; }
-        100% { clip-path: ${clipPathEnd}; }
+    try {
+      document.documentElement.animate(
+        { clipPath: [clipPathStart, clipPathEnd] },
+        { duration, easing: 'ease-out', fill: 'forwards', pseudoElement: pseudo }
+      );
+    } catch (_) {
+      // 降級方案：若 Web Animations API 不支援 pseudoElement，用注入 style 方式
+      let fallbackStyle = document.getElementById('vt-fallback');
+      if (!fallbackStyle) {
+        fallbackStyle = document.createElement('style');
+        fallbackStyle.id = 'vt-fallback';
+        document.head.appendChild(fallbackStyle);
       }
-      ${prefix}${pseudo} {
-        animation: ${animName} ${duration}ms ease-out forwards !important;
-      }
-    `;
+      const prefix = isDark ? 'html.transition-dark' : '';
+      const animName = 'vt-circle-anim-' + Date.now();
+      fallbackStyle.textContent = `
+        @keyframes ${animName} {
+          from { clip-path: ${clipPathStart}; }
+          to   { clip-path: ${clipPathEnd}; }
+        }
+        ${prefix}${pseudo} {
+          animation: ${animName} ${duration}ms ease-out forwards !important;
+        }
+      `;
+    }
   }).catch(() => {});
 
   transition.finished.finally(() => {
     document.documentElement.classList.remove('transition-dark');
+    document.documentElement.classList.remove('vt-active');
     const styleEl = document.getElementById('vt-fallback');
     if (styleEl) styleEl.remove();
   });
@@ -386,11 +586,20 @@ function updateAllImagesToTheme() {
 async function loadData() {
   try {
     showLoading(true);
-    const [roster, config, changelogs] = await Promise.all([
+    const [roster, config, changelogs, remarks] = await Promise.all([
       window._api.getRoster(),
       window._api.getConfig(),
-      window._api.getChangelog().catch(() => []) // 容錯處理：若尚未設定 DB 不會整個炸掉
+      window._api.getChangelog().catch(() => []),
+      window._api.getRemarks().catch(() => ({}))
     ]);
+    
+    // Merge remarks natively into the student list
+    if (roster.students && remarks) {
+        roster.students.forEach(s => {
+            s.remarks = remarks[s.id] || '';
+        });
+    }
+    
     state.students = roster.students || [];
     state.dateColumns = roster.dateColumns || [];
     state.config = config || {};
@@ -679,6 +888,12 @@ function navigateTo(page) {
   const fromPage = currentPage;
   currentPage = page;
 
+  // 判斷導航方向
+  const navOrder = ['home', 'rollcall', 'summary', 'history', 'settings'];
+  const fromIdx = navOrder.indexOf(fromPage);
+  const toIdx = navOrder.indexOf(page);
+  const isForward = toIdx > fromIdx;  // 沒找到的頁面(-1)一律視為前進
+
   // 立刻更新導覽列 & 按鈕狀態
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
@@ -698,14 +913,21 @@ function navigateTo(page) {
   if (customBg) customBg.classList.toggle('hidden-bg', !isHome);
   if (animBg) animBg.classList.toggle('hidden-bg', !isHome);
 
+  // 選擇方向性動畫
+  const enterAnim = fromIdx < 0 || toIdx < 0 ? 'fadeUp' : (isForward ? 'slideInRight' : 'slideInLeft');
+  const exitAnim = fromIdx < 0 || toIdx < 0 ? 'pageExit' : (isForward ? 'pageExitLeft' : 'pageExitRight');
+
   function showNewPage() {
     document.querySelectorAll('.page').forEach(p => { p.classList.remove('active'); p.style.animation = ''; });
-    if (toEl) toEl.classList.add('active');
+    if (toEl) {
+      toEl.classList.add('active');
+      toEl.style.animation = `${enterAnim} 0.28s cubic-bezier(0.16, 1, 0.3, 1)`;
+    }
     renderCurrentPage();
   }
 
   if (fromEl && fromEl.classList.contains('active')) {
-    fromEl.style.animation = 'pageExit 0.18s ease forwards';
+    fromEl.style.animation = `${exitAnim} 0.18s ease forwards`;
     setTimeout(showNewPage, 170);
   } else {
     showNewPage();
@@ -789,7 +1011,7 @@ function renderHome() {
 
     const animClass = isInitialHomeRender ? 'pop-initial' : 'pop-return';
 
-    const baseDelay = isInitialHomeRender ? 3.0 : 0; // 折衷給您 3.0 秒
+    const baseDelay = isInitialHomeRender ? 0.3 : 0; // 快速卡片進場
     const delay = (baseDelay + i * 0.03).toFixed(2) + 's';
 
     return `
@@ -822,7 +1044,7 @@ function renderHome() {
     const squadCount = CONFIG.SQUADS.length;
     managementGrid.innerHTML = roles.map((role, i) => {
       const animClass = isInitialHomeRender ? 'pop-initial' : 'pop-return';
-      const baseDelay = isInitialHomeRender ? 3.0 : 0;
+      const baseDelay = isInitialHomeRender ? 0.3 : 0;
       const delay = (baseDelay + (squadCount + i) * 0.03).toFixed(2) + 's';
 
       return `
@@ -938,6 +1160,10 @@ function renderRollCall() {
   const submitBtn = document.getElementById('submit-btn');
   if (submitBtn) submitBtn.textContent = `✅ 提交 ${state.currentDate} 點名`;
 
+  // 記住捲動位置
+  const listEl = document.getElementById('rc-student-list');
+  const scrollTop = listEl ? listEl.scrollTop : 0;
+
   const students = state.students.filter(s => s.squad === state.currentSquad && !s.hidden);
   students.sort((a, b) => a.room.localeCompare(b.room) || a.bed.localeCompare(b.bed));
 
@@ -967,9 +1193,12 @@ function renderRollCall() {
         </div>
       </div>`;
   }
-  document.getElementById('rc-student-list').innerHTML = html;
+  listEl.innerHTML = html;
   updateRollCallStats();
   setupSubmitButton();
+
+  // 恢復捲動位置
+  requestAnimationFrame(() => { if (listEl) listEl.scrollTop = scrollTop; });
 }
 
 // 每位學生的 debounce timer
@@ -1006,6 +1235,11 @@ function toggleStatus(pageId) {
     if (badge) {
       badge.style.cssText = `background:${si.color}20;color:${si.color};border:1px solid ${si.color}40`;
       badge.innerHTML = `${si.icon} ${si.label}`;
+      // 彈跳微動畫 + 觸覺回饋
+      badge.classList.remove('switching');
+      void badge.offsetWidth; // force reflow
+      badge.classList.add('switching');
+      haptic('light');
     }
     const syncDot = row.querySelector('.sync-dot');
     if (syncDot) syncDot.classList.add('pending');
@@ -1139,6 +1373,13 @@ function showSubmitSuccess() {
   document.getElementById('submit-absent').textContent = a;
   const m = document.getElementById('submit-success-modal');
   m.classList.add('visible'); setTimeout(() => m.classList.remove('visible'), 3000);
+
+  // 🎊 撒花慶祝 + 觸覺
+  launchConfetti();
+  haptic('heavy');
+
+  // 全員到齊額外音效
+  if (a === 0 && l === 0) playClickSound('all_present');
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1457,10 +1698,12 @@ function computeDailyStats(date) {
   // 4. 住宿率公式: round((住宿人數/總床數)*100*10)/10
   const rate = totalBeds > 0 ? Math.round((residents / totalBeds) * 100 * 10) / 10 : 0;
 
+  const foreignOffset = parseInt(state.config['foreign_offset']) || 0;
+
   return {
     totalBeds, totalEmpty, residents, rate, bedOffset,
     present: gPresent, leave: gLeave, absent: gAbsent,
-    shouldAttend: gShouldAttend, foreign: gForeignCount,
+    shouldAttend: gShouldAttend, foreign: gForeignCount + foreignOffset,
     squads,
   };
 }
@@ -1505,20 +1748,20 @@ function renderSummary() {
   const grid = document.getElementById('summary-squad-grid');
   grid.innerHTML = st.squads.map(sq => {
     const isConfirmed = state.confirmedSquads.includes(sq.id) && date === getTodayColumnName();
-    const confHtml = isConfirmed ? `<div class="sqd-conf-badge"><div class="conf-ring">✓</div><span>已回報</span></div>` : '';
+    const confHtml = isConfirmed ? `<div class="sqd-conf-badge-inline"><span class="conf-ring-sm">✓</span>已回報</div>` : '';
     return `
     <div class="sqd-card" style="--sq-c:${sq.color}">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
-        <div class="sqd-title" style="margin-bottom:0">${sq.id}</div>
+      <div class="sqd-header-row">
+        <div class="sqd-title">${sq.id}</div>
         ${confHtml}
       </div>
-      <div class="sqd-row">
-        <span>應到 <b>${sq.shouldAttend}</b></span>
-        <span style="color:var(--green)">到 <b>${sq.present}</b></span>
-        <span style="color:var(--yellow)">假 <b>${sq.leave}</b></span>
-        <span style="color:var(--red)">缺 <b>${sq.absent}</b></span>
+      <div class="sqd-stats-grid">
+        <div class="sqd-stat-item">應到 <b>${sq.shouldAttend}</b></div>
+        <div class="sqd-stat-item green">到 <b>${sq.present}</b></div>
+        <div class="sqd-stat-item yellow">假 <b>${sq.leave}</b></div>
+        <div class="sqd-stat-item red">缺 <b>${sq.absent}</b></div>
       </div>
-      <div class="sqd-foreign">🌏 外籍 ${sq.foreign} ・ 🛏️ 空床 ${sq.empty}</div>
+      <div class="sqd-meta">🌏 ${sq.foreign} ・ 🛏️ ${sq.empty}</div>
     </div>`;
   }).join('');
 
@@ -1609,8 +1852,11 @@ function renderSettings() {
   // 宿舍參數
   const totalBeds = parseInt(state.config['total_beds']) || visibleStudents.length;
   const bedOffset = parseInt(state.config['bed_offset']) || 0;
+  const foreignOffset = parseInt(state.config['foreign_offset']) || 0;
   document.getElementById('cfg-total-beds').value = totalBeds;
   document.getElementById('cfg-bed-offset').value = bedOffset;
+  const foreignInput = document.getElementById('cfg-foreign-offset');
+  if (foreignInput) foreignInput.value = foreignOffset;
 
 }
 
@@ -1618,25 +1864,205 @@ function adjustSetting(key, delta) {
   const map = {
     'total_beds': 'cfg-total-beds',
     'bed_offset': 'cfg-bed-offset',
+    'foreign_offset': 'cfg-foreign-offset',
   };
   const input = document.getElementById(map[key]);
   if (!input) return;
-  let val = parseInt(input.value) || 0;
-  if (key === 'total_beds') val = Math.max(0, val + delta);
-  else val = val + delta;
-  input.value = val;
+
+  const oldVal = parseInt(input.value) || 0;
+  const newVal = key === 'total_beds' ? Math.max(0, oldVal + delta) : oldVal + delta;
+  if (newVal === oldVal) return;
+
+  // 立即更新邏輯值
+  input.value = newVal;
+
+  const stepper = input.closest('.stepper');
+  const style = window.getComputedStyle(input);
+  const rect = input.getBoundingClientRect();
+  const sRect = stepper.getBoundingClientRect();
+  const h = rect.height;
+  const w = rect.width;
+  const left = rect.left - sRect.left;
+  const top = rect.top - sRect.top;
+  const dir = delta > 0 ? -1 : 1; // +1 → 數字從下方進來 (向上滾)
+
+  // 清除舊動畫盒
+  let isInterrupt = false;
+  stepper.querySelectorAll('.stepper-anim-box').forEach(b => {
+    isInterrupt = true;
+    b.getAnimations({ subtree: true }).forEach(a => {
+      try { a.cancel(); } catch (_) {}
+    });
+    b.remove();
+  });
+
+  // 拆分新舊數字為位數陣列（統一長度，前方補空格）
+  const oldStr = String(oldVal);
+  const newStr = String(newVal);
+  const maxLen = Math.max(oldStr.length, newStr.length);
+  const oldDigits = oldStr.padStart(maxLen, ' ').split('');
+  const newDigits = newStr.padStart(maxLen, ' ').split('');
+
+  // 動畫容器（完整覆蓋 input 區域）
+  const box = document.createElement('div');
+  box.className = 'stepper-anim-box';
+  box.style.cssText = `
+    position: absolute;
+    width: ${w}px; height: ${h}px;
+    left: ${left}px; top: ${top}px;
+    pointer-events: none; z-index: 10;
+    clip-path: inset(0 round ${style.borderRadius});
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  `;
+
+  // 所有位數的容器
+  const digitsWrapper = document.createElement('div');
+  digitsWrapper.style.cssText = `
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 0px;
+  `;
+
+  // 找出從右到左第一個變化的位數（用來判斷進位延遲）
+  // 進位連鎖：個位先動，十位稍後，百位最後
+  const changedIndices = [];
+  for (let i = maxLen - 1; i >= 0; i--) {
+    if (oldDigits[i] !== newDigits[i]) changedIndices.push(i);
+  }
+
+  // 動畫參數：若是中斷動畫則縮短時長，否則絲滑過渡
+  const baseDur = isInterrupt ? 250 : 450;
+  const stagger = isInterrupt ? 30 : 80;
+  const ease = 'cubic-bezier(0.23, 1, 0.32, 1)';
+  
+  // 建立輔助測量器，用來獲取每個字元精確的真實寬度
+  const measurer = document.createElement('span');
+  measurer.style.cssText = `
+    position: absolute; visibility: hidden; white-space: pre; pointer-events: none;
+    font-family: ${style.fontFamily}; font-size: ${style.fontSize}; font-weight: ${style.fontWeight};
+  `;
+  document.body.appendChild(measurer);
+  const getW = (ch) => {
+    if (ch === ' ') return 0;
+    measurer.textContent = ch;
+    return measurer.getBoundingClientRect().width;
+  };
+
+  const animations = [];
+
+  for (let i = 0; i < maxLen; i++) {
+    const oldD = oldDigits[i];
+    const newD = newDigits[i];
+    const changed = oldD !== newD;
+    
+    const cw = getW(newD !== ' ' ? newD : (oldD !== ' ' ? oldD : '0'));
+
+    // ★ 容器直接用最終寬度，不做寬度動畫
+    //   這樣連點時不會因為中斷寬度動畫而彈回
+    const digitContainer = document.createElement('div');
+    digitContainer.style.cssText = `
+      position: relative;
+      height: ${h}px;
+      overflow: hidden;
+      display: inline-block;
+      width: ${cw}px;
+    `;
+
+    const digitStyle = `
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: ${cw}px;
+      height: 100%;
+      position: absolute;
+      left: 0; top: 0;
+      font-family: ${style.fontFamily};
+      font-size: ${style.fontSize};
+      font-weight: ${style.fontWeight};
+      color: var(--text);
+      box-sizing: border-box;
+    `;
+
+    if (!changed) {
+      const staticSpan = document.createElement('span');
+      staticSpan.textContent = oldD;
+      staticSpan.style.cssText = digitStyle;
+      digitContainer.appendChild(staticSpan);
+    } else {
+      const oldSpan = document.createElement('span');
+      oldSpan.textContent = oldD;
+      oldSpan.style.cssText = digitStyle;
+      if (oldD === ' ') oldSpan.style.visibility = 'hidden';
+
+      const newSpan = document.createElement('span');
+      newSpan.textContent = newD;
+      newSpan.style.cssText = digitStyle;
+      newSpan.style.transform = `translateY(${-dir * h}px)`;
+      if (newD === ' ') newSpan.style.visibility = 'hidden';
+
+      digitContainer.appendChild(oldSpan);
+      digitContainer.appendChild(newSpan);
+
+      const orderInChain = changedIndices.indexOf(i);
+      const delay = orderInChain * stagger;
+
+      animations.push(() => {
+        // 舊位數滾出
+        if (oldD !== ' ') {
+          oldSpan.animate(
+            [
+              { transform: 'translateY(0)' },
+              { transform: `translateY(${dir * h}px)` }
+            ],
+            { duration: baseDur, easing: ease, fill: 'both', delay }
+          );
+        }
+
+        // 新位數滾入
+        if (newD !== ' ') {
+          newSpan.animate(
+            [
+              { transform: `translateY(${-dir * h}px)` },
+              { transform: 'translateY(0)' }
+            ],
+            { duration: baseDur, easing: ease, fill: 'both', delay }
+          );
+        }
+      });
+    }
+
+    digitsWrapper.appendChild(digitContainer);
+  }
+
+  box.appendChild(digitsWrapper);
+  stepper.appendChild(box);
+  
+  // 啟動所有漸變
+  animations.forEach(anim => anim());
+  
+  document.body.removeChild(measurer);
+
+  // 隱藏實體文字
+  input.classList.add('stepper-input-hiding');
 }
 
 async function saveDormSettings() {
   const totalBeds = parseInt(document.getElementById('cfg-total-beds').value) || 0;
   const bedOffset = parseInt(document.getElementById('cfg-bed-offset').value) || 0;
+  const foreignOffset = parseInt(document.getElementById('cfg-foreign-offset')?.value) || 0;
   try {
     await window._api.setConfig({
       total_beds: String(totalBeds),
       bed_offset: String(bedOffset),
+      foreign_offset: String(foreignOffset),
     });
     state.config['total_beds'] = String(totalBeds);
     state.config['bed_offset'] = String(bedOffset);
+    state.config['foreign_offset'] = String(foreignOffset);
     showToast('宿舍參數已儲存', 'success');
   } catch (err) {
     showToast('儲存失敗：' + err.message, 'error');
@@ -1774,7 +2200,18 @@ function showLoading(show) {
 
 function showToast(msg, type = 'info') {
   const c = document.getElementById('toast-container'); if (!c) return;
+  // Toast 堆疊限制：最多 3 條，移除最舊的
+  while (c.children.length >= 3) {
+    const oldest = c.children[0];
+    oldest.classList.remove('visible');
+    oldest.remove();
+  }
   const t = document.createElement('div'); t.className = `toast toast-${type}`; t.textContent = msg;
+  // 錯誤類型增加搖晃提醒
+  if (type === 'error') {
+    t.classList.add('toast-error');
+    haptic('error');
+  }
   c.appendChild(t); setTimeout(() => t.classList.add('visible'), 10);
   setTimeout(() => { t.classList.remove('visible'); setTimeout(() => t.remove(), 300); }, 3000);
 }
@@ -1888,6 +2325,7 @@ function openDevAuth() {
         pinAuthCheckbox.checked = state.config['global_pin_auth'] !== 'false';
       }
       initDevChangelog();
+      checkUnreadFeedback();
       panel.classList.add('open');
     } else {
       panel.classList.remove('open');
@@ -2054,7 +2492,14 @@ async function clearBgVideo() {
 
 // 清理所有空床的殘留資料（針對過往遺留資料）
 async function cleanUpEmptyBeds() {
-  if (!confirm("確定要將所有空床的「姓名、學號、班級」清空，並「所有日期的請假紀錄」覆寫為 ✅ 嗎？此操作無法還原！")) return;
+  const ok = await showConfirmDialog({
+    title: '清理空床資料',
+    message: '確定要將所有空床的「姓名、學號、班級」清空，並「所有日期的請假紀錄」覆寫為 ✅？此操作無法還原！',
+    confirmText: '確定清理',
+    danger: true,
+    icon: '🧹'
+  });
+  if (!ok) return;
 
   const emptyBeds = state.students.filter(s => s.isEmpty);
   if (emptyBeds.length === 0) {
@@ -2103,7 +2548,14 @@ async function cleanUpEmptyBeds() {
 
 // 暫時按鈕：將所有空床的請假紀錄覆蓋為空床專用的勾勾
 async function fillEmptyBedsWithCheckmarks() {
-  if (!confirm("確定要將「目前所有空床」的請假紀錄全部強制補上「✓」嗎？")) return;
+  const ok = await showConfirmDialog({
+    title: '補上勾勾',
+    message: '確定要將「目前所有空床」的請假紀錄全部強制補上「✓」嗎？',
+    confirmText: '確定執行',
+    danger: false,
+    icon: '✅'
+  });
+  if (!ok) return;
 
   const emptyBeds = state.students.filter(s => s.isEmpty);
   if (emptyBeds.length === 0) {
@@ -2199,7 +2651,14 @@ async function renderResidentReviewList() {
 }
 
 async function approveResidentAddReq(reqId) {
-  if (!confirm('確定要通過申請，將該學生正式寫入總表床位嗎？')) return;
+  const ok = await showConfirmDialog({
+    title: '核准申請',
+    message: '確定要通過申請，將該學生正式寫入總表床位嗎？',
+    confirmText: '✅ 通過並寫入',
+    danger: false,
+    icon: '📝'
+  });
+  if (!ok) return;
   showLoading(true);
   try {
     const config = await window._api.getConfig();
@@ -2246,7 +2705,14 @@ async function approveResidentAddReq(reqId) {
 }
 
 async function rejectResidentAddReq(reqId) {
-  if (!confirm('確定要駁回此申請嗎？紀錄將被刪除。')) return;
+  const ok = await showConfirmDialog({
+    title: '駁回申請',
+    message: '確定要駁回此申請嗎？紀錄將被刪除。',
+    confirmText: '駁回',
+    danger: true,
+    icon: '❌'
+  });
+  if (!ok) return;
   showLoading(true);
   try {
     await window._api.setConfig({ [reqId]: '' });
@@ -2539,6 +3005,7 @@ async function submitRepair() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         reporter: reporter,
+        name: reporter, // Fallback for backend that checks 'name'
         reason: reason,
         photos: repairPhotos
       })
@@ -2587,6 +3054,7 @@ async function renderRepairReviewList() {
 
       html += `
         <div class="repair-record-card">
+          <div class="repair-record-reporter">🗣️ 報修人：${rec.reporter || rec.name || rec.title || rec.Name || rec.author || '（未知填寫人）'}</div>
           <div class="repair-record-reason">${rec.reason || '（無描述）'}</div>
           ${photosHtml ? `<div class="repair-record-photos">${photosHtml}</div>` : ''}
           <div class="repair-record-time">⏰ ${timeStr}</div>
@@ -2601,7 +3069,14 @@ async function renderRepairReviewList() {
 }
 
 async function markRepairDone(id) {
-  if (!confirm('確定此報修已經回報處理完畢？紀錄將會被刪除。')) return;
+  const ok = await showConfirmDialog({
+    title: '確認處理完畢',
+    message: '確定此報修已經回報處理完畢？紀錄將會被刪除。',
+    confirmText: '確認完成',
+    danger: false,
+    icon: '🛠️'
+  });
+  if (!ok) return;
   showLoading(true);
   try {
     const res = await fetch(window.CONFIG.WORKER_URL + '/api/repair-records', {
@@ -2630,3 +3105,847 @@ window.submitRepair = submitRepair;
 window.openRepairReview = openRepairReview;
 window.renderRepairReviewList = renderRepairReviewList;
 window.markRepairDone = markRepairDone;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 意見回饋系統
+// ═══════════════════════════════════════════════════════════════════════════════
+let feedbackPhotos = []; // base64 array
+
+function openFeedbackForm() {
+  feedbackPhotos = [];
+  navigateTo('feedback-form');
+  const nameInput = document.getElementById('feedback-name');
+  if (nameInput) nameInput.value = '';
+  const content = document.getElementById('feedback-content');
+  if (content) content.value = '';
+  const grid = document.getElementById('feedback-preview-grid');
+  if (grid) grid.innerHTML = '';
+  // 重置送出按鈕狀態
+  const btn = document.getElementById('feedback-submit-btn');
+  if (btn) btn.classList.remove('sent');
+}
+
+function handleFeedbackPhotos(input) {
+  const files = Array.from(input.files);
+  files.forEach(file => {
+    if (feedbackPhotos.length >= 3) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 600;
+        let w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+          else { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const compressed = canvas.toDataURL('image/jpeg', 0.6);
+        feedbackPhotos.push(compressed);
+        renderFeedbackPreviews();
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value = '';
+}
+
+function renderFeedbackPreviews() {
+  const grid = document.getElementById('feedback-preview-grid');
+  if (!grid) return;
+  grid.innerHTML = feedbackPhotos.map((src, i) => `
+    <div class="repair-preview-item">
+      <img src="${src}" alt="截圖${i + 1}">
+      <button class="repair-preview-remove" onclick="removeFeedbackPhoto(${i})">✕</button>
+    </div>
+  `).join('');
+}
+
+function removeFeedbackPhoto(index) {
+  feedbackPhotos.splice(index, 1);
+  renderFeedbackPreviews();
+}
+
+async function submitFeedback() {
+  const name = document.getElementById('feedback-name')?.value?.trim() || '匿名';
+  const content = document.getElementById('feedback-content')?.value?.trim();
+  const btn = document.getElementById('feedback-submit-btn');
+
+  if (!content) {
+    showToast('請填寫您的建議或意見', 'error');
+    // 確保按鈕沒有被 focus 所以不會觸發紙飛機動畫
+    if (btn) btn.blur();
+    return;
+  }
+
+  // 通過驗證才觸發送出動畫
+  if (btn) btn.focus();
+  
+  try {
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name,
+        content: content,
+        photos: feedbackPhotos
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      playClickSound('all_present');
+      showToast('感謝您的回饋！我們會認真閱讀 💜', 'success');
+      feedbackPhotos = [];
+      // 延遲跳轉讓送出動畫播完
+      setTimeout(() => navigateTo('home'), 2000);
+    } else {
+      if (btn) btn.blur();
+      throw new Error(data.error || '送出失敗');
+    }
+  } catch (err) {
+    if (btn) btn.blur();
+    showToast('送出失敗：' + err.message, 'error');
+  }
+}
+
+function openFeedbackReview() {
+  navigateTo('feedback-review');
+  renderFeedbackReviewList();
+}
+
+async function renderFeedbackReviewList() {
+  const container = document.getElementById('feedback-review-list');
+  if (!container) return;
+  container.innerHTML = '<div style="color:var(--dim);text-align:center;padding:20px;">讀取中...</div>';
+
+  try {
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records');
+    const records = await res.json();
+
+    // 隱藏未讀紅點
+    const dot = document.getElementById('feedback-unread-dot');
+    const badge = document.getElementById('feedback-badge');
+    if (dot) dot.style.display = 'none';
+    if (badge) badge.style.display = 'none';
+
+    if (!records || records.length === 0) {
+      container.innerHTML = '<div style="color:var(--dim);text-align:center;padding:40px;">目前沒有任何用戶回饋 🎉</div>';
+      return;
+    }
+
+    let html = '';
+    records.forEach(rec => {
+      const timeStr = rec.createdAt ? new Date(rec.createdAt).toLocaleString() : '未知';
+      const photosHtml = (rec.photos || []).map(src =>
+        `<img src="${src}" alt="回饋截圖" style="width:80px;height:80px;object-fit:cover;border-radius:8px;cursor:pointer;" onclick="window.open('${src}','_blank')">`
+      ).join('');
+
+      html += `
+        <div class="repair-record-card">
+          <div class="repair-record-reporter">🙋 ${rec.name || '匿名'}</div>
+          <div class="repair-record-reason">${rec.content || '（無內容）'}</div>
+          ${photosHtml ? `<div class="repair-record-photos">${photosHtml}</div>` : ''}
+          <div class="repair-record-time">⏰ ${timeStr}</div>
+          <button class="repair-done-btn" onclick="markFeedbackRead('${rec.id}')">✅ 已讀並歸檔</button>
+        </div>
+      `;
+    });
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = `<div style="color:var(--red);text-align:center;padding:20px;">讀取失敗：${err.message}</div>`;
+  }
+}
+
+async function markFeedbackRead(id) {
+  const ok = await showConfirmDialog({
+    title: '歸檔回饋',
+    message: '確定要將此回饋標記為已讀並歸檔嗎？',
+    confirmText: '已讀歸檔',
+    danger: false,
+    icon: '📨'
+  });
+  if (!ok) return;
+  showLoading(true);
+  try {
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('已標記為已讀', 'success');
+      renderFeedbackReviewList();
+    } else {
+      throw new Error(data.error || '操作失敗');
+    }
+  } catch (err) {
+    showToast('操作失敗：' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+// 檢查是否有未讀回饋（在開發者面板開啟時檢查）
+async function checkUnreadFeedback() {
+  try {
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records');
+    const records = await res.json();
+    if (records && records.length > 0) {
+      const dot = document.getElementById('feedback-unread-dot');
+      const badge = document.getElementById('feedback-badge');
+      if (dot) dot.style.display = 'inline-block';
+      if (badge) badge.style.display = 'block';
+    }
+  } catch (_) {}
+}
+
+window.openFeedbackForm = openFeedbackForm;
+window.handleFeedbackPhotos = handleFeedbackPhotos;
+window.removeFeedbackPhoto = removeFeedbackPhoto;
+window.submitFeedback = submitFeedback;
+window.openFeedbackReview = openFeedbackReview;
+window.renderFeedbackReviewList = renderFeedbackReviewList;
+window.markFeedbackRead = markFeedbackRead;
+window.checkUnreadFeedback = checkUnreadFeedback;
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
+// 住宿生檔案管理
+// ═════════════════════════════════════════════════════════════════════════════
+let _sfSearchTimer = null;
+let _sfResults = [];
+let _sfActiveIndex = 0;
+let _sfObserver = null;
+let _sfRenderMap = new WeakMap(); // DOM element 到物件的對應
+let _sfRandomDefaults = [];
+
+function getRandomStudents(count) {
+  if (!state.students || state.students.length === 0) return [];
+  const shuffled = [...state.students].sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, count);
+}
+
+function onStudentFileSearch(query) {
+  clearTimeout(_sfSearchTimer);
+  const scene = document.getElementById('sf-scene');
+  const mirror = document.getElementById('sf-search-mirror');
+  if (!query || query.trim().length === 0) {
+    if (mirror) mirror.style.display = 'none';
+    if (scene) scene.classList.remove('is-searching');
+    
+    if (_sfRandomDefaults.length === 0) {
+      _sfRandomDefaults = getRandomStudents(5);
+    }
+    _sfResults = _sfRandomDefaults;
+    renderStudentFileCards();
+    return;
+  }
+
+  // 使用者開始打字，「立刻」顯示掃描鏡子與假搜尋動畫
+  if (mirror) mirror.style.display = 'block';
+  if (scene) scene.classList.add('is-searching');
+
+  _sfSearchTimer = setTimeout(() => {
+    // 系統確認使用者打字完畢 (1 秒後)，準備顯示結果
+    const q = query.trim().toLowerCase();
+    _sfResults = state.students.filter(s => {
+      const name = (s.name || '').toLowerCase();
+      const room = (s.room || '').toLowerCase();
+      const bed = (s.bed || '').toLowerCase();
+      const studentId = (s.studentId || '').toLowerCase();
+      const cls = (s.class || '').toLowerCase();
+      const squad = (s.squad || '').toLowerCase();
+      return name.includes(q) || room.includes(q) || bed.includes(q) ||
+             studentId.includes(q) || cls.includes(q) || squad.includes(q) ||
+             (room + bed).includes(q);
+    });
+
+    if (mirror) mirror.style.display = 'none';
+    if (scene) scene.classList.remove('is-searching');
+    
+    _sfRandomDefaults = [];
+    _sfActiveIndex = 0;
+    // 如果有結果產生，就觸發「切換為真實找尋」的高速滑入效果
+    renderStudentFileCards(true);
+    
+    // 追加一個過渡動畫：從「假找」切換成「找到了！」的 pop 動畫
+    const area = document.getElementById('sf-card-area');
+    if (area) {
+      area.classList.remove('search-found-pop');
+      void area.offsetWidth; // 觸發重繪
+      area.classList.add('search-found-pop');
+    }
+  }, 1000); // 打字防抖 1 秒
+}
+
+function renderStudentFileCards(sweepIn = false) {
+  const cardArea = document.getElementById('sf-card-area');
+  const track = document.getElementById('sf-card-track');
+
+  if (_sfObserver) {
+    _sfObserver.disconnect();
+    _sfObserver = null;
+  }
+
+  if (_sfResults.length === 0) {
+    track.innerHTML = `<div class="sf-empty-hint">
+      <div style="font-size:48px; margin-bottom:12px;">😔</div>
+      <div style="color:var(--dim); font-size:14px;">找不到符合的住宿生或床位</div>
+    </div>`;
+    return;
+  }
+
+  track.innerHTML = '';
+  
+  // 為了承受超極速慣性滑動不穿幫，環狀緩衝長度從 50 提升至 60 跨度 (前後各 30 張緩衝)
+  const repeats = Math.max( 5, Math.ceil(60 / _sfResults.length) );
+  let renderList = [];
+  for (let i = 0; i < repeats; i++) {
+     renderList.push(..._sfResults);
+  }
+  
+  renderList.forEach((s, i) => {
+    const card = document.createElement('div');
+    card.className = 'sf-student-card-2d';
+    card.dataset.index = i;
+    
+    card.innerHTML = `
+      <div class="sf-card-title" style="display: flex; align-items: flex-start; position: relative;">
+        <span class="sf-title-text" style="flex:1;">${s.room || ''} ${s.bed || ''}</span>
+        <button class="sf-icon-btn sf-broom-btn" onclick="clearStudentData(this)" title="清空床位資料" style="margin-top: 2px; margin-right: 6px;">🧹</button>
+        <div class="sf-card-badge-relative" style="margin-top: 4px; margin-right: 4px; transform-origin: center right;">${s.isForeign ? '外籍生' : (s.isEmpty || !s.name ? '空床' : (s.squad || '無班級'))}</div>
+      </div>
+      
+      <div class="sf-edit-form">
+        <div style="display:flex; gap: 8px; transform-style: preserve-3d;">
+            <div class="sf-form-group" style="flex: 1;">
+              <label>姓名</label>
+              <input type="text" class="sf-input-name styled-input" value="${s.name || ''}" placeholder="未登記">
+            </div>
+            <div class="sf-form-group" style="flex: 1;">
+              <label>學號</label>
+              <input type="text" class="sf-input-id styled-input" value="${s.studentId || ''}" placeholder="無">
+            </div>
+        </div>
+        <div style="display:flex; gap: 8px; align-items: flex-end; transform-style: preserve-3d;">
+            <div class="sf-form-group" style="flex: 1;">
+              <label>班別</label>
+              <input type="text" class="sf-input-class styled-input" value="${s.class || ''}" placeholder="無">
+            </div>
+            <div class="sf-toggles" style="flex: 1; padding-bottom: 6px; padding-left: 8px; gap: 8px;">
+              <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-foreign" ${s.isForeign ? 'checked' : ''}> 外籍</label>
+              <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-empty" ${s.isEmpty || !s.name ? 'checked' : ''}> 空床</label>
+            </div>
+        </div>
+        <div class="sf-form-group" style="flex: 1; margin-top: 8px;">
+          <label>備註 (情況註記)</label>
+          <textarea class="sf-input-remarks styled-input" style="flex: 1; resize: none; font-size: 13px; line-height: 1.4; padding: 10px;" placeholder="住宿生備註欄">${s.remarks || ''}</textarea>
+        </div>
+        <button class="sf-save-action-btn" onclick="autoSaveStudentFile(this)" style="margin-top: 16px;">💾 儲存修改</button>
+      </div>
+    `;
+    
+    track.appendChild(card);
+    _sfRenderMap.set(card, s); // mapping DOM to object
+  });
+
+  setup2DCarouselInteraction();
+
+  const middleIndex = Math.floor(repeats / 2) * _sfResults.length;
+  _sfActiveIndex = middleIndex;
+  _currentX = -(_sfActiveIndex * _cardWidth);
+  
+  if (sweepIn && window._updateContinuousScale) {
+      // 模擬從假裝找的右側（或左邊）高速滑入，這裡我們讓它從右邊飛進來（+8張卡片）
+      let startX = -((_sfActiveIndex - 8) * _cardWidth);
+      track.style.transition = 'none';
+      track.style.transform = `translateX(${startX}px)`;
+      
+      void track.offsetWidth; // force reflow
+      
+      // 刷刷刷飛向目標
+      track.style.transition = 'transform 0.9s cubic-bezier(0.1, 0.95, 0.2, 1)';
+      track.style.transform = `translateX(${_currentX}px)`;
+      
+      const startTime = performance.now();
+      if (window._sfSearchAnimFrame) cancelAnimationFrame(window._sfSearchAnimFrame);
+      function step() {
+          const transformStr = window.getComputedStyle(track).transform;
+          if (transformStr !== 'none') {
+              const matrix = new DOMMatrix(transformStr);
+              window._updateContinuousScale(matrix.m41);
+          }
+          if (performance.now() - startTime < 1000) {
+              window._sfSearchAnimFrame = requestAnimationFrame(step);
+          } else {
+              window._updateContinuousScale(_currentX);
+          }
+      }
+      window._sfSearchAnimFrame = requestAnimationFrame(step);
+  } else {
+      track.style.transition = 'none';
+      track.style.transform = `translateX(${_currentX}px)`;
+      if (window._updateContinuousScale) {
+          window._updateContinuousScale(_currentX);
+      }
+  }
+  
+  Array.from(track.children).forEach((c, i) => {
+     c.classList.toggle('active', i === _sfActiveIndex);
+  });
+  if (window._restart3DTimer) window._restart3DTimer();
+}
+
+let _currentX = 0;
+let _cardWidth = 308; // 300(card) + 8(gap)
+let _carouselAttached = false;
+
+function setup2DCarouselInteraction() {
+  const area = document.getElementById('sf-card-area');
+  const track = document.getElementById('sf-card-track');
+  const scene = document.getElementById('sf-scene');
+  
+  if (_carouselAttached || !scene || !track) return; 
+  _carouselAttached = true;
+  
+  let startX = 0;
+  let trackStartX = 0;
+  let isDragging = false;
+  
+  let _3dTimer = null;
+  
+  window._restart3DTimer = function() {
+      disable3D();
+      _3dTimer = setTimeout(enable3D, 2000);
+  };
+
+  function enable3D() {
+    const activeCard = Array.from(track.children).find(c => c.classList.contains('active'));
+    if (activeCard) {
+       activeCard.classList.add('is-3d-active');
+       window._is3dMode = true;
+       if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
+    }
+  }
+
+  function disable3D() {
+    window._is3dMode = false;
+    if (_3dTimer) {
+      clearTimeout(_3dTimer);
+      _3dTimer = null;
+    }
+    let changed = false;
+    Array.from(track.children).forEach(c => {
+       if (c.classList.contains('is-3d-active')) {
+          c.classList.remove('is-3d-active');
+          
+          c.dataset.was3d = 'true';
+          setTimeout(() => { c.dataset.was3d = 'false'; }, 500);
+          changed = true;
+       } else {
+          c.dataset.wasAway = 'true';
+          setTimeout(() => { c.dataset.wasAway = 'false'; }, 500);
+          changed = true;
+       }
+    });
+    if (changed && window._updateContinuousScale) window._updateContinuousScale(_currentX);
+  }
+
+  let velocityX = 0;
+  let lastMoveX = 0;
+  let lastMoveTime = 0;
+  
+  function onDown(e) {
+    if (scene.classList.contains('is-searching')) return; 
+    
+    const targetCard = e.target.closest('.sf-student-card-2d');
+    
+    // 只要點到目前的有效(Active)卡片，就絕對不要中斷 3D 體驗！讓使用者安心點擊輸入框
+    const isClickOnActive = targetCard && targetCard.classList.contains('active');
+    
+    if (!isClickOnActive) {
+        disable3D();
+    }
+    
+    // 無限滑動（地球是圓的）核心：如果在上次滑行結束後太靠近邊緣，就無縫瞬間傳送到中間
+    const total = track.children.length;
+    const baseN = _sfResults.length;
+    if (baseN > 0 && total >= baseN * 3) {
+      if (_sfActiveIndex < total * 0.2 || _sfActiveIndex > total * 0.8) {
+        const targetCenterBase = Math.floor((total / 2) / baseN) * baseN;
+        const localOffset = _sfActiveIndex % baseN;
+        _sfActiveIndex = targetCenterBase + localOffset;
+        _currentX = -(_sfActiveIndex * _cardWidth);
+        track.style.transition = 'none';
+        track.style.transform = `translateX(${_currentX}px)`;
+        if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
+      }
+    }
+
+    isDragging = true;
+    startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    trackStartX = _currentX;
+    
+    lastMoveX = startX;
+    lastMoveTime = performance.now();
+    velocityX = 0;
+    
+    track.style.transition = 'none';
+  }
+  
+  function onMove(e) {
+    if (!isDragging) return;
+    const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    const deltaX = clientX - startX;
+    
+    // 如果滑動量明顯，才取消 3D 狀態避免使用者點擊輸入框誤觸
+    if (Math.abs(deltaX) > 40) {
+       disable3D(); 
+    }
+    
+    const now = performance.now();
+    const dt = now - lastMoveTime;
+    if (dt > 0) {
+       velocityX = (clientX - lastMoveX) / dt;
+    }
+    lastMoveX = clientX;
+    lastMoveTime = now;
+    
+    _currentX = trackStartX + deltaX;
+    
+    // 即時無縫瞬間傳送校正（避免滑太快或滑到底出現空白斷層）
+    const total = track.children.length;
+    const baseN = _sfResults.length;
+    if (baseN > 0 && total >= baseN * 3) {
+        let thresholdLeft = -_cardWidth * (total * 0.3);  // 往右滑
+        let thresholdRight = -_cardWidth * (total * 0.7); // 往左滑 
+        if (_currentX > thresholdLeft || _currentX < thresholdRight) {
+            const centerPos = -Math.floor(total / 2) * _cardWidth;
+            const diff = centerPos - _currentX;
+            const shiftMultiples = Math.round(diff / (baseN * _cardWidth));
+            const shiftDist = shiftMultiples * baseN * _cardWidth;
+            
+            _currentX += shiftDist;
+            trackStartX += shiftDist;
+        }
+    }
+    
+    track.style.transform = `translateX(${_currentX}px)`;
+    if (window._updateContinuousScale) window._updateContinuousScale();
+  }
+  
+  let _currentTransitionTime = 0.5;
+
+  let _animFrame = null;
+
+  function updateContinuousScale(trackXStr) {
+    let currentTrackX = trackXStr !== undefined ? parseFloat(trackXStr) : _currentX;
+    const centerIdxFloat = -currentTrackX / _cardWidth;
+    
+    for (let i = 0; i < track.children.length; i++) {
+        const c = track.children[i];
+        if (!c) continue;
+        const rawDiff = i - centerIdxFloat; // positive means card is to the right
+        const absDiff = Math.abs(rawDiff);
+        
+        // 【虛擬化渲染優化】：當搜尋出大量資料（如全校 300 筆），不該讓瀏覽器同時算繪幾千張卡片
+        // 這裡設定唯有靠近畫面中心的 4 張卡片會被算繪並分配給 GPU，其餘直接被隱藏與釋放，零卡頓！
+        if (absDiff > 4) {
+            c.style.visibility = 'hidden';
+            continue;
+        } else {
+            c.style.visibility = 'visible';
+        }
+        
+        // Soft continuous interpolation using a simple quadratic curve
+        let t = Math.max(0, 1 - absDiff * 0.45); 
+        let scale = 0.85 + 0.15 * (t * t);   
+        let alpha = 0.8 + 0.2 * t;      
+        
+        // 確保中間卡片絕對在最上層，兩側往後排
+        c.style.zIndex = Math.round(100 - absDiff * 10);
+        c.style.opacity = alpha; // use hardware-accelerated opacity instead of blur/brightness!
+        c.style.filter = 'none'; // IMPORTANT: completely remove heavy CSS filters during drag!
+        
+        if (c.classList.contains('is-3d-active')) {
+            c.style.transition = 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
+            c.style.transform = `perspective(1000px) rotate3d(0.5, 1, 0, 15deg) scale(${scale + 0.05})`;
+            c.style.opacity = '1';
+        } else {
+            if (isDragging) {
+                if (c.dataset.was3d === 'true' || c.dataset.wasAway === 'true') {
+                    c.style.transition = 'transform 0.5s cubic-bezier(0.2, 0.9, 0.3, 1)';
+                } else {
+                    c.style.transition = 'none';
+                }
+            } else {
+                c.style.transition = 'transform 0.5s cubic-bezier(0.3, 0.9, 0.4, 1)';
+            }
+            
+            if (window._is3dMode && !isDragging) {
+                let spread = rawDiff < 0 ? -1500 : 1500;
+                c.style.transform = `translateX(${spread}px) scale(${scale})`;
+            } else {
+                c.style.transform = `translateX(0px) scale(${scale})`; 
+            }
+        }
+    }
+  }
+  window._updateContinuousScale = updateContinuousScale;
+
+  function snapToNearest() {
+    const maxIdx = track.children.length - 1;
+
+    let newIndex = Math.round(-_currentX / _cardWidth);
+    
+    if (newIndex < 0) newIndex = 0;
+    if (newIndex > maxIdx) newIndex = maxIdx;
+    
+    _sfActiveIndex = newIndex;
+    _currentX = -(_sfActiveIndex * _cardWidth);
+    
+    // 使用動態計算出的時間，搭配減速彈性的貝茲曲線模擬摩擦力到完全煞停
+    track.style.transition = `transform ${_currentTransitionTime}s cubic-bezier(0.2, 0.9, 0.3, 1.05)`;
+    track.style.transform = `translateX(${_currentX}px)`;
+    
+    // Update active visual class
+    Array.from(track.children).forEach((c, i) => {
+        c.classList.toggle('active', i === _sfActiveIndex);
+    });
+
+    if (_animFrame) cancelAnimationFrame(_animFrame);
+    
+    const startTime = performance.now();
+    const duration = _currentTransitionTime * 1000;
+    
+    function step() {
+        const transformStr = window.getComputedStyle(track).transform;
+        if (transformStr !== 'none') {
+            const matrix = new DOMMatrix(transformStr);
+            updateContinuousScale(matrix.m41);
+        }
+        
+        if (performance.now() - startTime < duration + 50) {
+            _animFrame = requestAnimationFrame(step);
+        } else {
+            updateContinuousScale(_currentX);
+            
+            // 無縫瞬間傳送校正（地球是圓的）
+            const total = track.children.length;
+            const baseN = _sfResults.length;
+            if (baseN > 0 && total >= baseN * 3) {
+                if (_sfActiveIndex < total * 0.3 || _sfActiveIndex > total * 0.7) {
+                    const targetCenterBase = Math.floor((total / 2) / baseN) * baseN;
+                    const localOffset = _sfActiveIndex % baseN;
+                    _sfActiveIndex = targetCenterBase + localOffset;
+                    _currentX = -(_sfActiveIndex * _cardWidth);
+                    track.style.transition = 'none';
+                    track.style.transform = `translateX(${_currentX}px)`;
+                    updateContinuousScale(_currentX);
+                }
+            }
+
+            if (window._restart3DTimer) window._restart3DTimer();
+        }
+    }
+    _animFrame = requestAnimationFrame(step);
+  }
+
+  function onUp(e) {
+    if (!isDragging) return;
+    isDragging = false;
+    
+    // 如果手指僅僅是「點擊」或微小滑動（例如點擊輸入區域），不要觸發強制 snapping 與 disable3D
+    const totalDeltaX = Math.abs(lastMoveX - startX);
+    if (totalDeltaX < 5 && velocityX === 0) {
+        return;
+    }
+    
+    // Check teleport BEFORE setting targetX, so we always stay in safe bounding center
+    const total = track.children.length;
+    const baseN = _sfResults.length;
+    if (baseN > 0 && total >= baseN * 3) {
+        const centerPos = -Math.floor(total / 2) * _cardWidth;
+        const diff = centerPos - _currentX;
+        const shiftMultiples = Math.round(diff / (baseN * _cardWidth));
+        const shiftDist = shiftMultiples * baseN * _cardWidth;
+        
+        if (shiftDist !== 0) {
+            _currentX += shiftDist;
+            track.style.transition = 'none';
+            track.style.transform = `translateX(${_currentX}px)`;
+            void track.offsetWidth; 
+        }
+    }
+    
+    // 依據拖曳速度計算慣性滑動距離 (摩擦力模擬 - 阻力提高以避免隨便飄走)
+    const friction = 0.005;
+    let momentumDist = (velocityX * Math.abs(velocityX)) / (2 * friction);
+    
+    // 上下限保護 (降低極限距離，保持絲滑同時避免輕碰就噴走)
+    if (momentumDist > 1500) momentumDist = 1500;
+    if (momentumDist < -1500) momentumDist = -1500;
+
+    let targetX = _currentX + momentumDist;
+    const maxIdx = track.children.length - 1;
+    let newIndex = Math.round(-targetX / _cardWidth);
+    if (newIndex < 0) newIndex = 0;
+    if (newIndex > maxIdx) newIndex = maxIdx;
+    
+    // 根據要滑動的實際距離動態計算動畫時間
+    const distToTravel = Math.abs((newIndex * _cardWidth) + _currentX);
+    let time = 0.4 + (distToTravel / 2500); 
+    if (time > 1.2) time = 1.2;
+    if (time < 0.4) time = 0.4;
+    _currentTransitionTime = time;
+
+    _currentX += momentumDist;
+    snapToNearest();
+  }
+
+  area.addEventListener('mousedown', onDown);
+  window.addEventListener('mousemove', onMove, { passive: false });
+  window.addEventListener('mouseup', onUp);
+  
+  area.addEventListener('touchstart', onDown, { passive: true });
+  area.addEventListener('touchmove', (e) => {
+      if (isDragging) e.preventDefault(); 
+      onMove(e);
+  }, { passive: false });
+  window.addEventListener('touchend', onUp);
+}
+
+window.initStudentFiles = function() {
+    _sfRandomDefaults = [];
+    document.getElementById('sf-search-input').value = '';
+    onStudentFileSearch('');
+};
+
+window.clearStudentData = function() {
+   const cardArea = document.getElementById('sf-card-area');
+   const cards = cardArea.querySelectorAll('.sf-student-card-2d');
+   const activeCard = Array.from(cards).find(c => c.classList.contains('active')) || cards[0];
+   if (!activeCard) return;
+
+   activeCard.querySelector('.sf-input-name').value = '';
+   activeCard.querySelector('.sf-input-id').value = '';
+   activeCard.querySelector('.sf-input-class').value = '';
+   activeCard.querySelector('.sf-input-remarks').value = '';
+   activeCard.querySelector('.sf-chk-foreign').checked = false;
+   activeCard.querySelector('.sf-chk-empty').checked = true;
+   
+   // 不自動儲存，留給用戶確認後再按下方的儲存按鈕
+};
+
+window.debouncedAutoSave = function(elem) {
+   if (elem.dataset.timeout) clearTimeout(elem.dataset.timeout);
+   elem.dataset.timeout = setTimeout(() => {
+      autoSaveStudentFile(elem);
+   }, 300);
+}
+
+window.autoSaveStudentFile = async function(elem) {
+   const activeCard = elem.closest('.sf-student-card-2d');
+   if (!activeCard) return;
+
+   const studentObj = _sfRenderMap.get(activeCard);
+   if (!studentObj) return;
+
+   const newName = activeCard.querySelector('.sf-input-name').value.trim();
+   const newId = activeCard.querySelector('.sf-input-id').value.trim();
+   const newClass = activeCard.querySelector('.sf-input-class').value.trim();
+   const newRemarks = activeCard.querySelector('.sf-input-remarks').value.trim();
+   const isForeign = activeCard.querySelector('.sf-chk-foreign').checked;
+   const isEmpty = activeCard.querySelector('.sf-chk-empty').checked;
+
+   const btn = activeCard.querySelector('.sf-save-action-btn');
+   let oldHtml = '';
+   if (btn) {
+       oldHtml = btn.innerHTML;
+       btn.innerHTML = '🔄 儲存中...';
+       btn.disabled = true;
+   } else {
+       showToast('自動儲存中...', 'info');
+   }
+
+   try {
+     const updatePayload = {
+        pageId: studentObj.id,
+        updateProfile: {
+            name: isEmpty ? '' : newName,
+            class: newClass,
+            studentId: isEmpty ? '' : newId,
+            isForeign: isForeign
+        },
+        markEmpty: isEmpty
+     };
+     if (isEmpty) updatePayload.clearProfile = true;
+
+     await Promise.all([
+        window._api.updateAttendance([updatePayload]),
+        window._api.updateRemark(studentObj.id, newRemarks).catch(() => {}) // 即使尚未初始化資料庫也不阻斷
+     ]);
+
+     // Update Local Cache Reference
+     studentObj.name = isEmpty ? '' : newName;
+     studentObj.studentId = isEmpty ? '' : newId;
+     studentObj.squad = newClass;
+     studentObj.class = newClass;
+     studentObj.remarks = newRemarks;
+     studentObj.isForeign = isForeign;
+     studentObj.isEmpty = isEmpty;
+     
+     // 同步更新畫面上所有複製人的顯示內容
+     const cards = document.querySelectorAll('.sf-student-card-2d');
+     cards.forEach(c => {
+         const obj = _sfRenderMap.get(c);
+         if (obj === studentObj) {
+             c.querySelector('.sf-input-name').value = studentObj.name;
+             c.querySelector('.sf-input-id').value = studentObj.studentId;
+             c.querySelector('.sf-input-class').value = studentObj.class;
+             c.querySelector('.sf-input-remarks').value = studentObj.remarks;
+             c.querySelector('.sf-chk-foreign').checked = studentObj.isForeign;
+             c.querySelector('.sf-chk-empty').checked = studentObj.isEmpty;
+         }
+     });
+     
+     localStorage.setItem('biyuan_temp_students_update', JSON.stringify(state.students));
+
+     if (btn) {
+         btn.innerHTML = '✅ 已儲存';
+         btn.style.background = '#10b981';
+         btn.style.color = '#fff';
+         setTimeout(() => {
+             btn.innerHTML = oldHtml;
+             btn.disabled = false;
+             btn.style.background = '';
+             btn.style.color = '';
+         }, 1500);
+     } else {
+         showToast('資料已自動同步至總表 ✅', 'success');
+     }
+
+     if (typeof playClickSound === 'function') playClickSound('all_present');
+
+   } catch (err) {
+     if (btn) {
+         btn.innerHTML = '❌ 儲存失敗';
+         btn.style.background = '#ef4444';
+         btn.style.color = '#fff';
+         setTimeout(() => {
+             btn.innerHTML = oldHtml;
+             btn.disabled = false;
+             btn.style.background = '';
+             btn.style.color = '';
+         }, 2000);
+     }
+     showToast('自動連動 Notion 失敗：' + err.message, 'error');
+   }
+};
+
+window.onStudentFileSearch = onStudentFileSearch;
