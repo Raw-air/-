@@ -328,30 +328,42 @@ body {
   animation: fadeUp .3s cubic-bezier(0.16, 1, 0.3, 1)
 }
 
-/* 頁面進入時恢復微微從下浮起 */
+/* 頁面進入：方向性滑動 */
 @keyframes fadeUp {
   from {
     opacity: 0;
     transform: translateY(16px)
   }
-
   to {
     opacity: 1;
     transform: none
   }
 }
 
-/* 頁面切換離開時如裝置藝術一般，往下掉落離開 */
-@keyframes pageExit {
-  from {
-    opacity: 1;
-    transform: translateY(0)
-  }
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
 
-  to {
-    opacity: 0;
-    transform: translateY(50px)
-  }
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* 頁面切換離開：方向性 */
+@keyframes pageExit {
+  from { opacity: 1; transform: translateY(0) }
+  to   { opacity: 0; transform: translateY(50px) }
+}
+
+@keyframes pageExitLeft {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(-30px); }
+}
+
+@keyframes pageExitRight {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(30px); }
 }
 
 /* 首頁透明，讓極光球背景窿透；其他頁面用不透明背景蓋住動畫 */
@@ -3352,116 +3364,9 @@ html.vt-active *:not(.bottom-nav):not(.bottom-nav-glow):not(.nav-item):not(.nav-
 
 /* ── 潘仔模式 (簡潔視角) ── */
 body.panzi-mode .sqd-meta { display: none !important; }
-/* ========================================================
-   GLASS-NEUMORPHISM OVERRIDES (Appended by Agent)
-   ======================================================== */
 
-/* 1. Global Box Shadows & Cards */
-.sq-card,
-.sqd-card, .big-stat, .sm-stat,
-.rc-stat, .student-row,
-.changelog-content, .hist-detail {
-  background: var(--card);
-  backdrop-filter: blur(20px) saturate(120%);
-  -webkit-backdrop-filter: blur(20px) saturate(120%);
-  box-shadow: var(--neu-out);
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-}
 
-.modal-card, .dev-card, .settings-card, .date-picker-panel {
-  background: rgba(30, 30, 32, 0.85); /* More solid background to prevent transparency issues */
-  backdrop-filter: blur(20px) saturate(120%);
-  -webkit-backdrop-filter: blur(20px) saturate(120%);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); /* Clean drop shadow instead of blurry var(--neu-out) */
-  border: 1px solid rgba(255, 255, 255, 0.15); /* Clean 1px border */
-  border-radius: var(--r);
-  overflow: hidden; /* Fix fuzzy edges */
-  transform: translateZ(0); /* Hardware acceleration to clear antialiasing issues */
-}
 
-body.light-mode .modal-card,
-body.light-mode .dev-card,
-body.light-mode .settings-card,
-body.light-mode .date-picker-panel {
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-.modal-card {
-  border-radius: 28px;
-}
-
-.bottom-nav {
-  background: var(--card);
-  backdrop-filter: blur(24px) saturate(180%);
-  box-shadow: 0 -8px 24px var(--shadow-dark), 0 0 16px var(--shadow-light);
-}
-
-/* 2. Buttons - Default Pop-Out */
-.back-btn, .submit-btn, .action-btn, .empty-bed-action, .fab-empty-bed,
-.nav-arrow, .date-pill, .rc-date-clickable, .changelog-btn, .dev-trigger,
-.modal-btn, .stepper-btn {
-  background: var(--card);
-  backdrop-filter: blur(12px) saturate(120%);
-  box-shadow: var(--neu-out);
-  border: 1px solid var(--border);
-  transition: all 0.25s cubic-bezier(.175, .885, .32, 1.275);
-}
-
-/* Background resets for heavy colors */
-.submit-btn, .fab-empty-bed {
-  background: rgba(139, 92, 246, 0.15) !important;
-  color: var(--text) !important;
-  border-color: rgba(139, 92, 246, 0.4) !important;
-}
-
-/* 3. Interactive States - Inset Shadow (Depressed) */
-.back-btn:active, .submit-btn:active, .action-btn:active, .empty-bed-action:active,
-.fab-empty-bed:active, .nav-arrow:active, .rc-date-clickable:active,
-.changelog-btn:active, .dev-trigger:active, .modal-btn:active, .stepper-btn:active,
-.sq-card:active, .student-row:active {
-  box-shadow: var(--neu-in) !important;
-  transform: translateY(2px) scale(0.98) !important;
-}
-
-.empty-bed-action:hover, .sq-card:hover {
-  box-shadow: var(--neu-out), 0 16px 24px rgba(0,0,0,0.05);
-}
-
-/* 4. Inputs & Selects - Inset Trench */
-.styled-input, .styled-select, .dev-input, .stepper-input, .repair-textarea {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  box-shadow: var(--neu-in) !important;
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 14px;
-}
-
-.styled-input:focus, .styled-select:focus, .dev-input:focus, .stepper-input:focus {
-  box-shadow: var(--neu-in), 0 0 0 2px var(--shadow-light) !important;
-  outline: none;
-}
-
-/* 5. Nav Items in Bottom Bar */
-.nav-item.active .nav-icon {
-  transform: translateY(-2px);
-  color: var(--purple);
-  filter: drop-shadow(0 4px 8px var(--shadow-dark));
-}
-
-/* 6. RC Confirm Action Banner */
-.rc-confirm-action {
-  background: var(--card);
-  box-shadow: var(--neu-out);
-  border-radius: 16px;
-}
-.rc-confirm-action:active {
-  box-shadow: var(--neu-in);
-  transform: scale(0.98);
-}
 
 
 /* ========================================================
@@ -4388,12 +4293,17 @@ body.light-mode .sf-save-action-btn:hover {
 }
 
 /* ========================================================
-   POWER SAVE MODE (2D FLAT)
+   POWER SAVE MODE — Full Effect
    ======================================================== */
 body.power-save-mode * {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
+body.power-save-mode .home-anim-bg { display: none !important; }
+body.power-save-mode #custom-video-bg { display: none !important; }
+body.power-save-mode .blob { animation: none !important; }
+body.power-save-mode .anim-line::after { animation: none !important; }
+body.power-save-mode .bottom-nav-glow { display: none !important; }
 body.power-save-mode .sf-student-card-2d::after,
 body.power-save-mode .sf-form-group input,
 body.power-save-mode .sf-form-group textarea,
@@ -4412,5 +4322,186 @@ body.power-save-mode .sf-student-card-2d.is-3d-active * {
   text-shadow: none !important;
 }
 body.power-save-mode .sf-scene-2d .sf-student-card-2d.is-3d-active * {
-  transform: translateZ(0) !important; /* Only kill 3D internal pops, let carousel rotate */
+  transform: translateZ(0) !important;
+}
+/* 省電模式下動畫減速到幾乎無感 */
+body.power-save-mode *:not(.page):not(.toast) {
+  animation-duration: 0s !important;
+  transition-duration: 0.1s !important;
+}
+
+/* ========================================================
+   STATUS BADGE SWITCHING ANIMATION
+   ======================================================== */
+@keyframes statusPop {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(0.7); }
+  65%  { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+.status-badge {
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.status-badge.switching {
+  animation: statusPop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ========================================================
+   CUSTOM CONFIRM DIALOG
+   ======================================================== */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, .65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity .25s;
+  padding: 20px;
+}
+.confirm-overlay.visible {
+  opacity: 1;
+}
+.confirm-card {
+  background: var(--bg2);
+  backdrop-filter: blur(25px) saturate(180%);
+  -webkit-backdrop-filter: blur(25px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 28px;
+  padding: 28px 24px 22px;
+  width: 100%;
+  max-width: 340px;
+  text-align: center;
+  transform: scale(0.88) translateY(10px);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s;
+  opacity: 0;
+}
+.confirm-overlay.visible .confirm-card {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+}
+.confirm-icon {
+  font-size: 44px;
+  margin-bottom: 10px;
+  animation: statusPop 0.5s 0.15s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.confirm-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.confirm-msg {
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+}
+.confirm-btn {
+  flex: 1;
+  padding: 13px;
+  border: none;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.confirm-btn.cancel-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+.confirm-btn.cancel-btn:active { transform: scale(0.96); }
+.confirm-btn.danger-btn {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
+}
+.confirm-btn.danger-btn:active { transform: scale(0.96); }
+.confirm-btn.primary-btn {
+  background: var(--blue);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(10, 132, 255, 0.3);
+}
+.confirm-btn.primary-btn:active { transform: scale(0.96); }
+body.light-mode .confirm-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+body.light-mode .confirm-btn.cancel-btn {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* ========================================================
+   CONFETTI CELEBRATION
+   ======================================================== */
+.confetti-container {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  pointer-events: none;
+  z-index: 9999;
+  overflow: hidden;
+}
+.confetti-piece {
+  position: absolute;
+  width: 10px; height: 10px;
+  border-radius: 2px;
+  animation: confettiFall var(--fall-dur, 2.5s) var(--fall-delay, 0s) cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+@keyframes confettiFall {
+  0% {
+    opacity: 1;
+    transform: translateY(-20vh) rotate(0deg) scale(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(105vh) rotate(var(--conf-rot, 720deg)) scale(0.4);
+  }
+}
+
+/* ========================================================
+   BUTTON-LEVEL LOADING SPINNER
+   ======================================================== */
+.btn-loading {
+  position: relative;
+  pointer-events: none;
+  opacity: 0.75;
+}
+.btn-loading::after {
+  content: '';
+  position: absolute;
+  width: 18px; height: 18px;
+  top: 50%; right: 14px;
+  margin-top: -9px;
+  border: 2.5px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: btnSpin 0.6s linear infinite;
+}
+@keyframes btnSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* ========================================================
+   ERROR GENTLE SHAKE
+   ======================================================== */
+@keyframes gentleShake {
+  0%, 100% { transform: translateX(0); }
+  20%  { transform: translateX(-5px); }
+  40%  { transform: translateX(5px); }
+  60%  { transform: translateX(-3px); }
+  80%  { transform: translateX(3px); }
+}
+.toast-error {
+  animation: gentleShake 0.4s ease-in-out;
 }

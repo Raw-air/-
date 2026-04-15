@@ -16,6 +16,70 @@ const state = {
   confirmedSquads: [],
 };
 
+// ─── 觸覺回饋 (Android vibrate API) ────────────────────────────────────────
+function haptic(type = 'light') {
+  if (!navigator.vibrate) return;
+  switch(type) {
+    case 'light':  navigator.vibrate(10); break;
+    case 'medium': navigator.vibrate(20); break;
+    case 'heavy':  navigator.vibrate([10, 30, 10]); break;
+    case 'error':  navigator.vibrate([50, 30, 50, 30, 50]); break;
+  }
+}
+
+// ─── 自訂確認對話框 (替代原生 confirm) ─────────────────────────────────────
+function showConfirmDialog({ title, message, confirmText = '確定', cancelText = '取消', danger = false, icon = '⚠️' }) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    overlay.innerHTML = `
+      <div class="confirm-card">
+        <div class="confirm-icon">${icon}</div>
+        <div class="confirm-title">${title}</div>
+        <div class="confirm-msg">${message}</div>
+        <div class="confirm-actions">
+          <button class="confirm-btn cancel-btn" id="cfd-cancel">${cancelText}</button>
+          <button class="confirm-btn ${danger ? 'danger-btn' : 'primary-btn'}" id="cfd-confirm">${confirmText}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('visible'));
+
+    const cleanup = (result) => {
+      overlay.classList.remove('visible');
+      setTimeout(() => overlay.remove(), 300);
+      resolve(result);
+    };
+
+    overlay.querySelector('#cfd-cancel').onclick = () => { playClickSound('back'); cleanup(false); };
+    overlay.querySelector('#cfd-confirm').onclick = () => { playClickSound('confirm'); haptic('medium'); cleanup(true); };
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(false); });
+  });
+}
+
+// ─── 🎊 撒花慶祝效果 ──────────────────────────────────────────────────────
+function launchConfetti() {
+  const container = document.createElement('div');
+  container.className = 'confetti-container';
+  const colors = ['#8b5cf6','#6366f1','#d946ef','#f59e0b','#22c55e','#0ea5e9','#ef4444','#f472b6'];
+  for (let i = 0; i < 50; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = Math.random() * 100 + '%';
+    piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.setProperty('--fall-dur', (2 + Math.random() * 2).toFixed(1) + 's');
+    piece.style.setProperty('--fall-delay', (Math.random() * 0.6).toFixed(2) + 's');
+    piece.style.setProperty('--conf-rot', (360 + Math.random() * 720).toFixed(0) + 'deg');
+    piece.style.width = (6 + Math.random() * 8) + 'px';
+    piece.style.height = (6 + Math.random() * 8) + 'px';
+    piece.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    container.appendChild(piece);
+  }
+  document.body.appendChild(container);
+  setTimeout(() => container.remove(), 4500);
+}
+
 // ─── 初始化 ─────────────────────────────────────────────────────────────────
 window.addEventListener('error', (e) => {
   showLoading(false);
@@ -804,6 +868,12 @@ function navigateTo(page) {
   const fromPage = currentPage;
   currentPage = page;
 
+  // 判斷導航方向
+  const navOrder = ['home', 'rollcall', 'summary', 'history', 'settings'];
+  const fromIdx = navOrder.indexOf(fromPage);
+  const toIdx = navOrder.indexOf(page);
+  const isForward = toIdx > fromIdx;  // 沒找到的頁面(-1)一律視為前進
+
   // 立刻更新導覽列 & 按鈕狀態
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
@@ -823,14 +893,21 @@ function navigateTo(page) {
   if (customBg) customBg.classList.toggle('hidden-bg', !isHome);
   if (animBg) animBg.classList.toggle('hidden-bg', !isHome);
 
+  // 選擇方向性動畫
+  const enterAnim = fromIdx < 0 || toIdx < 0 ? 'fadeUp' : (isForward ? 'slideInRight' : 'slideInLeft');
+  const exitAnim = fromIdx < 0 || toIdx < 0 ? 'pageExit' : (isForward ? 'pageExitLeft' : 'pageExitRight');
+
   function showNewPage() {
     document.querySelectorAll('.page').forEach(p => { p.classList.remove('active'); p.style.animation = ''; });
-    if (toEl) toEl.classList.add('active');
+    if (toEl) {
+      toEl.classList.add('active');
+      toEl.style.animation = `${enterAnim} 0.28s cubic-bezier(0.16, 1, 0.3, 1)`;
+    }
     renderCurrentPage();
   }
 
   if (fromEl && fromEl.classList.contains('active')) {
-    fromEl.style.animation = 'pageExit 0.18s ease forwards';
+    fromEl.style.animation = `${exitAnim} 0.18s ease forwards`;
     setTimeout(showNewPage, 170);
   } else {
     showNewPage();
@@ -914,7 +991,7 @@ function renderHome() {
 
     const animClass = isInitialHomeRender ? 'pop-initial' : 'pop-return';
 
-    const baseDelay = isInitialHomeRender ? 3.0 : 0; // 折衷給您 3.0 秒
+    const baseDelay = isInitialHomeRender ? 0.3 : 0; // 快速卡片進場
     const delay = (baseDelay + i * 0.03).toFixed(2) + 's';
 
     return `
@@ -947,7 +1024,7 @@ function renderHome() {
     const squadCount = CONFIG.SQUADS.length;
     managementGrid.innerHTML = roles.map((role, i) => {
       const animClass = isInitialHomeRender ? 'pop-initial' : 'pop-return';
-      const baseDelay = isInitialHomeRender ? 3.0 : 0;
+      const baseDelay = isInitialHomeRender ? 0.3 : 0;
       const delay = (baseDelay + (squadCount + i) * 0.03).toFixed(2) + 's';
 
       return `
@@ -1063,6 +1140,10 @@ function renderRollCall() {
   const submitBtn = document.getElementById('submit-btn');
   if (submitBtn) submitBtn.textContent = `✅ 提交 ${state.currentDate} 點名`;
 
+  // 記住捲動位置
+  const listEl = document.getElementById('rc-student-list');
+  const scrollTop = listEl ? listEl.scrollTop : 0;
+
   const students = state.students.filter(s => s.squad === state.currentSquad && !s.hidden);
   students.sort((a, b) => a.room.localeCompare(b.room) || a.bed.localeCompare(b.bed));
 
@@ -1092,9 +1173,12 @@ function renderRollCall() {
         </div>
       </div>`;
   }
-  document.getElementById('rc-student-list').innerHTML = html;
+  listEl.innerHTML = html;
   updateRollCallStats();
   setupSubmitButton();
+
+  // 恢復捲動位置
+  requestAnimationFrame(() => { if (listEl) listEl.scrollTop = scrollTop; });
 }
 
 // 每位學生的 debounce timer
@@ -1131,6 +1215,11 @@ function toggleStatus(pageId) {
     if (badge) {
       badge.style.cssText = `background:${si.color}20;color:${si.color};border:1px solid ${si.color}40`;
       badge.innerHTML = `${si.icon} ${si.label}`;
+      // 彈跳微動畫 + 觸覺回饋
+      badge.classList.remove('switching');
+      void badge.offsetWidth; // force reflow
+      badge.classList.add('switching');
+      haptic('light');
     }
     const syncDot = row.querySelector('.sync-dot');
     if (syncDot) syncDot.classList.add('pending');
@@ -1264,6 +1353,13 @@ function showSubmitSuccess() {
   document.getElementById('submit-absent').textContent = a;
   const m = document.getElementById('submit-success-modal');
   m.classList.add('visible'); setTimeout(() => m.classList.remove('visible'), 3000);
+
+  // 🎊 撒花慶祝 + 觸覺
+  launchConfetti();
+  haptic('heavy');
+
+  // 全員到齊額外音效
+  if (a === 0 && l === 0) playClickSound('all_present');
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -2084,7 +2180,18 @@ function showLoading(show) {
 
 function showToast(msg, type = 'info') {
   const c = document.getElementById('toast-container'); if (!c) return;
+  // Toast 堆疊限制：最多 3 條，移除最舊的
+  while (c.children.length >= 3) {
+    const oldest = c.children[0];
+    oldest.classList.remove('visible');
+    oldest.remove();
+  }
   const t = document.createElement('div'); t.className = `toast toast-${type}`; t.textContent = msg;
+  // 錯誤類型增加搖晃提醒
+  if (type === 'error') {
+    t.classList.add('toast-error');
+    haptic('error');
+  }
   c.appendChild(t); setTimeout(() => t.classList.add('visible'), 10);
   setTimeout(() => { t.classList.remove('visible'); setTimeout(() => t.remove(), 300); }, 3000);
 }
@@ -2365,7 +2472,14 @@ async function clearBgVideo() {
 
 // 清理所有空床的殘留資料（針對過往遺留資料）
 async function cleanUpEmptyBeds() {
-  if (!confirm("確定要將所有空床的「姓名、學號、班級」清空，並「所有日期的請假紀錄」覆寫為 ✅ 嗎？此操作無法還原！")) return;
+  const ok = await showConfirmDialog({
+    title: '清理空床資料',
+    message: '確定要將所有空床的「姓名、學號、班級」清空，並「所有日期的請假紀錄」覆寫為 ✅？此操作無法還原！',
+    confirmText: '確定清理',
+    danger: true,
+    icon: '🧹'
+  });
+  if (!ok) return;
 
   const emptyBeds = state.students.filter(s => s.isEmpty);
   if (emptyBeds.length === 0) {
@@ -2414,7 +2528,14 @@ async function cleanUpEmptyBeds() {
 
 // 暫時按鈕：將所有空床的請假紀錄覆蓋為空床專用的勾勾
 async function fillEmptyBedsWithCheckmarks() {
-  if (!confirm("確定要將「目前所有空床」的請假紀錄全部強制補上「✓」嗎？")) return;
+  const ok = await showConfirmDialog({
+    title: '補上勾勾',
+    message: '確定要將「目前所有空床」的請假紀錄全部強制補上「✓」嗎？',
+    confirmText: '確定執行',
+    danger: false,
+    icon: '✅'
+  });
+  if (!ok) return;
 
   const emptyBeds = state.students.filter(s => s.isEmpty);
   if (emptyBeds.length === 0) {
@@ -2510,7 +2631,14 @@ async function renderResidentReviewList() {
 }
 
 async function approveResidentAddReq(reqId) {
-  if (!confirm('確定要通過申請，將該學生正式寫入總表床位嗎？')) return;
+  const ok = await showConfirmDialog({
+    title: '核准申請',
+    message: '確定要通過申請，將該學生正式寫入總表床位嗎？',
+    confirmText: '✅ 通過並寫入',
+    danger: false,
+    icon: '📝'
+  });
+  if (!ok) return;
   showLoading(true);
   try {
     const config = await window._api.getConfig();
@@ -2557,7 +2685,14 @@ async function approveResidentAddReq(reqId) {
 }
 
 async function rejectResidentAddReq(reqId) {
-  if (!confirm('確定要駁回此申請嗎？紀錄將被刪除。')) return;
+  const ok = await showConfirmDialog({
+    title: '駁回申請',
+    message: '確定要駁回此申請嗎？紀錄將被刪除。',
+    confirmText: '駁回',
+    danger: true,
+    icon: '❌'
+  });
+  if (!ok) return;
   showLoading(true);
   try {
     await window._api.setConfig({ [reqId]: '' });
@@ -2914,7 +3049,14 @@ async function renderRepairReviewList() {
 }
 
 async function markRepairDone(id) {
-  if (!confirm('確定此報修已經回報處理完畢？紀錄將會被刪除。')) return;
+  const ok = await showConfirmDialog({
+    title: '確認處理完畢',
+    message: '確定此報修已經回報處理完畢？紀錄將會被刪除。',
+    confirmText: '確認完成',
+    danger: false,
+    icon: '🛠️'
+  });
+  if (!ok) return;
   showLoading(true);
   try {
     const res = await fetch(window.CONFIG.WORKER_URL + '/api/repair-records', {
@@ -3099,7 +3241,14 @@ async function renderFeedbackReviewList() {
 }
 
 async function markFeedbackRead(id) {
-  if (!confirm('確定要將此回饋標記為已讀並歸檔嗎？')) return;
+  const ok = await showConfirmDialog({
+    title: '歸檔回饋',
+    message: '確定要將此回饋標記為已讀並歸檔嗎？',
+    confirmText: '已讀歸檔',
+    danger: false,
+    icon: '📨'
+  });
+  if (!ok) return;
   showLoading(true);
   try {
     const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records', {
