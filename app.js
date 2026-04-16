@@ -14,6 +14,7 @@ const state = {
   loading: true,
   calMonth: new Date(),
   confirmedSquads: [],
+  recentSyncs: {}, // 用於保護剛同步成功的狀態，避免 eventual consistency 導致閃爍
 };
 
 // ─── 音訊上下文 (全域共用) ───────────────────────────────────────────
@@ -23,11 +24,11 @@ let audioCtx = null;
 function haptic(type = 'light') {
   // Android: native vibration
   if (navigator.vibrate) {
-    switch(type) {
-      case 'light':  navigator.vibrate(10); break;
+    switch (type) {
+      case 'light': navigator.vibrate(10); break;
       case 'medium': navigator.vibrate(20); break;
-      case 'heavy':  navigator.vibrate([10, 30, 10]); break;
-      case 'error':  navigator.vibrate([50, 30, 50, 30, 50]); break;
+      case 'heavy': navigator.vibrate([10, 30, 10]); break;
+      case 'error': navigator.vibrate([50, 30, 50, 30, 50]); break;
     }
     return;
   }
@@ -44,7 +45,7 @@ function haptic(type = 'light') {
     gain.gain.setValueAtTime(0.01, t);  // Nearly silent
     gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.02);
     osc.start(t); osc.stop(t + 0.03);
-  } catch(e) {}
+  } catch (e) { }
 }
 
 // ─── 自訂確認對話框 (替代原生 confirm) ─────────────────────────────────────
@@ -82,7 +83,7 @@ function showConfirmDialog({ title, message, confirmText = '確定', cancelText 
 function launchConfetti() {
   const container = document.createElement('div');
   container.className = 'confetti-container';
-  const colors = ['#8b5cf6','#6366f1','#d946ef','#f59e0b','#22c55e','#0ea5e9','#ef4444','#f472b6'];
+  const colors = ['#8b5cf6', '#6366f1', '#d946ef', '#f59e0b', '#22c55e', '#0ea5e9', '#ef4444', '#f472b6'];
   for (let i = 0; i < 60; i++) {
     const piece = document.createElement('div');
     piece.className = 'confetti-piece';
@@ -309,7 +310,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (whiteToggle) whiteToggle.checked = true;
       if (typeof updateAllImagesToTheme === 'function') updateAllImagesToTheme();
     }
-    
+
     // 初始狀態：靜音模式
     if (localStorage.getItem('mute_sound') === 'true') {
       const muteToggle = document.getElementById('setting-mute');
@@ -366,7 +367,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             state.config['confirm_' + today] = data.confirms || '';
             // 僅重新渲染，不需要 loadData
             if (currentPage === 'summary') renderSummary();
-            if (currentPage === 'rollcall') updateRollCallStats();
+            if (currentPage === 'rollcall') updateRollCallStats(true); // 輪詢更新也視為佈局變動，跳過動畫
           }
         }
 
@@ -379,14 +380,14 @@ document.addEventListener('DOMContentLoaded', async () => {
               window._api.getRoster(),
               window._api.getConfig(),
             ]);
-            state.students = roster.students || [];
+            state.students = applyLocalStateToRoster(roster.students || []);
             state.dateColumns = roster.dateColumns || [];
             state.config = config || {};
             applyRoomRules();
             const today = getTodayColumnName();
             const confVal = state.config['confirm_' + today];
             if (confVal) state.confirmedSquads = confVal.split(',').filter(Boolean);
-            renderCurrentPage();
+            renderCurrentPage(true);
           } catch (e) { console.warn('[Poll] 背景刷新失敗', e); }
         } else if (_lastAttTs === 0) {
           _lastAttTs = data.att_ts || 0; // 首次初始化
@@ -414,7 +415,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 頁面切換時重新調整輪詢頻率
     const _origNavigateTo = window.navigateTo;
     if (typeof _origNavigateTo === 'function') {
-      window.navigateTo = function(page) {
+      window.navigateTo = function (page) {
         _origNavigateTo(page);
         startPoll(); // 因為 currentPage 改變了，間隔也要跟著調整
       };
@@ -466,7 +467,7 @@ function toggleWhiteMode(el, event) {
 
   let x = lastTapX;
   let y = lastTapY;
-  
+
   const endRadius = Math.hypot(
     Math.max(x, window.innerWidth - x),
     Math.max(y, window.innerHeight - y)
@@ -484,23 +485,23 @@ function toggleWhiteMode(el, event) {
   const duration = 400;
 
   if (vtRadiusFn && (now - vtStartTime) < duration) {
-      startRadius = vtRadiusFn(now); 
+    startRadius = vtRadiusFn(now);
   }
 
   const targetRadius = isDark ? 0 : endRadius;
   vtStartTime = now;
-  
+
   vtRadiusFn = (evalTime) => {
-      let t = Math.min((evalTime - vtStartTime) / duration, 1);
-      let progress = easeOutQuad(t);
-      return Math.max(0, startRadius + (targetRadius - startRadius) * progress);
+    let t = Math.min((evalTime - vtStartTime) / duration, 1);
+    let progress = easeOutQuad(t);
+    return Math.max(0, startRadius + (targetRadius - startRadius) * progress);
   };
 
   // ⚡ 在截圖前先暫時關閉 backdrop-filter，大幅降低光柵化成本
   document.documentElement.classList.add('vt-active');
 
-  if(isDark) document.documentElement.classList.add('transition-dark');
-  
+  if (isDark) document.documentElement.classList.add('transition-dark');
+
   // 🔥 強制瀏覽器同步重繪此幀，確保 vt-active (拔除 blur/shadow) 實時生效於舊快照的截取
   void document.documentElement.offsetHeight;
 
@@ -537,7 +538,7 @@ function toggleWhiteMode(el, event) {
         }
       `;
     }
-  }).catch(() => {});
+  }).catch(() => { });
 
   transition.finished.finally(() => {
     document.documentElement.classList.remove('transition-dark');
@@ -550,7 +551,7 @@ function toggleWhiteMode(el, event) {
 function getIconSrc(baseName) {
   const isLight = document.body.classList.contains('light-mode');
   if (!isLight) return `./Lp/ICON/${baseName}.svg`;
-  
+
   if (baseName === 'SETTIN') return './Lp/ICON/BLACK/SETTINGS__BLACK.svg';
   if (baseName === 'SAVE') return './Lp/ICON/BLACK/SAVE.svg';
   return `./Lp/ICON/BLACK/${baseName}_BLACK.svg`;
@@ -562,7 +563,7 @@ function updateAllImagesToTheme() {
     images.forEach(img => {
       let src = img.getAttribute('src');
       if (!src) return;
-      
+
       let baseName = '';
       if (src.includes('BLACK')) {
         baseName = src.split('/').pop().replace('_BLACK.svg', '').replace('.svg', '');
@@ -592,15 +593,15 @@ async function loadData() {
       window._api.getChangelog().catch(() => []),
       window._api.getRemarks().catch(() => ({}))
     ]);
-    
+
     // Merge remarks natively into the student list
     if (roster.students && remarks) {
-        roster.students.forEach(s => {
-            s.remarks = remarks[s.id] || '';
-        });
+      roster.students.forEach(s => {
+        s.remarks = remarks[s.id] || '';
+      });
     }
-    
-    state.students = roster.students || [];
+
+    state.students = applyLocalStateToRoster(roster.students || []);
     state.dateColumns = roster.dateColumns || [];
     state.config = config || {};
     state.changelogs = changelogs || [];
@@ -617,7 +618,7 @@ async function loadData() {
     else state.confirmedSquads = [];
 
     showLoading(false);
-    renderCurrentPage();
+    renderCurrentPage(true);
     checkChangelogDot();
     showToast(`已載入 ${state.students.length} 位學生`, 'success');
   } catch (err) {
@@ -650,34 +651,34 @@ function openChangelogModal() {
   // debug 用：首次開啟時印出結構
   if (rawLogs.length > 0) console.log('[Changelog] entry keys:', Object.keys(rawLogs[0]));
   const newEntries = rawLogs.map(log => {
-      // 尋找全物件字串中是否有 ISO 8601 時間格式 (Notion 產生的標題或時間常見格式)
-      let timeStr = null;
-      const isoRegex = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)/;
-      
-      for (const key of Object.keys(log)) {
-          if (typeof log[key] === 'string') {
-              const match = log[key].match(isoRegex);
-              if (match) {
-                  timeStr = match[1];
-                  break;
-              }
-          }
-      }
+    // 尋找全物件字串中是否有 ISO 8601 時間格式 (Notion 產生的標題或時間常見格式)
+    let timeStr = null;
+    const isoRegex = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)/;
 
-      let time = timeStr || log.created_time || log.createdTime || log.created_at ||
-          log.last_edited_time || log.lastEditedTime || log.updated_at ||
-          log.timestamp || log.date || null;
-          
-      // 超級備援：查內文有無 YYYY/MM/DD
-      if (!time && log.content) {
-          const backupMatch = log.content.match(/(\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/);
-          if (backupMatch) time = backupMatch[1];
+    for (const key of Object.keys(log)) {
+      if (typeof log[key] === 'string') {
+        const match = log[key].match(isoRegex);
+        if (match) {
+          timeStr = match[1];
+          break;
+        }
       }
+    }
 
-      return {
-          content: log.content,
-          time: time
-      };
+    let time = timeStr || log.created_time || log.createdTime || log.created_at ||
+      log.last_edited_time || log.lastEditedTime || log.updated_at ||
+      log.timestamp || log.date || null;
+
+    // 超級備援：查內文有無 YYYY/MM/DD
+    if (!time && log.content) {
+      const backupMatch = log.content.match(/(\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/);
+      if (backupMatch) time = backupMatch[1];
+    }
+
+    return {
+      content: log.content,
+      time: time
+    };
   });
 
   // 兼容設定資料庫中的舊版公告（無時間戳）
@@ -735,14 +736,14 @@ function openChangelogModal() {
     const headings = contentEl.querySelectorAll('h3');
     headings.forEach((h3, i) => {
       const wrapper = document.createElement('div');
-      
+
       wrapper.style.paddingLeft = '12px';
       wrapper.style.borderLeft = '2px solid rgba(255,255,255,0.1)';
       wrapper.style.marginLeft = '4px';
       wrapper.style.marginTop = '8px';
       wrapper.style.marginBottom = '20px';
       wrapper.style.overflow = 'hidden'; // 為動畫準備
-      
+
       let nextNode = h3.nextElementSibling;
       while (nextNode && nextNode.tagName !== 'H3' && nextNode.tagName !== 'H2' && nextNode.tagName !== 'H1') {
         const toMove = nextNode;
@@ -791,18 +792,18 @@ function openChangelogModal() {
           // 展開動畫
           isOpen = true;
           chevron.style.transform = 'rotate(-180deg)';
-          
+
           wrapper.style.margin = '8px 0 20px 4px';
           wrapper.style.padding = '0 0 0 12px';
-          
+
           // 取得目標高度
           const targetHeight = wrapper.scrollHeight + 'px';
-          
+
           // 啟動過渡
           wrapper.style.transition = 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
           wrapper.style.height = targetHeight;
           wrapper.style.opacity = '1';
-          
+
           setTimeout(() => {
             if (isOpen) {
               wrapper.style.height = ''; // 解除死綁定以因應重新排版
@@ -812,11 +813,11 @@ function openChangelogModal() {
           // 收拢動畫
           isOpen = false;
           chevron.style.transform = 'rotate(0deg)';
-          
+
           // 將目前自動的高度鎖住
           wrapper.style.height = wrapper.scrollHeight + 'px';
           wrapper.offsetHeight; // force reflow
-          
+
           wrapper.style.transition = 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
           wrapper.style.height = '0px';
           wrapper.style.opacity = '0';
@@ -883,7 +884,7 @@ function setupNav() {
 }
 
 function navigateTo(page) {
-  if (page === currentPage) { renderCurrentPage(); return; }
+  if (page === currentPage) { renderCurrentPage(true); return; }
 
   const fromPage = currentPage;
   currentPage = page;
@@ -923,7 +924,7 @@ function navigateTo(page) {
       toEl.classList.add('active');
       toEl.style.animation = `${enterAnim} 0.28s cubic-bezier(0.16, 1, 0.3, 1)`;
     }
-    renderCurrentPage();
+    renderCurrentPage(true);
   }
 
   if (fromEl && fromEl.classList.contains('active')) {
@@ -934,10 +935,10 @@ function navigateTo(page) {
   }
 }
 
-function renderCurrentPage() {
+function renderCurrentPage(skipAnimation = false) {
   switch (currentPage) {
     case 'home': renderHome(); break;
-    case 'rollcall': renderRollCall(); break;
+    case 'rollcall': renderRollCall(skipAnimation); break;
     case 'summary': renderSummary(); break;
     case 'history': renderHistory(); break;
     case 'settings': renderSettings(); break;
@@ -1135,7 +1136,7 @@ function renderDatePicker() {
 function selectRollCallDate(date) {
   state.currentDate = date;
   closeDatePicker();
-  renderRollCall();
+  renderRollCall(true); // 切換日期時也跳過動畫防止殘影
 }
 
 // 點選面板外關閉
@@ -1150,7 +1151,7 @@ document.addEventListener('click', e => {
 // ═════════════════════════════════════════════════════════════════════════════
 // 點名
 // ═════════════════════════════════════════════════════════════════════════════
-function renderRollCall() {
+function renderRollCall(skipAnimation = false) {
   if (!state.currentSquad) return;
 
   document.getElementById('rc-squad-name').textContent = state.currentSquad;
@@ -1194,7 +1195,7 @@ function renderRollCall() {
       </div>`;
   }
   listEl.innerHTML = html;
-  updateRollCallStats();
+  updateRollCallStats(skipAnimation);
   setupSubmitButton();
 
   // 恢復捲動位置
@@ -1254,7 +1255,11 @@ function toggleStatus(pageId) {
       // 同步成功：移除 changes 中已成功的那筆
       const i = state.changes.findIndex(c => c.pageId === pageId && c.date === state.currentDate && c.value === next);
       if (i >= 0) state.changes.splice(i, 1);
-      // 微小的成功提示（不打擾操作）
+
+      // 將成功狀態放入「最近同步」保護中，保護 15 秒不被後台刷新覆蓋
+      const syncKey = pageId + '_' + state.currentDate;
+      state.recentSyncs[syncKey] = { value: next, ts: Date.now() };
+
       showSyncDot(pageId, 'ok');
     } catch (err) {
       // 失敗保留在 changes 留待手動提交
@@ -1280,14 +1285,21 @@ function showSyncDot(pageId, state) {
   }
 }
 
-function updateRollCallStats() {
+function updateRollCallStats(skipAnimation = false) {
   const ss = state.students.filter(s => s.squad === state.currentSquad && !s.isEmpty && !s.hidden);
   let p = 0, l = 0, a = 0;
-  for (const s of ss) { const v = s.attendance[state.currentDate] || '✓'; if (v === '✓') p++; else if (v === '◎' || v === '△') l++; else a++; }
-  document.getElementById('rc-stat-should').textContent = ss.length;
-  document.getElementById('rc-stat-present').textContent = p;
-  document.getElementById('rc-stat-leave').textContent = l;
-  document.getElementById('rc-stat-absent').textContent = a;
+  for (const s of ss) {
+    const v = s.attendance[state.currentDate] || '✓';
+    if (v === '✓') p++;
+    else if (v === '◎' || v === '△') l++;
+    else a++;
+  }
+
+  // 應用老虎機動畫動畫效果
+  animateNumber(document.getElementById('rc-stat-should'), ss.length, skipAnimation);
+  animateNumber(document.getElementById('rc-stat-present'), p, skipAnimation);
+  animateNumber(document.getElementById('rc-stat-leave'), l, skipAnimation);
+  animateNumber(document.getElementById('rc-stat-absent'), a, skipAnimation);
 
   const confirmBtn = document.getElementById('rc-confirm-btn');
   if (state.currentDate === getTodayColumnName()) {
@@ -1458,7 +1470,7 @@ function openAddResidentModal() {
   const rooms = [...new Set(emptyBeds.map(s => s.room))].sort();
   const sel = document.getElementById('ar-room');
   sel.innerHTML = rooms.map(r => `<option value="${r}">${r}</option>`).join('');
-  
+
   // 清空輸入框
   document.getElementById('ar-name').value = '';
   document.getElementById('ar-class').value = '';
@@ -1643,7 +1655,7 @@ function computeDailyStats(date) {
       try {
         const cachedSt = JSON.parse(snap);
         if (cachedSt && typeof cachedSt === 'object') return cachedSt;
-      } catch(e) { console.error('Failed to parse snapshot', e); }
+      } catch (e) { console.error('Failed to parse snapshot', e); }
     }
   }
 
@@ -1873,183 +1885,9 @@ function adjustSetting(key, delta) {
   const newVal = key === 'total_beds' ? Math.max(0, oldVal + delta) : oldVal + delta;
   if (newVal === oldVal) return;
 
-  // 立即更新邏輯值
-  input.value = newVal;
-
   const stepper = input.closest('.stepper');
-  const style = window.getComputedStyle(input);
-  const rect = input.getBoundingClientRect();
-  const sRect = stepper.getBoundingClientRect();
-  const h = rect.height;
-  const w = rect.width;
-  const left = rect.left - sRect.left;
-  const top = rect.top - sRect.top;
-  const dir = delta > 0 ? -1 : 1; // +1 → 數字從下方進來 (向上滾)
-
-  // 清除舊動畫盒
-  let isInterrupt = false;
-  stepper.querySelectorAll('.stepper-anim-box').forEach(b => {
-    isInterrupt = true;
-    b.getAnimations({ subtree: true }).forEach(a => {
-      try { a.cancel(); } catch (_) {}
-    });
-    b.remove();
-  });
-
-  // 拆分新舊數字為位數陣列（統一長度，前方補空格）
-  const oldStr = String(oldVal);
-  const newStr = String(newVal);
-  const maxLen = Math.max(oldStr.length, newStr.length);
-  const oldDigits = oldStr.padStart(maxLen, ' ').split('');
-  const newDigits = newStr.padStart(maxLen, ' ').split('');
-
-  // 動畫容器（完整覆蓋 input 區域）
-  const box = document.createElement('div');
-  box.className = 'stepper-anim-box';
-  box.style.cssText = `
-    position: absolute;
-    width: ${w}px; height: ${h}px;
-    left: ${left}px; top: ${top}px;
-    pointer-events: none; z-index: 10;
-    clip-path: inset(0 round ${style.borderRadius});
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  `;
-
-  // 所有位數的容器
-  const digitsWrapper = document.createElement('div');
-  digitsWrapper.style.cssText = `
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    gap: 0px;
-  `;
-
-  // 找出從右到左第一個變化的位數（用來判斷進位延遲）
-  // 進位連鎖：個位先動，十位稍後，百位最後
-  const changedIndices = [];
-  for (let i = maxLen - 1; i >= 0; i--) {
-    if (oldDigits[i] !== newDigits[i]) changedIndices.push(i);
-  }
-
-  // 動畫參數：若是中斷動畫則縮短時長，否則絲滑過渡
-  const baseDur = isInterrupt ? 250 : 450;
-  const stagger = isInterrupt ? 30 : 80;
-  const ease = 'cubic-bezier(0.23, 1, 0.32, 1)';
-  
-  // 建立輔助測量器，用來獲取每個字元精確的真實寬度
-  const measurer = document.createElement('span');
-  measurer.style.cssText = `
-    position: absolute; visibility: hidden; white-space: pre; pointer-events: none;
-    font-family: ${style.fontFamily}; font-size: ${style.fontSize}; font-weight: ${style.fontWeight};
-  `;
-  document.body.appendChild(measurer);
-  const getW = (ch) => {
-    if (ch === ' ') return 0;
-    measurer.textContent = ch;
-    return measurer.getBoundingClientRect().width;
-  };
-
-  const animations = [];
-
-  for (let i = 0; i < maxLen; i++) {
-    const oldD = oldDigits[i];
-    const newD = newDigits[i];
-    const changed = oldD !== newD;
-    
-    const cw = getW(newD !== ' ' ? newD : (oldD !== ' ' ? oldD : '0'));
-
-    // ★ 容器直接用最終寬度，不做寬度動畫
-    //   這樣連點時不會因為中斷寬度動畫而彈回
-    const digitContainer = document.createElement('div');
-    digitContainer.style.cssText = `
-      position: relative;
-      height: ${h}px;
-      overflow: hidden;
-      display: inline-block;
-      width: ${cw}px;
-    `;
-
-    const digitStyle = `
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: ${cw}px;
-      height: 100%;
-      position: absolute;
-      left: 0; top: 0;
-      font-family: ${style.fontFamily};
-      font-size: ${style.fontSize};
-      font-weight: ${style.fontWeight};
-      color: var(--text);
-      box-sizing: border-box;
-    `;
-
-    if (!changed) {
-      const staticSpan = document.createElement('span');
-      staticSpan.textContent = oldD;
-      staticSpan.style.cssText = digitStyle;
-      digitContainer.appendChild(staticSpan);
-    } else {
-      const oldSpan = document.createElement('span');
-      oldSpan.textContent = oldD;
-      oldSpan.style.cssText = digitStyle;
-      if (oldD === ' ') oldSpan.style.visibility = 'hidden';
-
-      const newSpan = document.createElement('span');
-      newSpan.textContent = newD;
-      newSpan.style.cssText = digitStyle;
-      newSpan.style.transform = `translateY(${-dir * h}px)`;
-      if (newD === ' ') newSpan.style.visibility = 'hidden';
-
-      digitContainer.appendChild(oldSpan);
-      digitContainer.appendChild(newSpan);
-
-      const orderInChain = changedIndices.indexOf(i);
-      const delay = orderInChain * stagger;
-
-      animations.push(() => {
-        // 舊位數滾出
-        if (oldD !== ' ') {
-          oldSpan.animate(
-            [
-              { transform: 'translateY(0)' },
-              { transform: `translateY(${dir * h}px)` }
-            ],
-            { duration: baseDur, easing: ease, fill: 'both', delay }
-          );
-        }
-
-        // 新位數滾入
-        if (newD !== ' ') {
-          newSpan.animate(
-            [
-              { transform: `translateY(${-dir * h}px)` },
-              { transform: 'translateY(0)' }
-            ],
-            { duration: baseDur, easing: ease, fill: 'both', delay }
-          );
-        }
-      });
-    }
-
-    digitsWrapper.appendChild(digitContainer);
-  }
-
-  box.appendChild(digitsWrapper);
-  stepper.appendChild(box);
-  
-  // 啟動所有漸變
-  animations.forEach(anim => anim());
-  
-  document.body.removeChild(measurer);
-
-  // 隱藏實體文字
-  input.classList.add('stepper-input-hiding');
+  animateNumber(input, newVal, false, stepper);
 }
-
 async function saveDormSettings() {
   const totalBeds = parseInt(document.getElementById('cfg-total-beds').value) || 0;
   const bedOffset = parseInt(document.getElementById('cfg-bed-offset').value) || 0;
@@ -2164,6 +2002,185 @@ function showPinDialog(squadId, callback, customTitle) {
   document.getElementById('pin-input').value = '';
   document.getElementById('pin-dialog').classList.add('visible');
   setTimeout(() => document.getElementById('pin-input').focus(), 100);
+}
+
+// ─── 數據校準與本地狀態整合 ───────────────────────────────────────────
+/**
+ * 將從伺服器抓回來的 Roster 與本地尚未同步(changes)或剛同步(recentSyncs)的狀態合併
+ * 防止背景輪詢因為 eventual consistency 導致 UI 閃爍
+ */
+function applyLocalStateToRoster(rosterStudents) {
+  if (!rosterStudents) return [];
+  const now = Date.now();
+
+  // 清理過期的 recentSyncs (超過 15 秒)
+  Object.keys(state.recentSyncs).forEach(key => {
+    if (now - state.recentSyncs[key].ts > 15000) delete state.recentSyncs[key];
+  });
+
+  return rosterStudents.map(s => {
+    // 1. 優先處理正在等待同步的變更 (Pending Changes)
+    const pending = state.changes.find(c => c.pageId === s.id && c.date === state.currentDate);
+    if (pending) {
+      s.attendance[state.currentDate] = pending.value;
+      return s;
+    }
+
+    // 2. 處理剛同步成功但在伺服器可能尚未穩定的變更 (Recent Syncs)
+    const syncKey = s.id + '_' + state.currentDate;
+    const recent = state.recentSyncs[syncKey];
+    if (recent) {
+      s.attendance[state.currentDate] = recent.value;
+      return s;
+    }
+
+    return s;
+  });
+}
+
+// ─── 老虎機數字捲動動畫 ───────────────────────────────────────────
+function animateNumber(el, newValue, skipAnimation = false, customContainer = null) {
+  if (!el) return;
+
+  const isInput = (el.tagName === 'INPUT');
+  const getVal = () => isInput ? el.value : el.textContent;
+  const setVal = (v) => { if (isInput) el.value = v; else el.textContent = v; };
+
+  const oldValStr = getVal() || '0';
+  const oldVal = parseInt(oldValStr) || 0;
+  const container = customContainer || el.parentElement;
+
+  // 1. 快速跳過檢查
+  if (skipAnimation || (oldVal === newValue && container?.querySelector(`.stepper-anim-box[data-target-id="${el.id}"]`))) {
+    setVal(newValue);
+    el.style.transition = '';
+    el.classList.remove('number-anim-hiding');
+    if (container) {
+      container.querySelectorAll(`.stepper-anim-box[data-target-id="${el.id}"]`).forEach(b => b.remove());
+    }
+    return;
+  }
+  if (oldVal === newValue && getVal() !== '') return;
+
+  const delta = newValue - oldVal;
+  const style = window.getComputedStyle(el);
+
+  // 2. 核心原子化測量：在改變任何狀態前先抓取「絕對舊座標」
+  const oldRect = el.getBoundingClientRect();
+  const oldH = oldRect.height;
+
+  // 3. 準備測量器 (提前建立避免在中途插入 DOM 導致多次重排)
+  const measurer = document.createElement('span');
+  measurer.style.cssText = `position:absolute;visibility:hidden;white-space:pre;pointer-events:none;font-family:${style.fontFamily};font-size:${style.fontSize};font-weight:${style.fontWeight};`;
+  document.body.appendChild(measurer);
+
+  const getW = (ch) => {
+    if (ch === ' ' || ch === '' || ch === undefined) return 0;
+    measurer.textContent = ch;
+    return measurer.getBoundingClientRect().width;
+  };
+
+  const oldW = getW(oldValStr);
+  const newW = getW(String(newValue));
+  const maxW = Math.max(oldW, newW) + 4;
+
+  let color = style.color;
+  if (color === 'rgba(0, 0, 0, 0)' || color === 'transparent' || el.classList.contains('number-anim-hiding')) {
+    color = el.dataset.origColor || window.getComputedStyle(container).color;
+  }
+  if (!el.dataset.origColor && style.color !== 'rgba(0, 0, 0, 0)' && style.color !== 'transparent' && !el.classList.contains('number-anim-hiding')) {
+    el.dataset.origColor = style.color;
+  }
+
+  // 4. 執行狀態切換：隱藏舊文字，設定新數值以更新佈局
+  el.style.transition = 'none';
+  el.classList.add('number-anim-hiding');
+  setVal(newValue);
+  void el.offsetWidth; // 強制重排，讓新數值撐開佈局
+
+  // 5. 抓取「新座標」與「新容器座標」
+  const newRect = el.getBoundingClientRect();
+  const cRect = container.getBoundingClientRect();
+  const h = newRect.height || oldH;
+
+  // 重要：計算 startLeft 時，必須使用「舊的絕對位置」減去「新的容器位置」，
+  // 這樣才能確保動畫框出現的第一幀與舊數字完全重疊，即使容器因為寬度改變而位移了。
+  const oldCenter = oldRect.left + oldRect.width / 2;
+  const newCenter = newRect.left + newRect.width / 2;
+  const startLeft = oldCenter - cRect.left - (maxW / 2);
+  const endLeft = newCenter - cRect.left - (maxW / 2);
+  const top = newRect.top - cRect.top;
+  const dir = delta >= 0 ? -1 : 1;
+
+  // 6. 清理舊動畫並建立新動畫盒
+  let isInterrupt = false;
+  container.querySelectorAll(`.stepper-anim-box[data-target-id="${el.id}"]`).forEach(b => {
+    isInterrupt = true;
+    b.remove();
+  });
+
+  const oldStr = String(oldVal);
+  const newStr = String(newValue);
+  const maxLen = Math.max(oldStr.length, newStr.length);
+  const oldDigits = oldStr.padStart(maxLen, ' ').split('');
+  const newDigits = newStr.padStart(maxLen, ' ').split('');
+
+  const box = document.createElement('div');
+  box.className = 'stepper-anim-box';
+  box.dataset.targetId = el.id;
+  // 注意：初期 left 設為 startLeft，且先不給 transition 避免動畫初始化閃爍
+  box.style.cssText = `position:absolute;width:${maxW}px;height:${h}px;left:${startLeft}px;top:${top}px;pointer-events:none;z-index:100;clip-path:inset(0);display:flex;align-items:center;justify-content:flex-start;`;
+
+  const digitsWrapper = document.createElement('div');
+  digitsWrapper.style.cssText = `display:flex;align-items:center;justify-content:flex-start;height:100%;gap:0px;`;
+
+  const slotWidths = [];
+  let realNewW = 0, leadSpaceW = 0, leadDone = false;
+  for (let i = 0; i < maxLen; i++) {
+    const cw = getW(newDigits[i] !== ' ' ? newDigits[i] : (oldDigits[i] !== ' ' ? oldDigits[i] : '0'));
+    slotWidths.push(cw);
+    if (newDigits[i] !== ' ') realNewW += cw;
+    if (!leadDone && newDigits[i] === ' ') leadSpaceW += cw; else leadDone = true;
+  }
+  digitsWrapper.style.marginLeft = ((maxW - realNewW) / 2 - leadSpaceW) + 'px';
+
+  const baseDur = isInterrupt ? 250 : 450;
+  const stagger = isInterrupt ? 30 : 80;
+  const ease = 'cubic-bezier(0.23, 1, 0.32, 1)';
+  const changedIndices = [];
+  for (let i = maxLen - 1; i >= 0; i--) if (oldDigits[i] !== newDigits[i]) changedIndices.push(i);
+
+  for (let i = 0; i < maxLen; i++) {
+    const oldD = oldDigits[i], newD = newDigits[i], cw = slotWidths[i];
+    const digitContainer = document.createElement('div');
+    digitContainer.style.cssText = `position:relative;height:${h}px;overflow:hidden;display:inline-block;width:${cw}px;`;
+    const dStyle = `display:flex;align-items:center;justify-content:center;width:${cw}px;height:100%;position:absolute;left:0;top:0;font-family:${style.fontFamily};font-size:${style.fontSize};font-weight:${style.fontWeight};color:${color};`;
+
+    if (oldD === newD) {
+      const s = document.createElement('span'); s.textContent = oldD; s.style.cssText = dStyle; digitContainer.appendChild(s);
+    } else {
+      const oS = document.createElement('span'); oS.textContent = oldD; oS.style.cssText = dStyle; if (oldD === ' ') oS.style.visibility = 'hidden';
+      const nS = document.createElement('span'); nS.textContent = newD; nS.style.cssText = dStyle; nS.style.transform = `translateY(${-dir * h}px)`; if (newD === ' ') nS.style.visibility = 'hidden';
+      digitContainer.appendChild(oS); digitContainer.appendChild(nS);
+      const delay = changedIndices.indexOf(i) * stagger;
+      setTimeout(() => {
+        if (oldD !== ' ') oS.animate([{ transform: 'translateY(0)' }, { transform: `translateY(${dir * h}px)` }], { duration: baseDur, easing: ease, fill: 'both' });
+        if (newD !== ' ') nS.animate([{ transform: `translateY(${-dir * h}px)` }, { transform: 'translateY(0)' }], { duration: baseDur, easing: ease, fill: 'both' });
+      }, delay);
+    }
+    digitsWrapper.appendChild(digitContainer);
+  }
+
+  box.appendChild(digitsWrapper);
+  container.appendChild(box);
+  document.body.removeChild(measurer);
+
+  // 7. 啟動水平移動動畫 (確保在下一幀，讓 DOM 有機會渲染初始位置)
+  requestAnimationFrame(() => {
+    box.style.transition = `left ${baseDur}ms ${ease}`;
+    box.style.left = endLeft + 'px';
+  });
+
 }
 
 // ─── 自動備份 ───────────────────────────────────────────────────────────────
@@ -2519,7 +2536,7 @@ async function cleanUpEmptyBeds() {
       student.studentId = '';
       student.isForeign = false;
       for (const d of state.dateColumns) student.attendance[d] = '✓';
-      
+
       return {
         pageId: student.id,
         markEmpty: true,
@@ -2534,7 +2551,7 @@ async function cleanUpEmptyBeds() {
     }
 
     showToast(`成功清理了 ${emptyBeds.length} 張空床的資料，請假全數補上勾勾！`, 'success');
-    
+
     // 如果剛好在點名頁或總表，重新渲染一下確保畫面同步
     if (currentPage === 'rollcall') renderRollCall();
     if (currentPage === 'summary') renderSummary();
@@ -2571,7 +2588,7 @@ async function fillEmptyBedsWithCheckmarks() {
     const updates = emptyBeds.map(student => {
       // 本地同步更新
       for (const d of state.dateColumns) student.attendance[d] = '✓';
-      
+
       return {
         pageId: student.id,
         dates: datesToClear // 僅覆寫請假紀錄為勾勾
@@ -2584,7 +2601,7 @@ async function fillEmptyBedsWithCheckmarks() {
     }
 
     showToast(`成功將 ${emptyBeds.length} 張空床的請假紀錄統一填上勾勾！`, 'success');
-    
+
     if (currentPage === 'rollcall') renderRollCall();
     if (currentPage === 'summary') renderSummary();
 
@@ -2606,7 +2623,7 @@ function openReviewPage() {
 async function renderResidentReviewList() {
   const container = document.getElementById('management-review-list');
   if (!container) return;
-  
+
   container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">讀取中...</div>';
 
   try {
@@ -2746,11 +2763,11 @@ window.rejectResidentAddReq = rejectResidentAddReq;
 function openCounterLeaveModal() {
   document.getElementById('cl-search').value = '';
   document.getElementById('cl-handler').value = '';
-  
+
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('cl-start-date').value = today;
   document.getElementById('cl-end-date').value = today;
-  
+
   document.getElementById('cl-target').innerHTML = '<option value="">請先搜尋上方欄位...</option>';
   document.getElementById('counter-leave-modal').classList.add('visible');
 }
@@ -2758,23 +2775,23 @@ function openCounterLeaveModal() {
 function handleCounterLeaveSearch() {
   const query = document.getElementById('cl-search').value.trim().toLowerCase();
   const select = document.getElementById('cl-target');
-  
+
   if (!query) {
     select.innerHTML = '<option value="">請先搜尋上方欄位...</option>';
     return;
   }
-  
+
   // 模糊過濾
   const matches = state.students.filter(s => {
     if (s.isEmpty) return false;
     const txt = `${s.name} ${s.room} ${s.bed} ${s.studentId}`.toLowerCase();
     return txt.includes(query);
   }).slice(0, 50); // 最多 50 筆
-  
+
   if (matches.length === 0) {
     select.innerHTML = '<option value="">找不到符合的學生</option>';
   } else {
-    select.innerHTML = matches.map(s => 
+    select.innerHTML = matches.map(s =>
       `<option value="${s.id}">${s.room} ${s.bed} - ${s.name}</option>`
     ).join('');
   }
@@ -2789,19 +2806,19 @@ function viewLeaveRecords() {
 async function renderLeaveRecordsList() {
   const container = document.getElementById('leave-records-list');
   if (!container) return;
-  
+
   container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">讀取中...</div>';
-  
+
   try {
     const res = await fetch(CONFIG.WORKER_URL + '/api/leave-records');
     if (!res.ok) throw new Error('API 回應錯誤');
     const records = await res.json();
-    
+
     if (!records || records.length === 0) {
       container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">目前沒有任何電話請假紀錄。<br><br><small style="color:var(--red);">若您確定有新增過，可能是 Cloudflare 中尚未設定 LEAVE_DB_ID，請至開發者區初始化資料庫並將 ID 填入 Cloudflare 環境變數。</small></div>';
       return;
     }
-    
+
     container.innerHTML = records.map(r => `
       <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);padding:16px;border-radius:12px;margin-bottom:12px;">
         <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;">
@@ -2823,39 +2840,39 @@ async function submitCounterLeave() {
   const startDateStr = document.getElementById('cl-start-date').value;
   const endDateStr = document.getElementById('cl-end-date').value;
   const handler = document.getElementById('cl-handler').value.trim();
-  
+
   if (!targetId) {
     playClickSound('dev_error');
     showToast('請先搜尋並選擇要請假的學生！', 'error');
     return;
   }
-  
+
   if (!startDateStr || !endDateStr) {
     playClickSound('dev_error');
     showToast('請填寫完整請假日期區間！', 'error');
     return;
   }
-  
+
   if (startDateStr > endDateStr) {
     playClickSound('dev_error');
     showToast('結束日期不能早於開始日期！', 'error');
     return;
   }
-  
+
   const student = state.students.find(s => s.id === targetId);
   if (!student) return;
-  
+
   const btn = document.querySelector('#counter-leave-modal .modal-btn:last-child');
   if (btn) { btn.disabled = true; btn.textContent = '處理中...'; }
   showLoading(true);
-  
+
   try {
     // 1. 找出區間對應的 state.dateColumns (點名表的欄位)
     // 我們需要將 Date string "YYYY-MM-DD" 與 dateColumns "X月Y日" 配對
     const updates = [];
     const localStart = new Date(startDateStr);
     const localEnd = new Date(endDateStr);
-    
+
     // 產生期間內所有日期的 X月Y日
     const targetDates = [];
     let cur = new Date(startDateStr);
@@ -2865,7 +2882,7 @@ async function submitCounterLeave() {
       targetDates.push(`${m}月${d}日`);
       cur.setDate(cur.getDate() + 1);
     }
-    
+
     // 篩選出總表確實存在的欄位
     const matchedCols = state.dateColumns.filter(c => targetDates.includes(c));
     if (matchedCols.length > 0) {
@@ -2875,7 +2892,7 @@ async function submitCounterLeave() {
         student.attendance[c] = '◎'; // 本地更新
       }
       updates.push(pageUpdate);
-      
+
       // 送出至總表 (分批每45筆)
       for (let i = 0; i < updates.length; i += 45) {
         await window._api.updateAttendance(updates.slice(i, i + 45));
@@ -2883,32 +2900,32 @@ async function submitCounterLeave() {
     } else {
       showToast('警告：選擇的請假範圍未涵蓋目前點名表的任何一天！將只記錄歷史，不修改總表。', 'info');
     }
-    
+
     // 2. 紀錄至電話請假紀錄 DB
     const leaveAddRes = await fetch(CONFIG.WORKER_URL + '/api/leave-records', {
-       method: 'POST',
-       headers: {'Content-Type': 'application/json'},
-       body: JSON.stringify({
-         name: student.name,
-         roomBed: `${student.room} - ${student.bed}`,
-         dateStart: startDateStr,
-         dateEnd: endDateStr,
-         handler: handler
-       })
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: student.name,
+        roomBed: `${student.room} - ${student.bed}`,
+        dateStart: startDateStr,
+        dateEnd: endDateStr,
+        handler: handler
+      })
     });
-    
+
     // 若 worker 回傳 500 表示可能未設定環境變數
     if (!leaveAddRes.ok) {
-       console.warn('電話紀錄寫入失敗，可能未配置 LEAVE_DB_ID。');
-       showToast('總表已更新◎，但歷史紀錄寫入失敗 (請確認 Cloudflare 已設定 LEAVE_DB_ID)', 'info');
+      console.warn('電話紀錄寫入失敗，可能未配置 LEAVE_DB_ID。');
+      showToast('總表已更新◎，但歷史紀錄寫入失敗 (請確認 Cloudflare 已設定 LEAVE_DB_ID)', 'info');
     } else {
-       playClickSound('all_present');
-       showToast(`已經為 ${student.name} 完成起迄請假設定並寫入紀錄！`, 'success');
+      playClickSound('all_present');
+      showToast(`已經為 ${student.name} 完成起迄請假設定並寫入紀錄！`, 'success');
     }
-    
+
     if (currentPage === 'summary') renderSummary();
     if (currentPage === 'rollcall') renderRollCall();
-    
+
     closeModal('counter-leave-modal');
   } catch (err) {
     showToast('更新失敗：' + err.message, 'error');
@@ -3049,7 +3066,7 @@ async function renderRepairReviewList() {
     records.forEach(rec => {
       const timeStr = rec.createdAt ? new Date(rec.createdAt).toLocaleString() : '未知';
       const photosHtml = (rec.photos || []).map(src =>
-        `<img src="${src}" alt="報修照片" onclick="window.open('${src}','_blank')">`
+        `<img src="${src}" alt="報修照片" onclick="openImagePreview('${src}')">`
       ).join('');
 
       html += `
@@ -3184,7 +3201,7 @@ async function submitFeedback() {
 
   // 通過驗證才觸發送出動畫
   if (btn) btn.focus();
-  
+
   try {
     const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records', {
       method: 'POST',
@@ -3241,7 +3258,7 @@ async function renderFeedbackReviewList() {
     records.forEach(rec => {
       const timeStr = rec.createdAt ? new Date(rec.createdAt).toLocaleString() : '未知';
       const photosHtml = (rec.photos || []).map(src =>
-        `<img src="${src}" alt="回饋截圖" style="width:80px;height:80px;object-fit:cover;border-radius:8px;cursor:pointer;" onclick="window.open('${src}','_blank')">`
+        `<img src="${src}" alt="回饋截圖" style="width:80px;height:80px;object-fit:cover;border-radius:8px;cursor:pointer;" onclick="openImagePreview('${src}')">`
       ).join('');
 
       html += `
@@ -3301,7 +3318,7 @@ async function checkUnreadFeedback() {
       if (dot) dot.style.display = 'inline-block';
       if (badge) badge.style.display = 'block';
     }
-  } catch (_) {}
+  } catch (_) { }
 }
 
 window.openFeedbackForm = openFeedbackForm;
@@ -3337,7 +3354,7 @@ function onStudentFileSearch(query) {
   if (!query || query.trim().length === 0) {
     if (mirror) mirror.style.display = 'none';
     if (scene) scene.classList.remove('is-searching');
-    
+
     if (_sfRandomDefaults.length === 0) {
       _sfRandomDefaults = getRandomStudents(5);
     }
@@ -3361,18 +3378,18 @@ function onStudentFileSearch(query) {
       const cls = (s.class || '').toLowerCase();
       const squad = (s.squad || '').toLowerCase();
       return name.includes(q) || room.includes(q) || bed.includes(q) ||
-             studentId.includes(q) || cls.includes(q) || squad.includes(q) ||
-             (room + bed).includes(q);
+        studentId.includes(q) || cls.includes(q) || squad.includes(q) ||
+        (room + bed).includes(q);
     });
 
     if (mirror) mirror.style.display = 'none';
     if (scene) scene.classList.remove('is-searching');
-    
+
     _sfRandomDefaults = [];
     _sfActiveIndex = 0;
     // 如果有結果產生，就觸發「切換為真實找尋」的高速滑入效果
     renderStudentFileCards(true);
-    
+
     // 追加一個過渡動畫：從「假找」切換成「找到了！」的 pop 動畫
     const area = document.getElementById('sf-card-area');
     if (area) {
@@ -3401,19 +3418,19 @@ function renderStudentFileCards(sweepIn = false) {
   }
 
   track.innerHTML = '';
-  
+
   // 為了承受超極速慣性滑動不穿幫，環狀緩衝長度從 50 提升至 60 跨度 (前後各 30 張緩衝)
-  const repeats = Math.max( 5, Math.ceil(60 / _sfResults.length) );
+  const repeats = Math.max(5, Math.ceil(60 / _sfResults.length));
   let renderList = [];
   for (let i = 0; i < repeats; i++) {
-     renderList.push(..._sfResults);
+    renderList.push(..._sfResults);
   }
-  
+
   renderList.forEach((s, i) => {
     const card = document.createElement('div');
     card.className = 'sf-student-card-2d';
     card.dataset.index = i;
-    
+
     card.innerHTML = `
       <div class="sf-card-title" style="display: flex; align-items: flex-start; position: relative;">
         <span class="sf-title-text" style="flex:1;">${s.room || ''} ${s.bed || ''}</span>
@@ -3449,7 +3466,7 @@ function renderStudentFileCards(sweepIn = false) {
         <button class="sf-save-action-btn" onclick="autoSaveStudentFile(this)" style="margin-top: 16px;">💾 儲存修改</button>
       </div>
     `;
-    
+
     track.appendChild(card);
     _sfRenderMap.set(card, s); // mapping DOM to object
   });
@@ -3459,44 +3476,44 @@ function renderStudentFileCards(sweepIn = false) {
   const middleIndex = Math.floor(repeats / 2) * _sfResults.length;
   _sfActiveIndex = middleIndex;
   _currentX = -(_sfActiveIndex * _cardWidth);
-  
+
   if (sweepIn && window._updateContinuousScale) {
-      // 模擬從假裝找的右側（或左邊）高速滑入，這裡我們讓它從右邊飛進來（+8張卡片）
-      let startX = -((_sfActiveIndex - 8) * _cardWidth);
-      track.style.transition = 'none';
-      track.style.transform = `translateX(${startX}px)`;
-      
-      void track.offsetWidth; // force reflow
-      
-      // 刷刷刷飛向目標
-      track.style.transition = 'transform 0.9s cubic-bezier(0.1, 0.95, 0.2, 1)';
-      track.style.transform = `translateX(${_currentX}px)`;
-      
-      const startTime = performance.now();
-      if (window._sfSearchAnimFrame) cancelAnimationFrame(window._sfSearchAnimFrame);
-      function step() {
-          const transformStr = window.getComputedStyle(track).transform;
-          if (transformStr !== 'none') {
-              const matrix = new DOMMatrix(transformStr);
-              window._updateContinuousScale(matrix.m41);
-          }
-          if (performance.now() - startTime < 1000) {
-              window._sfSearchAnimFrame = requestAnimationFrame(step);
-          } else {
-              window._updateContinuousScale(_currentX);
-          }
+    // 模擬從假裝找的右側（或左邊）高速滑入，這裡我們讓它從右邊飛進來（+8張卡片）
+    let startX = -((_sfActiveIndex - 8) * _cardWidth);
+    track.style.transition = 'none';
+    track.style.transform = `translateX(${startX}px)`;
+
+    void track.offsetWidth; // force reflow
+
+    // 刷刷刷飛向目標
+    track.style.transition = 'transform 0.9s cubic-bezier(0.1, 0.95, 0.2, 1)';
+    track.style.transform = `translateX(${_currentX}px)`;
+
+    const startTime = performance.now();
+    if (window._sfSearchAnimFrame) cancelAnimationFrame(window._sfSearchAnimFrame);
+    function step() {
+      const transformStr = window.getComputedStyle(track).transform;
+      if (transformStr !== 'none') {
+        const matrix = new DOMMatrix(transformStr);
+        window._updateContinuousScale(matrix.m41);
       }
-      window._sfSearchAnimFrame = requestAnimationFrame(step);
+      if (performance.now() - startTime < 1000) {
+        window._sfSearchAnimFrame = requestAnimationFrame(step);
+      } else {
+        window._updateContinuousScale(_currentX);
+      }
+    }
+    window._sfSearchAnimFrame = requestAnimationFrame(step);
   } else {
-      track.style.transition = 'none';
-      track.style.transform = `translateX(${_currentX}px)`;
-      if (window._updateContinuousScale) {
-          window._updateContinuousScale(_currentX);
-      }
+    track.style.transition = 'none';
+    track.style.transform = `translateX(${_currentX}px)`;
+    if (window._updateContinuousScale) {
+      window._updateContinuousScale(_currentX);
+    }
   }
-  
+
   Array.from(track.children).forEach((c, i) => {
-     c.classList.toggle('active', i === _sfActiveIndex);
+    c.classList.toggle('active', i === _sfActiveIndex);
   });
   if (window._restart3DTimer) window._restart3DTimer();
 }
@@ -3509,31 +3526,60 @@ function setup2DCarouselInteraction() {
   const area = document.getElementById('sf-card-area');
   const track = document.getElementById('sf-card-track');
   const scene = document.getElementById('sf-scene');
-  
-  if (_carouselAttached || !scene || !track) return; 
+
+  if (_carouselAttached || !scene || !track) return;
   _carouselAttached = true;
-  
+
   let startX = 0;
+  let startY = 0;
   let trackStartX = 0;
   let isDragging = false;
-  
+  let isHorizontalSwipe = null; // null = undecided, true = horizontal, false = vertical
+
   let _3dTimer = null;
-  
-  window._restart3DTimer = function() {
-      disable3D();
-      _3dTimer = setTimeout(enable3D, 2000);
+
+  // ═══════ Instagram-like swipe physics constants ═══════
+  const DRAG_THRESHOLD = 8;          // px before we consider it a drag
+  const DECEL_RATE = 0.985;          // per-frame deceleration (exponential decay) — higher = smoother/longer glide
+  const MIN_VELOCITY = 0.08;         // px/ms — stop momentum below this
+  const SNAP_SPRING_TENSION = 0.08;  // spring tension for final snap
+  const SNAP_SPRING_DAMPING = 0.82;  // damping ratio for snap spring
+  const MAX_FLICK_CARDS = 6;         // max cards a single flick can travel
+  const VELOCITY_SAMPLES = 6;        // number of recent touch samples to average
+  const VELOCITY_WEIGHT_DECAY = 0.7; // exponential weight decay for older samples
+
+  // Velocity tracking ring buffer — last N samples
+  let _velocitySamples = [];
+  let _momentumFrame = null;
+  let _isAnimating = false; // true while momentum/spring is running
+
+  // Helper: cancel all running animations and clean up frame IDs
+  function cancelAllAnimations() {
+    if (_momentumFrame) { cancelAnimationFrame(_momentumFrame); _momentumFrame = null; }
+    if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null; }
+    _isAnimating = false;
+  }
+
+  window._restart3DTimer = function () {
+    disable3D();
+    _3dTimer = setTimeout(enable3D, 1200);
   };
 
   function enable3D() {
+    // Guard: don't enter 3D if user is dragging or animations still running
+    if (isDragging || _isAnimating) return;
+
     const activeCard = Array.from(track.children).find(c => c.classList.contains('active'));
     if (activeCard) {
-       activeCard.classList.add('is-3d-active');
-       window._is3dMode = true;
-       if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
+      activeCard.classList.add('is-3d-active');
+      _3dCardIndex = _sfActiveIndex;
+      window._is3dMode = true;
+      if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
     }
   }
 
   function disable3D() {
+    const was3dMode = window._is3dMode;
     window._is3dMode = false;
     if (_3dTimer) {
       clearTimeout(_3dTimer);
@@ -3541,38 +3587,61 @@ function setup2DCarouselInteraction() {
     }
     let changed = false;
     Array.from(track.children).forEach(c => {
-       if (c.classList.contains('is-3d-active')) {
-          c.classList.remove('is-3d-active');
-          
-          c.dataset.was3d = 'true';
-          setTimeout(() => { c.dataset.was3d = 'false'; }, 500);
-          changed = true;
-       } else {
-          c.dataset.wasAway = 'true';
-          setTimeout(() => { c.dataset.wasAway = 'false'; }, 500);
-          changed = true;
-       }
+      if (c.classList.contains('is-3d-active')) {
+        c.classList.remove('is-3d-active');
+
+        c.dataset.was3d = 'true';
+        // Extended timeout: give the CSS transition enough time to fully complete (1s transition + buffer)
+        setTimeout(() => { c.dataset.was3d = 'false'; }, 1200);
+        changed = true;
+      } else if (was3dMode) {
+        // Only mark wasAway if we were actually in 3D mode (side cards were spread out)
+        c.dataset.wasAway = 'true';
+        setTimeout(() => { c.dataset.wasAway = 'false'; }, 1200);
+        changed = true;
+      }
     });
     if (changed && window._updateContinuousScale) window._updateContinuousScale(_currentX);
   }
 
-  let velocityX = 0;
-  let lastMoveX = 0;
-  let lastMoveTime = 0;
-  
-  function onDown(e) {
-    if (scene.classList.contains('is-searching')) return; 
-    
-    const targetCard = e.target.closest('.sf-student-card-2d');
-    
-    // 只要點到目前的有效(Active)卡片，就絕對不要中斷 3D 體驗！讓使用者安心點擊輸入框
-    const isClickOnActive = targetCard && targetCard.classList.contains('active');
-    
-    if (!isClickOnActive) {
-        disable3D();
+  // ═══════ Weighted velocity calculation from recent samples ═══════
+  function getWeightedVelocity() {
+    if (_velocitySamples.length === 0) return 0;
+
+    // Filter out stale samples (older than 100ms from last sample)
+    const now = performance.now();
+    const recent = _velocitySamples.filter(s => now - s.time < 100);
+    if (recent.length === 0) return 0;
+
+    let weightedSum = 0;
+    let weightTotal = 0;
+
+    for (let i = 0; i < recent.length; i++) {
+      // More recent samples get exponentially higher weight
+      const weight = Math.pow(VELOCITY_WEIGHT_DECAY, recent.length - 1 - i);
+      weightedSum += recent[i].velocity * weight;
+      weightTotal += weight;
     }
-    
-    // 無限滑動（地球是圓的）核心：如果在上次滑行結束後太靠近邊緣，就無縫瞬間傳送到中間
+
+    return weightTotal > 0 ? weightedSum / weightTotal : 0;
+  }
+  // Track which card index is in 3D, for displacement calculation
+  let _3dCardIndex = -1;
+
+  // Softly stop the side-card spread without removing is-3d-active from active card
+  function softDisable3DSpread() {
+    window._is3dMode = false;
+    if (_3dTimer) { clearTimeout(_3dTimer); _3dTimer = null; }
+    // Mark side cards for smooth return transition
+    Array.from(track.children).forEach(c => {
+      if (!c.classList.contains('is-3d-active')) {
+        c.dataset.wasAway = 'true';
+        setTimeout(() => { c.dataset.wasAway = 'false'; }, 1200);
+      }
+    });
+  }
+
+  function teleportToCenterIfNeeded() {
     const total = track.children.length;
     const baseN = _sfResults.length;
     if (baseN > 0 && total >= baseN * 3) {
@@ -3586,366 +3655,483 @@ function setup2DCarouselInteraction() {
         if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
       }
     }
+  }
+
+  function onDown(e) {
+    if (scene.classList.contains('is-searching')) return;
+
+    // Stop any ongoing momentum animation immediately (like IG — touching stops glide)
+    cancelAllAnimations();
+
+    const targetCard = e.target.closest('.sf-student-card-2d');
+    const isClickOnActive = targetCard && targetCard.classList.contains('active');
+
+    // If clicking on non-active card, fully disable 3D
+    if (!isClickOnActive) {
+      disable3D();
+    }
+
+    teleportToCenterIfNeeded();
 
     isDragging = true;
-    startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    isHorizontalSwipe = null;
+    const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+    startX = clientX;
+    startY = clientY;
     trackStartX = _currentX;
-    
-    lastMoveX = startX;
-    lastMoveTime = performance.now();
-    velocityX = 0;
-    
+
+    _velocitySamples = [{ x: clientX, time: performance.now(), velocity: 0 }];
+
     track.style.transition = 'none';
   }
-  
+
   function onMove(e) {
     if (!isDragging) return;
     const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
     const deltaX = clientX - startX;
-    
-    // 如果滑動量明顯，才取消 3D 狀態避免使用者點擊輸入框誤觸
-    if (Math.abs(deltaX) > 40) {
-       disable3D(); 
+    const deltaY = clientY - startY;
+
+    // Determine swipe direction on first meaningful movement
+    if (isHorizontalSwipe === null && (Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD)) {
+      isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
+      if (!isHorizontalSwipe) {
+        isDragging = false;
+        return;
+      }
+      // First confirmed horizontal swipe — softly retract side cards but keep active card's 3D
+      if (window._is3dMode) {
+        softDisable3DSpread();
+      }
     }
-    
+
+    if (isHorizontalSwipe !== true && Math.abs(deltaX) < DRAG_THRESHOLD) return;
+    if (e.cancelable) e.preventDefault();
+
+    // Record velocity sample
     const now = performance.now();
-    const dt = now - lastMoveTime;
+    const lastSample = _velocitySamples[_velocitySamples.length - 1];
+    const dt = now - lastSample.time;
     if (dt > 0) {
-       velocityX = (clientX - lastMoveX) / dt;
+      const v = (clientX - lastSample.x) / dt;
+      _velocitySamples.push({ x: clientX, time: now, velocity: v });
+      if (_velocitySamples.length > VELOCITY_SAMPLES) {
+        _velocitySamples.shift();
+      }
     }
-    lastMoveX = clientX;
-    lastMoveTime = now;
-    
+
     _currentX = trackStartX + deltaX;
-    
-    // 即時無縫瞬間傳送校正（避免滑太快或滑到底出現空白斷層）
+
+    // 即時無縫瞬間傳送校正
     const total = track.children.length;
     const baseN = _sfResults.length;
     if (baseN > 0 && total >= baseN * 3) {
-        let thresholdLeft = -_cardWidth * (total * 0.3);  // 往右滑
-        let thresholdRight = -_cardWidth * (total * 0.7); // 往左滑 
-        if (_currentX > thresholdLeft || _currentX < thresholdRight) {
-            const centerPos = -Math.floor(total / 2) * _cardWidth;
-            const diff = centerPos - _currentX;
-            const shiftMultiples = Math.round(diff / (baseN * _cardWidth));
-            const shiftDist = shiftMultiples * baseN * _cardWidth;
-            
-            _currentX += shiftDist;
-            trackStartX += shiftDist;
-        }
+      let thresholdLeft = -_cardWidth * (total * 0.3);
+      let thresholdRight = -_cardWidth * (total * 0.7);
+      if (_currentX > thresholdLeft || _currentX < thresholdRight) {
+        const centerPos = -Math.floor(total / 2) * _cardWidth;
+        const diff = centerPos - _currentX;
+        const shiftMultiples = Math.round(diff / (baseN * _cardWidth));
+        const shiftDist = shiftMultiples * baseN * _cardWidth;
+
+        _currentX += shiftDist;
+        trackStartX += shiftDist;
+      }
     }
-    
+
     track.style.transform = `translateX(${_currentX}px)`;
     if (window._updateContinuousScale) window._updateContinuousScale();
   }
-  
-  let _currentTransitionTime = 0.5;
 
+  let _currentTransitionTime = 0.5;
   let _animFrame = null;
 
   function updateContinuousScale(trackXStr) {
     let currentTrackX = trackXStr !== undefined ? parseFloat(trackXStr) : _currentX;
     const centerIdxFloat = -currentTrackX / _cardWidth;
-    
+
     for (let i = 0; i < track.children.length; i++) {
-        const c = track.children[i];
-        if (!c) continue;
-        const rawDiff = i - centerIdxFloat; // positive means card is to the right
-        const absDiff = Math.abs(rawDiff);
-        
-        // 【虛擬化渲染優化】：當搜尋出大量資料（如全校 300 筆），不該讓瀏覽器同時算繪幾千張卡片
-        // 這裡設定唯有靠近畫面中心的 4 張卡片會被算繪並分配給 GPU，其餘直接被隱藏與釋放，零卡頓！
-        if (absDiff > 4) {
-            c.style.visibility = 'hidden';
-            continue;
+      const c = track.children[i];
+      if (!c) continue;
+      const rawDiff = i - centerIdxFloat;
+      const absDiff = Math.abs(rawDiff);
+
+      // 虛擬化渲染優化
+      if (absDiff > 4) {
+        c.style.visibility = 'hidden';
+        continue;
+      } else {
+        c.style.visibility = 'visible';
+      }
+
+      let t = Math.max(0, 1 - absDiff * 0.45);
+      let scale = 0.85 + 0.15 * (t * t);
+      let alpha = 0.8 + 0.2 * t;
+
+      c.style.zIndex = Math.round(100 - absDiff * 10);
+      c.style.opacity = alpha;
+      c.style.filter = 'none';
+
+      if (c.classList.contains('is-3d-active')) {
+        // ═══════ Progressive 3D rotation based on displacement ═══════
+        // Calculate how far this card has moved from its snap position
+        const snapIdx = _3dCardIndex >= 0 ? _3dCardIndex : _sfActiveIndex;
+        const displacement = Math.abs(i - centerIdxFloat); // how far from center
+
+        // Interpolate rotation: full 15deg at center, 0deg at 0.6 cards away
+        const rotProgress = Math.max(0, Math.min(1, 1 - displacement / 0.6));
+        const rotAngle = 15 * rotProgress;
+        const scaleBoost = 0.05 * rotProgress;
+
+        // If too far from home, fully flatten and remove 3D
+        if (displacement > 0.65 && isDragging) {
+          c.classList.remove('is-3d-active');
+          c.dataset.was3d = 'true';
+          _3dCardIndex = -1;
+          setTimeout(() => { c.dataset.was3d = 'false'; }, 1200);
+          // Apply flat transform immediately
+          c.style.transition = 'transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s';
+          c.style.transform = `translateX(0px) scale(${scale})`;
         } else {
-            c.style.visibility = 'visible';
+          // Smooth responsive transition during drag
+          c.style.transition = isDragging
+            ? 'transform 0.15s ease-out'
+            : 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
+          c.style.transform = `perspective(1000px) rotate3d(0.5, 1, 0, ${rotAngle}deg) scale(${scale + scaleBoost})`;
+          c.style.opacity = '1';
         }
-        
-        // Soft continuous interpolation using a simple quadratic curve
-        let t = Math.max(0, 1 - absDiff * 0.45); 
-        let scale = 0.85 + 0.15 * (t * t);   
-        let alpha = 0.8 + 0.2 * t;      
-        
-        // 確保中間卡片絕對在最上層，兩側往後排
-        c.style.zIndex = Math.round(100 - absDiff * 10);
-        c.style.opacity = alpha; // use hardware-accelerated opacity instead of blur/brightness!
-        c.style.filter = 'none'; // IMPORTANT: completely remove heavy CSS filters during drag!
-        
-        if (c.classList.contains('is-3d-active')) {
-            c.style.transition = 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
-            c.style.transform = `perspective(1000px) rotate3d(0.5, 1, 0, 15deg) scale(${scale + 0.05})`;
-            c.style.opacity = '1';
+      } else {
+        // ═══════ 2D card transitions ═══════
+        if (isDragging) {
+          if (c.dataset.was3d === 'true') {
+            c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
+          } else if (c.dataset.wasAway === 'true') {
+            c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
+          } else {
+            c.style.transition = 'none';
+          }
         } else {
-            if (isDragging) {
-                if (c.dataset.was3d === 'true' || c.dataset.wasAway === 'true') {
-                    c.style.transition = 'transform 0.5s cubic-bezier(0.2, 0.9, 0.3, 1)';
-                } else {
-                    c.style.transition = 'none';
-                }
-            } else {
-                c.style.transition = 'transform 0.5s cubic-bezier(0.3, 0.9, 0.4, 1)';
-            }
-            
-            if (window._is3dMode && !isDragging) {
-                let spread = rawDiff < 0 ? -1500 : 1500;
-                c.style.transform = `translateX(${spread}px) scale(${scale})`;
-            } else {
-                c.style.transform = `translateX(0px) scale(${scale})`; 
-            }
+          if (c.dataset.was3d === 'true' || c.dataset.wasAway === 'true') {
+            c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
+          } else {
+            c.style.transition = 'transform 0.5s cubic-bezier(0.3, 0.9, 0.4, 1)';
+          }
         }
+
+        if (window._is3dMode && !isDragging) {
+          let spread = rawDiff < 0 ? -1500 : 1500;
+          c.style.transform = `translateX(${spread}px) scale(${scale})`;
+        } else {
+          c.style.transform = `translateX(0px) scale(${scale})`;
+        }
+      }
     }
   }
   window._updateContinuousScale = updateContinuousScale;
 
-  function snapToNearest() {
+  // ═══════ Spring-based snap to nearest card ═══════
+  function springSnapTo(targetIndex) {
     const maxIdx = track.children.length - 1;
+    if (targetIndex < 0) targetIndex = 0;
+    if (targetIndex > maxIdx) targetIndex = maxIdx;
 
-    let newIndex = Math.round(-_currentX / _cardWidth);
-    
-    if (newIndex < 0) newIndex = 0;
-    if (newIndex > maxIdx) newIndex = maxIdx;
-    
-    _sfActiveIndex = newIndex;
-    _currentX = -(_sfActiveIndex * _cardWidth);
-    
-    // 使用動態計算出的時間，搭配減速彈性的貝茲曲線模擬摩擦力到完全煞停
-    track.style.transition = `transform ${_currentTransitionTime}s cubic-bezier(0.2, 0.9, 0.3, 1.05)`;
-    track.style.transform = `translateX(${_currentX}px)`;
-    
-    // Update active visual class
+    _sfActiveIndex = targetIndex;
+    const targetX = -(_sfActiveIndex * _cardWidth);
+
     Array.from(track.children).forEach((c, i) => {
-        c.classList.toggle('active', i === _sfActiveIndex);
+      c.classList.toggle('active', i === _sfActiveIndex);
     });
 
-    if (_animFrame) cancelAnimationFrame(_animFrame);
-    
-    const startTime = performance.now();
-    const duration = _currentTransitionTime * 1000;
-    
-    function step() {
-        const transformStr = window.getComputedStyle(track).transform;
-        if (transformStr !== 'none') {
-            const matrix = new DOMMatrix(transformStr);
-            updateContinuousScale(matrix.m41);
-        }
-        
-        if (performance.now() - startTime < duration + 50) {
-            _animFrame = requestAnimationFrame(step);
-        } else {
-            updateContinuousScale(_currentX);
-            
-            // 無縫瞬間傳送校正（地球是圓的）
-            const total = track.children.length;
-            const baseN = _sfResults.length;
-            if (baseN > 0 && total >= baseN * 3) {
-                if (_sfActiveIndex < total * 0.3 || _sfActiveIndex > total * 0.7) {
-                    const targetCenterBase = Math.floor((total / 2) / baseN) * baseN;
-                    const localOffset = _sfActiveIndex % baseN;
-                    _sfActiveIndex = targetCenterBase + localOffset;
-                    _currentX = -(_sfActiveIndex * _cardWidth);
-                    track.style.transition = 'none';
-                    track.style.transform = `translateX(${_currentX}px)`;
-                    updateContinuousScale(_currentX);
-                }
-            }
+    cancelAllAnimations();
+    _isAnimating = true;
 
-            if (window._restart3DTimer) window._restart3DTimer();
-        }
+    let springVel = 0;
+    let springPos = _currentX;
+    const startTime = performance.now();
+
+    function springStep() {
+      const displacement = springPos - targetX;
+      const springForce = -SNAP_SPRING_TENSION * displacement;
+      springVel = (springVel + springForce) * SNAP_SPRING_DAMPING;
+      springPos += springVel;
+
+      _currentX = springPos;
+      track.style.transition = 'none';
+      track.style.transform = `translateX(${_currentX}px)`;
+      updateContinuousScale(_currentX);
+
+      if (Math.abs(displacement) < 0.5 && Math.abs(springVel) < 0.1) {
+        _currentX = targetX;
+        track.style.transform = `translateX(${_currentX}px)`;
+        updateContinuousScale(_currentX);
+        _animFrame = null;
+        _isAnimating = false;
+        teleportToCenterIfNeeded();
+        if (window._restart3DTimer) window._restart3DTimer();
+        return;
+      }
+
+      if (performance.now() - startTime > 2500) {
+        _currentX = targetX;
+        track.style.transform = `translateX(${_currentX}px)`;
+        updateContinuousScale(_currentX);
+        _animFrame = null;
+        _isAnimating = false;
+        teleportToCenterIfNeeded();
+        if (window._restart3DTimer) window._restart3DTimer();
+        return;
+      }
+
+      _animFrame = requestAnimationFrame(springStep);
     }
-    _animFrame = requestAnimationFrame(step);
+
+    _animFrame = requestAnimationFrame(springStep);
   }
 
   function onUp(e) {
     if (!isDragging) return;
     isDragging = false;
-    
-    // 如果手指僅僅是「點擊」或微小滑動（例如點擊輸入區域），不要觸發強制 snapping 與 disable3D
-    const totalDeltaX = Math.abs(lastMoveX - startX);
-    if (totalDeltaX < 5 && velocityX === 0) {
-        return;
+
+    const clientX = e.type.includes('touch')
+      ? (e.changedTouches ? e.changedTouches[0].clientX : startX)
+      : e.clientX;
+
+    // 點擊不觸發 snapping
+    const totalDeltaX = Math.abs(clientX - startX);
+    if (totalDeltaX < DRAG_THRESHOLD) {
+      return;
     }
-    
-    // Check teleport BEFORE setting targetX, so we always stay in safe bounding center
+
+    // Teleport check
     const total = track.children.length;
     const baseN = _sfResults.length;
     if (baseN > 0 && total >= baseN * 3) {
-        const centerPos = -Math.floor(total / 2) * _cardWidth;
-        const diff = centerPos - _currentX;
-        const shiftMultiples = Math.round(diff / (baseN * _cardWidth));
-        const shiftDist = shiftMultiples * baseN * _cardWidth;
-        
-        if (shiftDist !== 0) {
-            _currentX += shiftDist;
-            track.style.transition = 'none';
-            track.style.transform = `translateX(${_currentX}px)`;
-            void track.offsetWidth; 
-        }
+      const centerPos = -Math.floor(total / 2) * _cardWidth;
+      const diff = centerPos - _currentX;
+      const shiftMultiples = Math.round(diff / (baseN * _cardWidth));
+      const shiftDist = shiftMultiples * baseN * _cardWidth;
+      if (shiftDist !== 0) {
+        _currentX += shiftDist;
+        track.style.transition = 'none';
+        track.style.transform = `translateX(${_currentX}px)`;
+        void track.offsetWidth;
+      }
     }
-    
-    // 依據拖曳速度計算慣性滑動距離 (摩擦力模擬 - 阻力提高以避免隨便飄走)
-    const friction = 0.005;
-    let momentumDist = (velocityX * Math.abs(velocityX)) / (2 * friction);
-    
-    // 上下限保護 (降低極限距離，保持絲滑同時避免輕碰就噴走)
-    if (momentumDist > 1500) momentumDist = 1500;
-    if (momentumDist < -1500) momentumDist = -1500;
 
-    let targetX = _currentX + momentumDist;
-    const maxIdx = track.children.length - 1;
-    let newIndex = Math.round(-targetX / _cardWidth);
-    if (newIndex < 0) newIndex = 0;
-    if (newIndex > maxIdx) newIndex = maxIdx;
-    
-    // 根據要滑動的實際距離動態計算動畫時間
-    const distToTravel = Math.abs((newIndex * _cardWidth) + _currentX);
-    let time = 0.4 + (distToTravel / 2500); 
-    if (time > 1.2) time = 1.2;
-    if (time < 0.4) time = 0.4;
-    _currentTransitionTime = time;
+    // ═══════ Pure velocity-driven momentum ═══════
+    const flickVelocity = getWeightedVelocity(); // px/ms
 
-    _currentX += momentumDist;
-    snapToNearest();
+    if (Math.abs(flickVelocity) < MIN_VELOCITY) {
+      springSnapTo(Math.round(-_currentX / _cardWidth));
+      return;
+    }
+
+    cancelAllAnimations();
+    _isAnimating = true;
+
+    const frameTime = 16.67;
+    let vel = flickVelocity * frameTime; // px/frame
+
+    // Clamp maximum initial velocity to prevent explosion on fast flicks
+    const maxVel = _cardWidth * 0.4; // max ~0.4 card widths per frame
+    if (vel > maxVel) vel = maxVel;
+    if (vel < -maxVel) vel = -maxVel;
+
+    function momentumStep() {
+      vel *= DECEL_RATE;
+      _currentX += vel;
+
+      track.style.transition = 'none';
+      track.style.transform = `translateX(${_currentX}px)`;
+      updateContinuousScale(_currentX);
+
+      // Teleport during momentum if needed
+      const total2 = track.children.length;
+      const baseN2 = _sfResults.length;
+      if (baseN2 > 0 && total2 >= baseN2 * 3) {
+        let thresholdLeft = -_cardWidth * (total2 * 0.3);
+        let thresholdRight = -_cardWidth * (total2 * 0.7);
+        if (_currentX > thresholdLeft || _currentX < thresholdRight) {
+          const centerPos = -Math.floor(total2 / 2) * _cardWidth;
+          const diff = centerPos - _currentX;
+          const shiftMultiples = Math.round(diff / (baseN2 * _cardWidth));
+          const shiftDist = shiftMultiples * baseN2 * _cardWidth;
+          _currentX += shiftDist;
+        }
+      }
+
+      // When velocity drops low, spring-snap to whatever card is nearest NOW
+      if (Math.abs(vel) < 0.5) {
+        _momentumFrame = null;
+        const nearestIdx = Math.round(-_currentX / _cardWidth);
+        springSnapTo(nearestIdx);
+        return;
+      }
+
+      _momentumFrame = requestAnimationFrame(momentumStep);
+    }
+
+    _momentumFrame = requestAnimationFrame(momentumStep);
   }
 
   area.addEventListener('mousedown', onDown);
   window.addEventListener('mousemove', onMove, { passive: false });
   window.addEventListener('mouseup', onUp);
-  
+
   area.addEventListener('touchstart', onDown, { passive: true });
-  area.addEventListener('touchmove', (e) => {
-      if (isDragging) e.preventDefault(); 
-      onMove(e);
-  }, { passive: false });
+  area.addEventListener('touchmove', onMove, { passive: false });
   window.addEventListener('touchend', onUp);
 }
 
-window.initStudentFiles = function() {
-    _sfRandomDefaults = [];
-    document.getElementById('sf-search-input').value = '';
-    onStudentFileSearch('');
+window.initStudentFiles = function () {
+  _sfRandomDefaults = [];
+  document.getElementById('sf-search-input').value = '';
+  onStudentFileSearch('');
 };
 
-window.clearStudentData = function() {
-   const cardArea = document.getElementById('sf-card-area');
-   const cards = cardArea.querySelectorAll('.sf-student-card-2d');
-   const activeCard = Array.from(cards).find(c => c.classList.contains('active')) || cards[0];
-   if (!activeCard) return;
+window.clearStudentData = function () {
+  const cardArea = document.getElementById('sf-card-area');
+  const cards = cardArea.querySelectorAll('.sf-student-card-2d');
+  const activeCard = Array.from(cards).find(c => c.classList.contains('active')) || cards[0];
+  if (!activeCard) return;
 
-   activeCard.querySelector('.sf-input-name').value = '';
-   activeCard.querySelector('.sf-input-id').value = '';
-   activeCard.querySelector('.sf-input-class').value = '';
-   activeCard.querySelector('.sf-input-remarks').value = '';
-   activeCard.querySelector('.sf-chk-foreign').checked = false;
-   activeCard.querySelector('.sf-chk-empty').checked = true;
-   
-   // 不自動儲存，留給用戶確認後再按下方的儲存按鈕
+  activeCard.querySelector('.sf-input-name').value = '';
+  activeCard.querySelector('.sf-input-id').value = '';
+  activeCard.querySelector('.sf-input-class').value = '';
+  activeCard.querySelector('.sf-input-remarks').value = '';
+  activeCard.querySelector('.sf-chk-foreign').checked = false;
+  activeCard.querySelector('.sf-chk-empty').checked = true;
+
+  // 不自動儲存，留給用戶確認後再按下方的儲存按鈕
 };
 
-window.debouncedAutoSave = function(elem) {
-   if (elem.dataset.timeout) clearTimeout(elem.dataset.timeout);
-   elem.dataset.timeout = setTimeout(() => {
-      autoSaveStudentFile(elem);
-   }, 300);
+window.debouncedAutoSave = function (elem) {
+  if (elem.dataset.timeout) clearTimeout(elem.dataset.timeout);
+  elem.dataset.timeout = setTimeout(() => {
+    autoSaveStudentFile(elem);
+  }, 300);
 }
 
-window.autoSaveStudentFile = async function(elem) {
-   const activeCard = elem.closest('.sf-student-card-2d');
-   if (!activeCard) return;
+window.autoSaveStudentFile = async function (elem) {
+  const activeCard = elem.closest('.sf-student-card-2d');
+  if (!activeCard) return;
 
-   const studentObj = _sfRenderMap.get(activeCard);
-   if (!studentObj) return;
+  const studentObj = _sfRenderMap.get(activeCard);
+  if (!studentObj) return;
 
-   const newName = activeCard.querySelector('.sf-input-name').value.trim();
-   const newId = activeCard.querySelector('.sf-input-id').value.trim();
-   const newClass = activeCard.querySelector('.sf-input-class').value.trim();
-   const newRemarks = activeCard.querySelector('.sf-input-remarks').value.trim();
-   const isForeign = activeCard.querySelector('.sf-chk-foreign').checked;
-   const isEmpty = activeCard.querySelector('.sf-chk-empty').checked;
+  const newName = activeCard.querySelector('.sf-input-name').value.trim();
+  const newId = activeCard.querySelector('.sf-input-id').value.trim();
+  const newClass = activeCard.querySelector('.sf-input-class').value.trim();
+  const newRemarks = activeCard.querySelector('.sf-input-remarks').value.trim();
+  const isForeign = activeCard.querySelector('.sf-chk-foreign').checked;
+  const isEmpty = activeCard.querySelector('.sf-chk-empty').checked;
 
-   const btn = activeCard.querySelector('.sf-save-action-btn');
-   let oldHtml = '';
-   if (btn) {
-       oldHtml = btn.innerHTML;
-       btn.innerHTML = '🔄 儲存中...';
-       btn.disabled = true;
-   } else {
-       showToast('自動儲存中...', 'info');
-   }
+  const btn = activeCard.querySelector('.sf-save-action-btn');
+  let oldHtml = '';
+  if (btn) {
+    oldHtml = btn.innerHTML;
+    btn.innerHTML = '🔄 儲存中...';
+    btn.disabled = true;
+  } else {
+    showToast('自動儲存中...', 'info');
+  }
 
-   try {
-     const updatePayload = {
-        pageId: studentObj.id,
-        updateProfile: {
-            name: isEmpty ? '' : newName,
-            class: newClass,
-            studentId: isEmpty ? '' : newId,
-            isForeign: isForeign
-        },
-        markEmpty: isEmpty
-     };
-     if (isEmpty) updatePayload.clearProfile = true;
+  try {
+    const updatePayload = {
+      pageId: studentObj.id,
+      updateProfile: {
+        name: isEmpty ? '' : newName,
+        class: newClass,
+        studentId: isEmpty ? '' : newId,
+        isForeign: isForeign
+      },
+      markEmpty: isEmpty
+    };
+    if (isEmpty) updatePayload.clearProfile = true;
 
-     await Promise.all([
-        window._api.updateAttendance([updatePayload]),
-        window._api.updateRemark(studentObj.id, newRemarks).catch(() => {}) // 即使尚未初始化資料庫也不阻斷
-     ]);
+    await Promise.all([
+      window._api.updateAttendance([updatePayload]),
+      window._api.updateRemark(studentObj.id, newRemarks).catch(() => { }) // 即使尚未初始化資料庫也不阻斷
+    ]);
 
-     // Update Local Cache Reference
-     studentObj.name = isEmpty ? '' : newName;
-     studentObj.studentId = isEmpty ? '' : newId;
-     studentObj.squad = newClass;
-     studentObj.class = newClass;
-     studentObj.remarks = newRemarks;
-     studentObj.isForeign = isForeign;
-     studentObj.isEmpty = isEmpty;
-     
-     // 同步更新畫面上所有複製人的顯示內容
-     const cards = document.querySelectorAll('.sf-student-card-2d');
-     cards.forEach(c => {
-         const obj = _sfRenderMap.get(c);
-         if (obj === studentObj) {
-             c.querySelector('.sf-input-name').value = studentObj.name;
-             c.querySelector('.sf-input-id').value = studentObj.studentId;
-             c.querySelector('.sf-input-class').value = studentObj.class;
-             c.querySelector('.sf-input-remarks').value = studentObj.remarks;
-             c.querySelector('.sf-chk-foreign').checked = studentObj.isForeign;
-             c.querySelector('.sf-chk-empty').checked = studentObj.isEmpty;
-         }
-     });
-     
-     localStorage.setItem('biyuan_temp_students_update', JSON.stringify(state.students));
+    // Update Local Cache Reference
+    studentObj.name = isEmpty ? '' : newName;
+    studentObj.studentId = isEmpty ? '' : newId;
+    studentObj.squad = newClass;
+    studentObj.class = newClass;
+    studentObj.remarks = newRemarks;
+    studentObj.isForeign = isForeign;
+    studentObj.isEmpty = isEmpty;
 
-     if (btn) {
-         btn.innerHTML = '✅ 已儲存';
-         btn.style.background = '#10b981';
-         btn.style.color = '#fff';
-         setTimeout(() => {
-             btn.innerHTML = oldHtml;
-             btn.disabled = false;
-             btn.style.background = '';
-             btn.style.color = '';
-         }, 1500);
-     } else {
-         showToast('資料已自動同步至總表 ✅', 'success');
-     }
+    // 同步更新畫面上所有複製人的顯示內容
+    const cards = document.querySelectorAll('.sf-student-card-2d');
+    cards.forEach(c => {
+      const obj = _sfRenderMap.get(c);
+      if (obj === studentObj) {
+        c.querySelector('.sf-input-name').value = studentObj.name;
+        c.querySelector('.sf-input-id').value = studentObj.studentId;
+        c.querySelector('.sf-input-class').value = studentObj.class;
+        c.querySelector('.sf-input-remarks').value = studentObj.remarks;
+        c.querySelector('.sf-chk-foreign').checked = studentObj.isForeign;
+        c.querySelector('.sf-chk-empty').checked = studentObj.isEmpty;
+      }
+    });
 
-     if (typeof playClickSound === 'function') playClickSound('all_present');
+    localStorage.setItem('biyuan_temp_students_update', JSON.stringify(state.students));
 
-   } catch (err) {
-     if (btn) {
-         btn.innerHTML = '❌ 儲存失敗';
-         btn.style.background = '#ef4444';
-         btn.style.color = '#fff';
-         setTimeout(() => {
-             btn.innerHTML = oldHtml;
-             btn.disabled = false;
-             btn.style.background = '';
-             btn.style.color = '';
-         }, 2000);
-     }
-     showToast('自動連動 Notion 失敗：' + err.message, 'error');
-   }
+    if (btn) {
+      btn.innerHTML = '✅ 已儲存';
+      btn.style.background = '#10b981';
+      btn.style.color = '#fff';
+      setTimeout(() => {
+        btn.innerHTML = oldHtml;
+        btn.disabled = false;
+        btn.style.background = '';
+        btn.style.color = '';
+      }, 1500);
+    } else {
+      showToast('資料已自動同步至總表 ✅', 'success');
+    }
+
+    if (typeof playClickSound === 'function') playClickSound('all_present');
+
+  } catch (err) {
+    if (btn) {
+      btn.innerHTML = '❌ 儲存失敗';
+      btn.style.background = '#ef4444';
+      btn.style.color = '#fff';
+      setTimeout(() => {
+        btn.innerHTML = oldHtml;
+        btn.disabled = false;
+        btn.style.background = '';
+        btn.style.color = '';
+      }, 2000);
+    }
+    showToast('自動連動 Notion 失敗：' + err.message, 'error');
+  }
 };
 
 window.onStudentFileSearch = onStudentFileSearch;
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 圖片預覽彈窗 (Image Preview Modal)
+// ═════════════════════════════════════════════════════════════════════════════
+window.openImagePreview = function (src) {
+  const modal = document.getElementById('image-preview-modal');
+  const img = document.getElementById('image-preview-img');
+  if (modal && img) {
+    img.src = src;
+    modal.classList.add('visible');
+  }
+};
+
+window.closeImagePreview = function () {
+  const modal = document.getElementById('image-preview-modal');
+  if (modal) {
+    modal.classList.remove('visible');
+    setTimeout(() => {
+      document.getElementById('image-preview-img').src = '';
+    }, 300);
+  }
+};
