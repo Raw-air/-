@@ -986,6 +986,8 @@ body {
 }
 
 .rc-stat {
+  position: relative;
+  overflow: hidden;
   flex: 1;
   text-align: center;
   padding: 8px 2px;
@@ -1001,8 +1003,16 @@ body {
 }
 
 .rc-stat b {
+  transition: opacity 0.2s;
   font-size: 20px;
   font-weight: 800
+}
+
+/* 強制瞬間隱身，防止老虎機滾動時出現疊影或閃爍 */
+.number-anim-hiding {
+  color: transparent !important;
+  caret-color: transparent !important;
+  transition: none !important;
 }
 
 .rc-stat.green b {
