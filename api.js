@@ -45,6 +45,17 @@ class ApiClient {
   // 更新系統設定
   setConfig(data) { return this._fetch('/api/config', 'POST', data); }
 
+  // 建立備註資料庫
+  setupRemarksDB() { return this._fetch('/api/setup-remarks-db', 'POST'); }
+
+  // 取得備註資料
+  getRemarks() { return this._fetch('/api/remarks'); }
+
+  // 更新備註資料
+  updateRemark(pageId, remark) {
+    return this._fetch('/api/remarks', 'POST', { pageId, remark });
+  }
+
   // 換床位（整行資料交換）
   // pageIdA: 來源學生的 Notion pageId
   // pageIdB: 目標床位的 Notion pageId（可以是空床）
@@ -56,7 +67,18 @@ class ApiClient {
   getChangelog() { return this._fetch('/api/changelog'); }
 
   // 發布新公告日誌
+  // 發布新公告日誌
   postChangelog(content) { return this._fetch('/api/changelog', 'POST', { content }); }
+
+  // ⚡ 即時輪詢（KV 信號層，回應 < 10ms，不走重試邏輯）
+  async poll() {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/poll`);
+      return await res.json();
+    } catch (e) {
+      return null; // 輪詢失敗靜默跳過
+    }
+  }
 }
 
 // 全域單例
