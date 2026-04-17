@@ -1,6 +1,4 @@
-// 碧苑宿舍點名系統 - Service Worker（PWA 離線支援）
-const CACHE_NAME = 'biyuan-v32'; // ← 每次更新 JS/CSS 必須遞增此版號
-const ASSETS = [
+// 碧苑宿舍點名系統 - Service Worker（PWA 離線支援�?const CACHE_NAME = 'biyuan-v49'; // �?每次更新 JS/CSS 必須遞增此版�?const ASSETS = [
   './',
   './index.html',
   './style.css',
@@ -11,8 +9,7 @@ const ASSETS = [
   './export.js',
 ];
 
-// 安裝時快取靜態資源
-self.addEventListener('install', (event) => {
+// 安裝時快取靜態資�?self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
   );
@@ -29,10 +26,8 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// 網路優先，失敗時用快取
-self.addEventListener('fetch', (event) => {
-  // API 請求不快取
-  if (event.request.url.includes('/api/')) return;
+// 網路優先，失敗時用快�?self.addEventListener('fetch', (event) => {
+  // API 請求不快�?  if (event.request.url.includes('/api/')) return;
 
   event.respondWith(
     fetch(event.request)

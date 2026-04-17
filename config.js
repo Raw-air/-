@@ -34,6 +34,28 @@ const CONFIG = {
   DOUBLE_ROOMS: ['B118', 'B120', 'B122', 'B124', 'B126'],
   // 儲藏室：不能住人，完全隱藏
   STORAGE_ROOMS: ['B128'],
+
+  // 幹部值星輪值表 114-2
+  DUTY_ROSTER: [
+    { week: 1, start: '02/20', end: '02/26', dutyOfficer: '周鈺翰', deputy: '王毅中' },
+    { week: 2, start: '02/27', end: '03/05', dutyOfficer: '陳偉承', deputy: '陳昭銘' },
+    { week: 3, start: '03/06', end: '03/12', dutyOfficer: '廖祐鞍', deputy: '李珈合' },
+    { week: 4, start: '03/13', end: '03/19', dutyOfficer: '邱振晏', deputy: '王瑞宏' },
+    { week: 5, start: '03/20', end: '03/26', dutyOfficer: '陳昭銘', deputy: '陳偉承' },
+    { week: 6, start: '03/27', end: '04/02', dutyOfficer: '李珈合', deputy: '廖祐鞍' },
+    { week: 7, start: '04/03', end: '04/09', dutyOfficer: '王瑞宏', deputy: '邱振晏' },
+    { week: 8, start: '04/10', end: '04/16', dutyOfficer: '陳偉承', deputy: '陳昭銘' },
+    { week: 9, start: '04/17', end: '04/23', dutyOfficer: '王毅中', deputy: '周鈺翰' },
+    { week: 10, start: '04/24', end: '04/30', dutyOfficer: '廖祐鞍', deputy: '李珈合' },
+    { week: 11, start: '05/01', end: '05/07', dutyOfficer: '王瑞宏', deputy: '邱振晏' },
+    { week: 12, start: '05/08', end: '05/14', dutyOfficer: '陳昭銘', deputy: '陳偉承' },
+    { week: 13, start: '05/15', end: '05/21', dutyOfficer: '李珈合', deputy: '廖祐鞍' },
+    { week: 14, start: '05/22', end: '05/28', dutyOfficer: '邱振晏', deputy: '王瑞宏' },
+    { week: 15, start: '05/29', end: '06/04', dutyOfficer: '王瑞宏', deputy: '邱振晏' },
+    { week: 16, start: '06/05', end: '06/11', dutyOfficer: '廖祐鞍', deputy: '李珈合' },
+    { week: 17, start: '06/12', end: '06/18', dutyOfficer: '陳偉承', deputy: '陳昭銘' },
+    { week: 18, start: '06/19', end: '06/25', dutyOfficer: '周鈺翰', deputy: '王毅中' },
+  ],
 };
 
 /** 從寢床號判斷中隊 */
@@ -72,6 +94,28 @@ function parseDateColumnToDate(name) {
   return d;
 }
 
+/** 取得當週值星官資訊 */
+function getCurrentDutyOfficers() {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  // 依序檢查每個輪值表
+  for (let i = 0; i < CONFIG.DUTY_ROSTER.length; i++) {
+    const roster = CONFIG.DUTY_ROSTER[i];
+    const [startMonth, startDay] = roster.start.split('/').map(Number);
+    const [endMonth, endDay] = roster.end.split('/').map(Number);
+    
+    // 設定開始與結束時間（假設皆為今年）
+    let startDate = new Date(currentYear, startMonth - 1, startDay, 0, 0, 0);
+    // 依據表單，結束日期的下週五 17:00 前都是，但為了簡化，算到結束日的 23:59:59
+    let endDate = new Date(currentYear, endMonth - 1, endDay, 23, 59, 59);
+    
+    if (now >= startDate && now <= endDate) {
+      return roster;
+    }
+  }
+  return null;
+}
+
 // 匯出為全域
 if (typeof window !== 'undefined') {
   window.CONFIG = CONFIG;
@@ -79,4 +123,5 @@ if (typeof window !== 'undefined') {
   window.getSquadColor = getSquadColor;
   window.getTodayColumnName = getTodayColumnName;
   window.parseDateColumnToDate = parseDateColumnToDate;
+  window.getCurrentDutyOfficers = getCurrentDutyOfficers;
 }
