@@ -139,14 +139,27 @@
       <div class="home-date" id="home-date"></div>
     </div>
     
-    <!-- 幹部工作及值星合併按鈕 -->
-    <div id="duty-manual-widget" class="duty-manual-widget" onclick="openDutyManualModal()">
+    <!-- 本週值星幹部 (獨立顯示) -->
+    <div id="duty-roster-widget" onclick="openDutyRosterModal()" style="display:flex; justify-content:space-between; align-items:center; background:rgba(245,158,11,0.1); padding:12px 20px; border-radius:16px; border:1px solid rgba(245,158,11,0.2); margin: 0 20px 24px 20px; transition:all 0.2s ease; cursor:pointer;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="color:var(--orange); display:flex; align-items:center;"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
+        <span style="font-size:14px; font-weight:700; color:var(--orange);">值星(<span id="duty-roster-week">--</span>): <span id="duty-roster-main">--</span> / <span id="duty-roster-sub">--</span></span>
+      </div>
+      <span style="color:var(--orange); opacity:0.8; display:flex; align-items:center;"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+    </div>
 
-      <!-- 主區塊：幹部工作手冊 -->
-      <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom: 12px; border-bottom: 1px solid var(--glass-border);">
+    <p class="section-label">選擇你的中隊</p>
+    <div id="squad-grid" class="squad-grid-3col"></div>
+
+    <p class="section-label" style="margin-top:24px;">幹部專區</p>
+    <div id="management-grid" style="display:flex;flex-direction:column;gap:12px;position:relative;z-index:1;"></div>
+
+    <!-- 幹部工作手冊獨立區塊 (移動至此) -->
+    <div id="duty-manual-widget" class="duty-manual-widget" style="margin-top: 24px; cursor:pointer;" onclick="openDutyManualModal()">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
         <div style="display:flex; align-items:center; gap:16px;">
           <div style="background:var(--glass-bg); border: 1px solid var(--glass-border); width:48px; height:48px; border-radius:14px; display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow-sm);">
-            <span style="font-size:24px; color: var(--text); display:flex; align-items:center; justify-content:center;"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg></span>
+            <svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text);"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
           </div>
           <div>
             <div style="font-size:15px; color:var(--text); font-weight:800; letter-spacing:0.5px;">幹部工作手冊</div>
@@ -156,26 +169,10 @@
           </div>
         </div>
         <div style="width:32px; height:32px; border-radius:50%; background:var(--glass-bg); border: 1px solid var(--glass-border); display:flex; align-items:center; justify-content:center;">
-          <span style="color:var(--text); opacity: 0.7; display:flex; align-items:center;"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+          <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text); opacity: 0.7;"><path d="m9 18 6-6-6-6"/></svg>
         </div>
       </div>
-
-      <!-- 小提示鈕：本週值星幹部 -->
-      <div id="duty-roster-widget" onclick="event.stopPropagation(); openDutyRosterModal()" style="display:flex; justify-content:space-between; align-items:center; background:rgba(245,158,11,0.1); padding:10px 16px; border-radius:12px; border:1px solid rgba(245,158,11,0.2); width:100%; transition:all 0.2s ease; margin-top: 12px; box-sizing:border-box;">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span style="color:var(--orange); display:flex; align-items:center;"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
-          <span style="font-size:13px; font-weight:700; color:var(--orange);">值星(<span id="duty-roster-week">--</span>): <span id="duty-roster-main">--</span> / <span id="duty-roster-sub">--</span></span>
-        </div>
-        <span style="color:var(--orange); opacity:0.8; display:flex; align-items:center;"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
-      </div>
-
     </div>
-
-    <p class="section-label">選擇你的中隊</p>
-    <div id="squad-grid" class="squad-grid-3col"></div>
-
-    <p class="section-label" style="margin-top:24px;">幹部專區</p>
-    <div id="management-grid" style="display:flex;flex-direction:column;gap:12px;position:relative;z-index:1;"></div>
 
     <!-- 意見回饋入口 -->
     <div style="display:flex;justify-content:center;margin-top:32px;margin-bottom:16px;position:relative;z-index:1;">
@@ -774,7 +771,7 @@
 
     <div class="settings-card">
       <div class="settings-card-header"><svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M7 5H3"/><path d="M21 17v4"/><path d="M23 19h-4"/></svg> 個人化設定</div>
-      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 4px 0;">
+      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 8px 0;">
         <div style="display:flex; flex-direction:column; gap:4px;">
           <span>音效靜音模式</span>
           <span style="color:var(--dim); font-size:11px;">關閉系統的觸發音效</span>
@@ -798,7 +795,7 @@
         </label>
       </div>
       
-      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 4px 0; margin-top: 16px;">
+      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 8px 0; margin-top: 16px;">
         <div style="display:flex; flex-direction:column; gap:4px;">
           <span>觸覺震動反饋</span>
           <span style="color:var(--dim); font-size:11px;">開啟按鍵與互動震動 (支援的手機裝置)</span>
@@ -821,7 +818,7 @@
             </div>
         </label>
       </div>
-      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 4px 0;">
+      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 8px 0;">
         <div style="display:flex; flex-direction:column; gap:4px;">
           <span>全白模式</span>
           <span style="color:var(--dim); font-size:11px;">切換為亮色外觀主題</span>
@@ -844,7 +841,7 @@
             </div>
         </label>
       </div>
-      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 4px 0;">
+      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 8px 0;">
         <div style="display:flex; flex-direction:column; gap:4px;">
           <span>潘仔模式 (簡潔視角)</span>
           <span style="color:var(--dim); font-size:11px;">僅隱藏外籍/空床標籤，保持色彩</span>
@@ -869,7 +866,7 @@
       </div>
 
       <!-- NEW: Power Save Mode -->
-      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 4px 0;">
+      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 8px 0;">
         <div style="display:flex; flex-direction:column; gap:4px;">
           <span>省電順暢模式 (純 2D)</span>
           <span style="color:var(--dim); font-size:11px;">去除所有浮雕、景深與 3D 特效</span>
@@ -951,14 +948,7 @@
       <button class="action-btn wide save-btn" onclick="saveDormSettings()">儲存宿舍參數</button>
     </div>
 
-    <div class="settings-card">
-      <div class="settings-card-header"><img src="./Lp/ICON/HOME.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">AI 辨識設定</div>
-      <div class="setting-row" style="display:flex; flex-direction:column; align-items:flex-start; padding: 4px 0;">
-        <span style="margin-bottom:8px;">Gemini API Key (用於值星表等影像辨識)</span>
-        <input type="password" id="gemini-api-key" placeholder="AIzaSy..." style="width:100%; padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.2); background:rgba(0,0,0,0.2); color:white; font-family:monospace;" onchange="saveGeminiKey(this.value)">
-      </div>
-      <p class="settings-hint"><svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg> Key 僅保存在本機端瀏覽器中，不會上傳至伺服器。</p>
-    </div>
+
 
     <div class="settings-card">
       <div class="settings-card-header"><img src="./Lp/ICON/COPY.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">匯出 Excel</div>

@@ -2,8 +2,11 @@
  * 碧苑宿舍點名系統 - 設定檔
  */
 const CONFIG = {
-  // Cloudflare Worker 網址
+  // Cloudflare Worker 網址 (Notion 主後端)
   WORKER_URL: 'https://biyuan-proxy.s010828.workers.dev',
+
+  // Cloudflare Worker 網址 (附加功能與 AI 後端)
+  KV_API_URL: 'https://dorm-api.s010828.workers.dev',
 
   // 當前學期
   SEMESTER: '114-2',

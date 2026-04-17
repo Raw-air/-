@@ -1,0 +1,7 @@
+name = "dorm-api"
+main = "worker.js"
+compatibility_date = "2024-04-18"
+
+[[kv_namespaces]]
+binding = "DORM_DB"
+id = "1fd71977a24f4110a4ff9cb2814227de"

@@ -741,18 +741,17 @@ function updateDutyManualPreview() {
   
   // 簡單邏輯：找出大於等於現在時間，或過去一小時內的最近任務
   let closestTask = null;
-  let minDiff = Infinity;
+  let maxPastTime = -1;
+  const nowTime = now.getHours() * 60 + now.getMinutes();
   
   const checkTasks = (tasks) => {
     tasks.forEach(t => {
       const [h, m] = t.time.split(':').map(Number);
       const taskTime = h * 60 + m;
-      const nowTime = now.getHours() * 60 + now.getMinutes();
-      const diff = Math.abs(taskTime - nowTime);
       
-      // 任務在前後 60 分鐘內
-      if (diff < 60 && diff < minDiff) {
-        minDiff = diff;
+      // 任務已經開始（taskTime <= nowTime），且是最接近現在時間的
+      if (taskTime <= nowTime && taskTime > maxPastTime) {
+        maxPastTime = taskTime;
         closestTask = t;
       }
     });
@@ -783,7 +782,7 @@ function openDutyRosterModal() {
   } else {
     const currentDuty = window.getCurrentDutyOfficers ? window.getCurrentDutyOfficers() : null;
     
-    let html = '<div style="display:flex; flex-direction:column; gap:12px; padding:4px 0 20px 0;">';
+    let html = '<div style="display:flex; flex-direction:column; gap:12px; padding:4px 8px 20px 8px;">';
     
     window.CONFIG.DUTY_ROSTER.forEach(row => {
       const isCurrent = currentDuty && currentDuty.week === row.week;
@@ -807,12 +806,12 @@ function openDutyRosterModal() {
           </div>
         </div>
         
-        <div style="display:flex; gap:12px; margin-top:2px;">
-          <div style="flex:1; background:var(--glass-bg); padding:10px 12px; border-radius:12px; border:1px solid var(--glass-border);">
+        <div style="display:flex; gap:12px; margin-top:2px; align-items:stretch;">
+          <div style="flex:1; background:var(--glass-bg); padding:10px 12px; border-radius:12px; border:1px solid var(--glass-border); display:flex; flex-direction:column; justify-content:center;">
             <div style="font-size:10px; color:var(--orange); font-weight:800; margin-bottom:2px; opacity:0.8;">主值星官</div>
             <div style="font-size:15px; font-weight:700; color:var(--text);">${row.dutyOfficer}</div>
           </div>
-          <div style="flex:1; background:var(--glass-bg); padding:10px 12px; border-radius:12px; border:1px solid var(--glass-border);">
+          <div style="flex:1; background:var(--glass-bg); padding:10px 12px; border-radius:12px; border:1px solid var(--glass-border); display:flex; flex-direction:column; justify-content:center;">
             <div style="font-size:10px; color:var(--purple); font-weight:800; margin-bottom:2px; opacity:0.8;">副值星官</div>
             <div style="font-size:15px; font-weight:700; color:var(--text);">${row.deputy}</div>
           </div>
@@ -841,17 +840,25 @@ function openDutyManualModal() {
     let html = `
     <div style="margin-top:24px; margin-bottom:16px;">
       <h2 style="margin:0; font-size:clamp(1.5rem, 5vw + 1rem, 2rem); font-weight:800; color:${color}; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; letter-spacing:-0.5px; display:flex; align-items:center; gap:12px;">
-         <span style="font-size:1.2em;">${title === '主職' ? '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'}</span> ${title}
+         <span style="font-size:1.2em;">${title === '主職' ? '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'}</span> ${title}
       </h2>
     </div>`;
     
     html += '<div style="display:flex; flex-direction:column; gap:12px;">';
     
-    tasks.forEach(t => {
+    let activeIndex = -1;
+    let maxPast = -1;
+    tasks.forEach((t, i) => {
       const [h, m] = t.time.split(':').map(Number);
       const taskTime = h * 60 + m;
-      const diff = Math.abs(taskTime - currentMinutes);
-      const isCurrent = diff <= 45; // 45 分鐘內的任務標示為目前要做的
+      if (taskTime <= currentMinutes && taskTime > maxPast) {
+        maxPast = taskTime;
+        activeIndex = i;
+      }
+    });
+    
+    tasks.forEach((t, i) => {
+      const isCurrent = (i === activeIndex);
       
       const bgColor = color === '#f59e0b' ? '245,158,11' : '59,130,246';
       
@@ -3102,7 +3109,7 @@ async function renderLeaveRecordsList() {
   container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">讀取中...</div>';
 
   try {
-    const res = await fetch(CONFIG.WORKER_URL + '/api/leave-records');
+    const res = await fetch(CONFIG.KV_API_URL + '/api/leave-records');
     if (!res.ok) throw new Error('API 回應錯誤');
     const records = await res.json();
 
@@ -3194,7 +3201,7 @@ async function submitCounterLeave() {
     }
 
     // 2. 紀錄至電話請假紀錄 DB
-    const leaveAddRes = await fetch(CONFIG.WORKER_URL + '/api/leave-records', {
+    const leaveAddRes = await fetch(CONFIG.KV_API_URL + '/api/leave-records', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -3309,7 +3316,7 @@ async function submitRepair() {
 
   showLoading(true);
   try {
-    const res = await fetch(window.CONFIG.WORKER_URL + '/api/repair-records', {
+    const res = await fetch(window.CONFIG.KV_API_URL + '/api/repair-records', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -3346,7 +3353,7 @@ async function renderRepairReviewList() {
   container.innerHTML = '<div style="color:var(--dim);text-align:center;padding:20px;">讀取中...</div>';
 
   try {
-    const res = await fetch(window.CONFIG.WORKER_URL + '/api/repair-records');
+    const res = await fetch(window.CONFIG.KV_API_URL + '/api/repair-records');
     const records = await res.json();
 
     if (!records || records.length === 0) {
@@ -3388,7 +3395,7 @@ async function markRepairDone(id) {
   if (!ok) return;
   showLoading(true);
   try {
-    const res = await fetch(window.CONFIG.WORKER_URL + '/api/repair-records', {
+    const res = await fetch(window.CONFIG.KV_API_URL + '/api/repair-records', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id })
@@ -3495,7 +3502,7 @@ async function submitFeedback() {
   if (btn) btn.focus();
 
   try {
-    const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records', {
+    const res = await fetch(window.CONFIG.KV_API_URL + '/api/feedback-records', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -3532,7 +3539,7 @@ async function renderFeedbackReviewList() {
   container.innerHTML = '<div style="color:var(--dim);text-align:center;padding:20px;">讀取中...</div>';
 
   try {
-    const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records');
+    const res = await fetch(window.CONFIG.KV_API_URL + '/api/feedback-records');
     const records = await res.json();
 
     // 隱藏未讀紅點
@@ -3580,7 +3587,7 @@ async function markFeedbackRead(id) {
   if (!ok) return;
   showLoading(true);
   try {
-    const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records', {
+    const res = await fetch(window.CONFIG.KV_API_URL + '/api/feedback-records', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id })
@@ -3602,7 +3609,7 @@ async function markFeedbackRead(id) {
 // 檢查是否有未讀回饋（在開發者面板開啟時檢查）
 async function checkUnreadFeedback() {
   try {
-    const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records');
+    const res = await fetch(window.CONFIG.KV_API_URL + '/api/feedback-records');
     const records = await res.json();
     if (records && records.length > 0) {
       const dot = document.getElementById('feedback-unread-dot');
@@ -4437,13 +4444,7 @@ window.handleDutyRosterUpload = async function(e) {
   const file = e.target.files[0];
   if (!file) return;
   
-  const apiKey = localStorage.getItem('gemini_api_key');
-  if (!apiKey) {
-    showToast('請先至「設定」頁面輸入 Gemini API Key', 'error');
-    closeModal('duty-roster-modal');
-    navigateTo('settings');
-    return;
-  }
+  // API Key 改由 Cloudflare Worker 後端隱藏保護
   
   const container = document.getElementById('duty-roster-content');
   const originalHtml = container.innerHTML;
@@ -4468,6 +4469,13 @@ window.handleDutyRosterUpload = async function(e) {
     });
     
     // ... rest of the logic remains same for API call
+    const targetRooms = ['211', '311', '113', '112'];
+    const officers = state.students
+      .filter(s => targetRooms.some(r => s.room && s.room.includes(r)))
+      .map(s => s.name)
+      .filter(n => n && !n.includes('空床'));
+    const officersText = officers.length > 0 ? `\n\n另外，本宿舍的幹部通常住在 211, 311, 113, 112 房。以下是這些房間的住宿生名單作為參考，如果辨識到的名字與這些人相似，請優先修正為名單上的正確名字：\n${officers.join(', ')}` : '';
+
     const prompt = `你是一個值星表資料擷取專家。請讀取這張圖片中的值星幹部輪值表，並輸出為純 JSON 陣列格式。
 不要輸出任何 Markdown 標記，只要合法的 JSON 陣列。
 陣列中的每個物件需包含：
@@ -4476,9 +4484,9 @@ window.handleDutyRosterUpload = async function(e) {
 - end: (字串，結束日期，例如 "02/26")
 - dutyOfficer: (字串，值星官姓名)
 - deputy: (字串，副值星官姓名)
-若有任何辨識不清的地方請自行合理推斷，若有換行請視為同一個字串處理。`;
+若有任何辨識不清的地方請自行合理推斷，若有換行請視為同一個字串處理。${officersText}`;
     
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`, {
+    const res = await fetch(window.CONFIG.KV_API_URL + '/api/ai-parse', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
