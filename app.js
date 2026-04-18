@@ -505,7 +505,12 @@ function toggleWhiteMode(el, event) {
     Math.max(y, window.innerHeight - y)
   );
 
-  haptic('medium');
+  // 漸漸放大的波紋震動效果
+  if (navigator.vibrate) {
+    navigator.vibrate([15, 30, 25, 40, 50]); 
+  } else {
+    haptic('medium');
+  }
 
   if (!document.startViewTransition) {
     performAppearanceChange(isLight);
@@ -2725,14 +2730,15 @@ window.saveGlobalPinAuth = saveGlobalPinAuth;
 // ═════════════════════════════════════════════════════════════════════════════
 function loadGlobalBgVideo() {
   // 從 Notion 全域設定讀取
-  const url = state.config['bg_video_url'];
+  const rawUrl = state.config['bg_video_url'];
+  const url = (rawUrl || '').trim();
   const scale = state.config['bg_video_scale'] || 1.0;
   const opacity = state.config['bg_video_opacity'] || 0.25;
 
   const container = document.getElementById('custom-video-bg');
   const animBg = document.querySelector('.home-anim-bg');
 
-  if (url) {
+  if (url && url.startsWith('http')) {
     container.innerHTML = `<video src="${url}" autoplay loop muted playsinline style="--target-scale: ${scale}; --target-opacity: ${opacity}; opacity: 0;"></video>`;
     const vid = container.querySelector('video');
     vid.addEventListener('loadeddata', () => {
@@ -3127,7 +3133,7 @@ async function renderLeaveRecordsList() {
   container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">讀取中...</div>';
 
   try {
-    const res = await fetch(CONFIG.KV_API_URL + '/api/leave-records');
+    const res = await fetch(CONFIG.WORKER_URL + '/api/leave-records');
     if (!res.ok) throw new Error('API 回應錯誤');
     const records = await res.json();
 
@@ -3219,7 +3225,7 @@ async function submitCounterLeave() {
     }
 
     // 2. 紀錄至電話請假紀錄 DB
-    const leaveAddRes = await fetch(CONFIG.KV_API_URL + '/api/leave-records', {
+    const leaveAddRes = await fetch(CONFIG.WORKER_URL + '/api/leave-records', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -3334,7 +3340,7 @@ async function submitRepair() {
 
   showLoading(true);
   try {
-    const res = await fetch(window.CONFIG.KV_API_URL + '/api/repair-records', {
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/repair-records', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -3371,7 +3377,7 @@ async function renderRepairReviewList() {
   container.innerHTML = '<div style="color:var(--dim);text-align:center;padding:20px;">讀取中...</div>';
 
   try {
-    const res = await fetch(window.CONFIG.KV_API_URL + '/api/repair-records');
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/repair-records');
     const records = await res.json();
 
     if (!records || records.length === 0) {
@@ -3413,7 +3419,7 @@ async function markRepairDone(id) {
   if (!ok) return;
   showLoading(true);
   try {
-    const res = await fetch(window.CONFIG.KV_API_URL + '/api/repair-records', {
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/repair-records', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id })
@@ -3520,7 +3526,7 @@ async function submitFeedback() {
   if (btn) btn.focus();
 
   try {
-    const res = await fetch(window.CONFIG.KV_API_URL + '/api/feedback-records', {
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -3557,7 +3563,7 @@ async function renderFeedbackReviewList() {
   container.innerHTML = '<div style="color:var(--dim);text-align:center;padding:20px;">讀取中...</div>';
 
   try {
-    const res = await fetch(window.CONFIG.KV_API_URL + '/api/feedback-records');
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records');
     const records = await res.json();
 
     // 隱藏未讀紅點
@@ -3605,7 +3611,7 @@ async function markFeedbackRead(id) {
   if (!ok) return;
   showLoading(true);
   try {
-    const res = await fetch(window.CONFIG.KV_API_URL + '/api/feedback-records', {
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id })
@@ -3627,7 +3633,7 @@ async function markFeedbackRead(id) {
 // 檢查是否有未讀回饋（在開發者面板開啟時檢查）
 async function checkUnreadFeedback() {
   try {
-    const res = await fetch(window.CONFIG.KV_API_URL + '/api/feedback-records');
+    const res = await fetch(window.CONFIG.WORKER_URL + '/api/feedback-records');
     const records = await res.json();
     if (records && records.length > 0) {
       const dot = document.getElementById('feedback-unread-dot');
