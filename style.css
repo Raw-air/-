@@ -2040,7 +2040,7 @@ body.light-mode #changelog-content .changelog-time {
 
 .save-btn {
   background: var(--blue) !important;
-  color: var(--text) !important;
+  color: #ffffff !important;
   border: none !important;
   font-weight: 600
 }
@@ -2811,10 +2811,10 @@ body.light-mode .icon-upload-preview {
 }
 
 body.light-mode .modal-btn.confirm {
-  color: var(--text);
+  color: #ffffff;
 }
 body.light-mode .save-btn {
-  color: var(--text) !important;
+  color: #ffffff !important;
 }
 
 body.light-mode .home-anim-bg::before {
@@ -4240,6 +4240,7 @@ body.light-mode .focus-indicator { background: #6366f1; }
   color: var(--text);
   border-radius: 50%;
   width: 32px; height: 32px;
+  padding: 0;
   display: flex; align-items: center; justify-content: center;
   font-size: 16px;
   cursor: pointer;
@@ -4409,11 +4410,11 @@ body.light-mode .focus-indicator { background: #6366f1; }
 }
 
 .sf-student-card-2d.is-3d-active .sf-card-badge-relative {
-  transform: translateZ(45px);
+  transform: translateY(4px) translateZ(45px);
   box-shadow: 0 5px 12px rgba(0,0,0,0.15);
 }
 .sf-student-card-2d.is-3d-active .sf-card-badge-relative:hover {
-  transform: translateZ(65px);
+  transform: translateY(4px) translateZ(65px);
   box-shadow: 0 12px 25px rgba(0,0,0,0.25);
 }
 

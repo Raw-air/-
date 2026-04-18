@@ -22,6 +22,7 @@ let audioCtx = null;
 
 // ─── 觸覺回饋 (Android vibrate + iOS AudioContext fallback) ──────────────
 function haptic(type = 'light') {
+  if (localStorage.getItem('mute_haptic') === 'true') return;
   // Android: native vibration
   if (navigator.vibrate) {
     switch (type) {
@@ -349,7 +350,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 初始狀態：震動反饋
     if (localStorage.getItem('mute_haptic') === 'true') {
       const hapticToggle = document.getElementById('setting-haptic');
-      if (hapticToggle) hapticToggle.checked = false;
+      if (hapticToggle) hapticToggle.checked = true;
     }
 
     // 初始狀態：潘仔模式
@@ -471,8 +472,8 @@ function toggleMute(el) {
 }
 
 function toggleHaptic(el) {
-  localStorage.setItem('mute_haptic', !el.checked);
-  if (el.checked) triggerHapticFeedback('confirm');
+  localStorage.setItem('mute_haptic', el.checked);
+  if (!el.checked) triggerHapticFeedback('confirm');
 }
 
 function togglePanzi(el) {
@@ -1629,7 +1630,7 @@ function updateRollCallStats(skipAnimation = false) {
     confirmBtn.style.display = 'flex';
     const isConfirmed = state.confirmedSquads.includes(state.currentSquad);
     confirmBtn.className = 'rc-confirm-action' + (isConfirmed ? ' done' : '');
-    document.getElementById('rc-confirm-icon').textContent = isConfirmed ? '<svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '<svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>';
+    document.getElementById('rc-confirm-icon').innerHTML = isConfirmed ? '<svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '<svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>';
     document.getElementById('rc-confirm-text').textContent = isConfirmed ? '確認本中隊已完成點名' : '確認本中隊完成點名';
   } else {
     confirmBtn.style.display = 'none';
@@ -2550,7 +2551,7 @@ function showToast(msg, type = 'info') {
     oldest.classList.remove('visible');
     oldest.remove();
   }
-  const t = document.createElement('div'); t.className = `toast toast-${type}`; t.textContent = msg;
+  const t = document.createElement('div'); t.className = `toast toast-${type}`; t.innerHTML = msg;
   // 錯誤類型增加搖晃提醒
   if (type === 'error') {
     t.classList.add('toast-error');
@@ -3908,6 +3909,7 @@ function setup2DCarouselInteraction() {
     const activeCard = Array.from(track.children).find(c => c.classList.contains('active'));
     if (activeCard) {
       activeCard.classList.add('is-3d-active');
+        haptic('medium');
       _3dCardIndex = _sfActiveIndex;
       window._is3dMode = true;
       if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
