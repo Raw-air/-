@@ -26,8 +26,8 @@ function haptic(type = 'light') {
   if (navigator.vibrate) {
     switch (type) {
       case 'light': navigator.vibrate(10); break;
-      case 'medium': navigator.vibrate(20); break;
-      case 'heavy': navigator.vibrate([10, 30, 10]); break;
+      case 'medium': navigator.vibrate(25); break;
+      case 'heavy': navigator.vibrate([15, 20, 25]); break;
       case 'error': navigator.vibrate([50, 30, 50, 30, 50]); break;
     }
     return;
@@ -36,15 +36,23 @@ function haptic(type = 'light') {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
+    
+    let duration = 0.02;
+    let volume = 0.01;
+    let wave = 'sine';
+    if (type === 'medium') { duration = 0.05; volume = 0.04; }
+    else if (type === 'heavy') { duration = 0.08; volume = 0.08; wave = 'square'; }
+    else if (type === 'error') { duration = 0.15; volume = 0.15; wave = 'sawtooth'; }
+    
     const t = audioCtx.currentTime;
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.connect(gain); gain.connect(audioCtx.destination);
-    osc.type = 'sine';
+    osc.type = wave;
     osc.frequency.setValueAtTime(1, t); // Sub-audible frequency
-    gain.gain.setValueAtTime(0.01, t);  // Nearly silent
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.02);
-    osc.start(t); osc.stop(t + 0.03);
+    gain.gain.setValueAtTime(volume, t);  // Nearly silent
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+    osc.start(t); osc.stop(t + duration + 0.01);
   } catch (e) { }
 }
 
@@ -507,7 +515,8 @@ function toggleWhiteMode(el, event) {
 
   // 漸漸放大的波紋震動效果 (配合 400ms 的展開動畫)
   if (navigator.vibrate && /Android/i.test(navigator.userAgent)) {
-    navigator.vibrate([10, 50, 15, 60, 20, 70, 30]); 
+    // 讓 Android 的震動時間落差更大：極短 -> 短 -> 中 -> 長
+    navigator.vibrate([8, 60, 20, 60, 40, 60, 80]); 
   } else {
     // iOS 或其他裝置的漸變漣漪震動
     haptic('light');
