@@ -4458,7 +4458,7 @@ window.handleDutyRosterUpload = async function(e) {
       </div>
       <div style="font-size:18px; font-weight:700; color:var(--text); margin-bottom:8px; letter-spacing:-0.5px;"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg> AI 智慧辨識中</div>
       <p style="font-size:14px; opacity:0.6;">正在掃描輪值表細節，請稍候...</p>
-      <div style="margin-top:24px; font-size:11px; font-weight:600; color:var(--blue); background:rgba(10,132,255,0.1); padding:4px 12px; border-radius:20px; display:inline-block; animation:pulse 2s infinite;">Processing with Gemini 2.5 Flash</div>
+      <div style="margin-top:24px; font-size:11px; font-weight:600; color:var(--blue); background:rgba(10,132,255,0.1); padding:4px 12px; border-radius:20px; display:inline-block; animation:pulse 2s infinite;">⚡ 暴力圖像 2.7 引擎運算中</div>
     </div>`;
   
   try {
