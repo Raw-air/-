@@ -3936,8 +3936,8 @@ function setup2DCarouselInteraction() {
   const DRAG_THRESHOLD = 8;          // px before we consider it a drag
   const DECEL_RATE = 0.985;          // per-frame deceleration (exponential decay) — higher = smoother/longer glide
   const MIN_VELOCITY = 0.08;         // px/ms — stop momentum below this
-  const SNAP_SPRING_TENSION = 0.08;  // spring tension for final snap
-  const SNAP_SPRING_DAMPING = 0.82;  // damping ratio for snap spring
+  const SNAP_SPRING_TENSION = 0.03;  // Slower acceleration
+  const SNAP_SPRING_DAMPING = 0.88;  // More friction to slow down smoothly
   const MAX_FLICK_CARDS = 6;         // max cards a single flick can travel
   const VELOCITY_SAMPLES = 6;        // number of recent touch samples to average
   const VELOCITY_WEIGHT_DECAY = 0.7; // exponential weight decay for older samples
@@ -4218,7 +4218,8 @@ function setup2DCarouselInteraction() {
           if (c.dataset.was3d === 'true' || c.dataset.wasAway === 'true') {
             c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
           } else {
-            c.style.transition = 'transform 0.5s cubic-bezier(0.3, 0.9, 0.4, 1)';
+            // Slowed down normal slide from 0.5s to 0.8s for better visibility
+            c.style.transition = 'transform 0.8s cubic-bezier(0.25, 1, 0.5, 1)';
           }
         }
 

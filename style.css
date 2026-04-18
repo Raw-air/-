@@ -4040,13 +4040,13 @@ body.light-mode .focus-indicator { background: #6366f1; }
 
 .sf-card-area-2d {
   position: relative;
-  height: 100%;
+  width: 100%;
+  height: calc(100% + 400px);
+  margin: -200px 0;
   overflow: visible; /* Prevent shadows from being clipped vertically */
   display: flex;
   align-items: center;
   touch-action: manipulation;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 5%, black 95%, transparent 100%);
-  mask-image: linear-gradient(90deg, transparent 0%, black 5%, black 95%, transparent 100%);
 }
 .sf-card-track {
   display: flex;
