@@ -9,21 +9,28 @@
 }
 
 :root {
-  --bg: #151518;
-  --bg2: #1e1e22;
-  --card: rgba(38, 38, 44, 0.6);
-  --card-h: rgba(50, 50, 58, 0.8);
-  --border: rgba(255, 255, 255, 0.08);
-  --border2: rgba(255, 255, 255, 0.15);
-  --text: #f5f5f7;
-  --dim: #9898a0;
-  --muted: #73737a;
+  --rgb-glass: 255, 255, 255;
+  --rgb-bg: 10, 10, 16;
+  --bg: #0a0a10;
+  --bg2: #111118;
+  --card: rgba(22, 22, 32, 0.85);
+  --card-h: rgba(30, 30, 42, 0.92);
+  --border: rgba(255, 255, 255, 0.06);
+  --border2: rgba(255, 255, 255, 0.12);
+  --text: #eeeef2;
+  --dim: #8a8a96;
+  --muted: #5c5c68;
   
-  /* Enhanced Neumorphic shadow mix for elegant dark mode — visible but not overwhelming */
-  --shadow-dark: rgba(0, 0, 0, 0.8);
-  --shadow-light: rgba(255, 255, 255, 0.12);
-  --neu-out: 6px 6px 16px var(--shadow-dark), -4px -4px 12px var(--shadow-light);
-  --neu-in: inset 3px 3px 8px rgba(0,0,0,0.65), inset -2px -2px 6px rgba(255,255,255,0.07);
+  /* Glass effect tokens */
+  --glass-bg: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --shadow-sm: 0 2px 12px rgba(0, 0, 0, 0.4);
+  
+  /* Enhanced Neumorphic shadow mix — deep obsidian with refined edge highlights */
+  --shadow-dark: rgba(0, 0, 0, 0.9);
+  --shadow-light: rgba(255, 255, 255, 0.06);
+  --neu-out: 8px 8px 20px var(--shadow-dark), -4px -4px 10px var(--shadow-light);
+  --neu-in: inset 4px 4px 10px rgba(0,0,0,0.8), inset -2px -2px 6px rgba(255, 255, 255, 0.04);
 
   --green: #30d158;
   --yellow: #ffd60a;
@@ -40,15 +47,22 @@
 }
 
 body.light-mode {
+  --rgb-glass: 0, 0, 0;
+  --rgb-bg: 235, 236, 240;
   --bg: #ebecf0;
   --bg2: #f5f6fa;
-  --card: rgba(255, 255, 255, 0.4);
-  --card-h: rgba(255, 255, 255, 0.6);
-  --border: rgba(255, 255, 255, 0.8);
-  --border2: rgba(255, 255, 255, 1);
+  --card: rgba(255, 255, 255, 0.72);
+  --card-h: rgba(255, 255, 255, 0.88);
+  --border: rgba(0, 0, 0, 0.08);
+  --border2: rgba(0, 0, 0, 0.15);
   --text: #2d3436;
   --dim: #636e72;
   --muted: #b2bec3;
+  
+  /* Glass effect tokens for light mode */
+  --glass-bg: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --shadow-sm: 0 2px 12px rgba(0, 0, 0, 0.06);
   
   /* Classic Soft UI / Neumorphism colors for light mode */
   --shadow-dark: rgba(174, 186, 204, 0.5);
@@ -58,7 +72,9 @@ body.light-mode {
 }
 
 html {
-  font-size: 15px
+  font-size: 15px;
+  background: var(--bg);
+  height: 100%;
 }
 
 body {
@@ -72,7 +88,7 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* ─ Loading ─ */
+/* 鈹€ Loading 鈹€ */
 .loading-overlay {
   position: fixed;
   inset: 0;
@@ -124,7 +140,7 @@ body {
 .terminal-loader {
   border: 0.1em solid #333;
   background-color: #1a1a1a;
-  color: #fff;
+  color: #eee;
   font-family: "Courier New", Courier, monospace;
   font-size: 1em;
   padding: 1.5em 1em;
@@ -196,7 +212,7 @@ body {
   }
 }
 
-/* 轉場：終端機自然掉落與背景淡出 (不會看到背景黑框裁切邊緣) */
+/* 杞夊牬锛氱祩绔鑷льної鎺夎惤鑸囪儗鏅贰鍑?(涓嶆渻鐪嬪埌鑳屾櫙榛戞瑁佸垏閭婄罚) */
 .loading-overlay.exit-drop {
   animation: fade-out-overlay 0.7s ease-in both;
 }
@@ -241,7 +257,7 @@ body {
   }
 }
 
-/* ─ Toast ─ */
+/* 鈹€ Toast 鈹€ */
 .toast-container {
   position: fixed;
   top: calc(16px + var(--safe-t));
@@ -290,13 +306,13 @@ body {
   border: 1px solid rgba(99, 102, 241, .3)
 }
 
-/* ─ Back ─ */
+/* 鈹€ Back 鈹€ */
 .back-btn {
   position: fixed;
   top: calc(12px + var(--safe-t));
   left: 12px;
   z-index: 200;
-  background: rgba(255, 255, 255, .06);
+  background: rgba(255, 255, 255, .04);
   border: 1px solid var(--border);
   color: var(--text);
   padding: 8px 14px;
@@ -313,8 +329,8 @@ body {
   transform: scale(.95)
 }
 
-/* ─ Pages ─ */
-/* ─ Pages ─ */
+/* 鈹€ Pages 鈹€ */
+/* 鈹€ Pages 鈹€ */
 .page {
   display: none;
   padding: calc(4px + var(--safe-t)) 16px 16px;
@@ -328,7 +344,7 @@ body {
   animation: fadeUp .3s cubic-bezier(0.16, 1, 0.3, 1)
 }
 
-/* 頁面進入：方向性滑動 */
+/* 闋侀潰閫插叆锛氭柟鍚戞€ф粦鍕?*/
 @keyframes fadeUp {
   from {
     opacity: 0;
@@ -350,7 +366,7 @@ body {
   to   { opacity: 1; transform: translateX(0); }
 }
 
-/* 頁面切換離開：方向性 */
+/* 闋侀潰鍒囨彌闆㈤枊锛氭柟鍚戞€?*/
 @keyframes pageExit {
   from { opacity: 1; transform: translateY(0) }
   to   { opacity: 0; transform: translateY(50px) }
@@ -358,15 +374,15 @@ body {
 
 @keyframes pageExitLeft {
   from { opacity: 1; transform: translateX(0); }
-  to   { opacity: 0; transform: translateX(-30px); }
+  to   { opacity: 0; transform: translateX(-30px) }
 }
 
 @keyframes pageExitRight {
   from { opacity: 1; transform: translateX(0); }
-  to   { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 0; transform: translateX(30px) }
 }
 
-/* 首頁透明，讓極光球背景窿透；其他頁面用不透明背景蓋住動畫 */
+/* 棣栭爜閫忔槑锛岃畵妤靛厜鐞冭儗鏅閫忥紱鍏朵粬闋侀潰鐢ㄤ笉閫忔槑鑳屾櫙钃嬩綇鍕曠暙 */
 #page-home {
   background: transparent
 }
@@ -386,7 +402,7 @@ body {
   margin-bottom: 16px
 }
 
-/* ─ Bottom Nav ─ */
+/* 鈹€ Bottom Nav 鈹€ */
 .bottom-nav-glow {
   display: none !important;
 }
@@ -396,7 +412,7 @@ body {
   bottom: 0;
   left: 0;
   right: 0;
-  background: rgba(28, 28, 30, 0.75);
+  background: rgba(12, 12, 18, 0.82);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-top: 1px solid rgba(255, 255, 255, 0.15);
@@ -448,17 +464,16 @@ body {
   font-weight: 700
 }
 
-/* ═══════════ 首頁 Hero ═══════════ */
+/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?棣栭爜 Hero 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?*/
 #page-home {
   position: relative;
 }
 
-/* 自訂影片背景 */
+/* 鑷▊褰辩墖鑳屾櫙 */
 #custom-video-bg {
   position: fixed;
   inset: 0;
-  z-index: -3;
-  /* 在所有東西背後 */
+  z-index: 0;
   pointer-events: none;
   overflow: hidden;
   transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s ease;
@@ -469,7 +484,7 @@ body {
   height: 100%;
   object-fit: cover;
   opacity: 0.25;
-  /* 不干擾文字的亮度 */
+  /* 涓嶅共鎿炬枃瀛楃殑浜害 */
   filter: saturate(1.2);
   -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 100%);
   mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 100%);
@@ -488,11 +503,11 @@ body {
   }
 }
 
-/* ── 頂級藝術光球背景 (Aurora Sphere) ── */
+/* 鈹€鈹€ 闋傜礆钘濊鍏夌悆鑳屾櫙 (Aurora Sphere) 鈹€鈹€ */
 .home-anim-bg {
   position: fixed;
   inset: 0;
-  z-index: -2;
+  z-index: 0;
   pointer-events: none;
   overflow: hidden;
   display: flex;
@@ -512,7 +527,7 @@ body {
   position: absolute;
   width: 700px;
   height: 700px;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, rgba(99, 102, 241, 0.05) 40%, transparent 70%);
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.2) 0%, rgba(99, 102, 241, 0.08) 40%, transparent 70%);
   filter: blur(40px);
   animation: bgGlowBreathe 12s ease-in-out infinite alternate;
 }
@@ -595,8 +610,8 @@ body {
   }
 }
 
-/* ── 頂級質感的首頁 Hero 區塊 ── */
-/* ─ 首頁特屬 Hero 區塊 ─ */
+/* 鈹€鈹€ 闋傜礆璩劅鐨勯闋?Hero 鍗€濉?鈹€鈹€ */
+/* 鈹€ 棣栭爜鐗瑰爆 Hero 鍗€濉?鈹€ */
 .home-hero {
   text-align: center;
   padding: 8px 0 20px;
@@ -636,7 +651,7 @@ body {
   display: inline-block;
   margin-top: 16px;
   padding: 8px 24px;
-  background: rgba(255, 255, 255, .03);
+  background: rgba(255, 255, 255, .02);
   border: 1px solid rgba(255, 255, 255, .08);
   border-radius: 30px;
   font-size: 14px;
@@ -653,7 +668,7 @@ body {
   text-transform: uppercase
 }
 
-/* ─ Squad Grid 3列 (頂級藝術感磨砂玻璃) ─ */
+/* 鈹€ Squad Grid 3鍒?(闋傜礆钘濊鎰熺（鐮傜幓鐠? 鈹€ */
 .squad-grid-3col {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -663,7 +678,7 @@ body {
 }
 
 .sq-card {
-  background: rgba(255, 255, 255, .01);
+  background: rgba(255, 255, 255, .02);
   backdrop-filter: blur(8px) saturate(1.2);
   -webkit-backdrop-filter: blur(8px) saturate(1.2);
   border: 1px solid rgba(255, 255, 255, .08);
@@ -677,17 +692,17 @@ body {
   user-select: none;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, .15), inset 0 1px 0 rgba(255, 255, 255, .08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, .4), inset 0 1px 0 rgba(255, 255, 255, .06);
 }
 
-/* 首次載入的超 Q 彈動畫 */
-.sq-card.pop-initial {
+/* 棣栨杓夊叆鐨勮秴 Q 褰堝嫊鐣?*/
+.pop-initial {
   animation: sq-pop-bounce 0.9s linear backwards;
-  /* 改用 linear，內部有貝茲曲線分段 */
+  /* 鏀圭敤 linear锛屽収閮ㄦ湁璨濊尣鏇茬窔鍒嗘 */
 }
 
-/* 切換分頁回來的「撞到頂部」動畫 */
-.sq-card.pop-return {
+/* 鍒囨彌鍒嗛爜鍥炰締鐨勩€屾挒鍒伴爞閮ㄣ€嶅嫊鐣?*/
+.pop-return {
   animation: sq-return-ceiling 0.6s linear backwards;
 }
 
@@ -773,7 +788,7 @@ body {
   background: rgba(255, 255, 255, .04);
   transform: translateY(-4px) scale(1.02);
   border-color: rgba(255, 255, 255, .15);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(255, 255, 255, .2);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .1);
 }
 
 .sq-card:active {
@@ -794,7 +809,7 @@ body {
   justify-content: center;
   font-size: 18px;
   font-weight: 900;
-  color: #fff;
+  color: #ffffff;
   box-shadow: 0 2px 12px color-mix(in srgb, var(--sq-c, var(--indigo)) 40%, transparent)
 }
 
@@ -814,7 +829,7 @@ body {
   color: var(--dim)
 }
 
-/* ═══════════ 點名 ═══════════ */
+/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?榛炲悕 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?*/
 .rc-header {
   position: sticky;
   top: 0;
@@ -826,7 +841,7 @@ body {
   padding-top: calc(16px + var(--safe-t));
   padding-bottom: 12px;
   
-  /* 填滿整個視窗寬度，並維持內容與內部 440px 容器對齊 */
+  /* 濉豢鏁村€嬭绐楀搴︼紝涓︾董鎸佸収瀹硅垏鍏ч儴 440px 瀹瑰櫒灏嶉綂 */
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
   padding-left: calc(50vw - 50%);
@@ -856,13 +871,13 @@ body {
 .rc-date-pill {
   font-size: 13px;
   color: var(--dim);
-  background: rgba(255, 255, 255, .06);
+  background: rgba(255, 255, 255, .04);
   padding: 5px 14px;
   border-radius: 10px;
   border: 1px solid var(--border)
 }
 
-/* 可點擊日期按鈕 */
+/* 鍙粸鎿婃棩鏈熸寜閳?*/
 .rc-date-clickable {
   display: flex;
   align-items: center;
@@ -894,7 +909,7 @@ body {
   transform: rotate(180deg)
 }
 
-/* 日期選擇器面板 */
+/* 鏃ユ湡閬告搰鍣ㄩ潰鏉?*/
 .date-picker-panel {
   position: absolute;
   top: calc(100% + 4px);
@@ -961,7 +976,7 @@ body {
 }
 
 .date-item.today-marker::after {
-  content: '今天';
+  content: '浠婂ぉ';
   font-size: 10px;
   background: rgba(34, 197, 94, .15);
   color: var(--green);
@@ -971,7 +986,7 @@ body {
 }
 
 .date-item.active.today-marker::after {
-  content: '今天 ✓'
+  content: '浠婂ぉ 鉁?
 }
 
 .date-picker-panel.open {
@@ -991,7 +1006,7 @@ body {
   flex: 1;
   text-align: center;
   padding: 8px 2px;
-  background: rgba(255, 255, 255, .03);
+  background: rgba(255, 255, 255, .02);
   border-radius: 10px;
   border: 1px solid var(--border)
 }
@@ -1008,7 +1023,7 @@ body {
   font-weight: 800
 }
 
-/* 強制瞬間隱身，防止老虎機滾動時出現疊影或閃爍 */
+/* 寮峰埗鐬枔闅辫韩锛岄槻姝㈣€佽檸姗熸痪鍕曟檪鍑虹従鐤婂奖鎴栭杻鐖?*/
 .number-anim-hiding {
   color: transparent !important;
   caret-color: transparent !important;
@@ -1140,7 +1155,7 @@ body {
   justify-content: center;
   font-weight: 800;
   font-size: 14px;
-  color: #fff
+  color: var(--text)
 }
 
 .student-name {
@@ -1166,11 +1181,11 @@ body {
   font-size: 11px;
   color: var(--muted);
   padding: 4px 10px;
-  background: rgba(255, 255, 255, .03);
+  background: rgba(255, 255, 255, .02);
   border-radius: 6px
 }
 
-/* 同步狀態小點 */
+/* 鍚屾鐙€鎱嬪皬榛?*/
 .sync-dot {
   width: 7px;
   height: 7px;
@@ -1228,7 +1243,7 @@ body {
   }
 }
 
-/* FAB - 空床回報按鈕 */
+/* FAB - 绌哄簥鍥炲牨鎸夐垥 */
 .fab-empty-bed {
   position: fixed;
   bottom: calc(var(--nav-h)+var(--safe)+76px);
@@ -1237,7 +1252,7 @@ body {
   max-width: 408px;
   margin: 0 auto;
   background: var(--blue);
-  color: #fff;
+  color: var(--text);
   border: none;
   border-radius: 16px;
   padding: 16px 20px;
@@ -1253,7 +1268,6 @@ body {
   transition: all .25s;
   animation: fabPulse 2.5s ease-in-out infinite;
   letter-spacing: 0.5px;
-  box-shadow: 0 4px 16px rgba(10, 132, 255, 0.3);
 }
 
 .fab-empty-bed:hover {
@@ -1300,7 +1314,7 @@ body {
   border-radius: 14px;
   font-size: 16px;
   font-weight: 600;
-  color: #fff;
+  color: var(--text);
   cursor: pointer;
   background: var(--blue);
   box-shadow: 0 4px 16px rgba(10, 132, 255, 0.3);
@@ -1322,7 +1336,7 @@ body {
   transform: none
 }
 
-/* ═══════════ 總表 ═══════════ */
+/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?绺借〃 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?*/
 .summary-header {
   margin-bottom: 16px
 }
@@ -1341,7 +1355,7 @@ body {
 }
 
 .nav-arrow {
-  background: rgba(255, 255, 255, .06);
+  background: rgba(255, 255, 255, .04);
   border: 1px solid var(--border);
   color: var(--text);
   width: 36px;
@@ -1558,13 +1572,13 @@ body {
   letter-spacing: 0.3px;
 }
 
-/* 已回報 圓圈封印 badge (矩形外框設計) */
+/* 宸插洖鍫?鍦撳湀灏佸嵃 badge (鐭╁舰澶栨瑷▓) */
 .sqd-conf-badge {
   position: absolute;
   top: 50%;
   right: 16px;
   transform: translateY(-50%);
-  /* 垂直居中 */
+  /* 鍨傜洿灞呬腑 */
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1574,7 +1588,7 @@ body {
   border: 1px solid rgba(34, 197, 94, 0.3);
   padding: 6px 12px 6px 8px;
   border-radius: 8px;
-  /* 外層篇圓 */
+  /* 澶栧堡绡囧湏 */
 }
 
 .conf-ring {
@@ -1612,7 +1626,7 @@ body {
   color: var(--green)
 }
 
-/* 空床回報 Action Card */
+/* 绌哄簥鍥炲牨 Action Card */
 .empty-bed-action {
   display: flex;
   align-items: center;
@@ -1684,7 +1698,7 @@ body {
   flex-shrink: 0
 }
 
-/* 換床位 Action Card variant */
+/* 鎻涘簥浣?Action Card variant */
 .swap-action {
   border-left-color: var(--purple)
 }
@@ -1724,7 +1738,7 @@ body {
   background: rgba(255, 255, 255, .1);
   border: 1px solid rgba(255, 255, 255, .2);
   border-radius: 12px;
-  color: #fff;
+  color: var(--text);
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
@@ -1805,7 +1819,7 @@ body.light-mode #changelog-content .changelog-time {
   flex: none
 }
 
-/* ═══════════ 歷史 ═══════════ */
+/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?姝峰彶 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?*/
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -1910,7 +1924,7 @@ body.light-mode #changelog-content .changelog-time {
   border-bottom: none
 }
 
-/* ═══════════ 設定 ═══════════ */
+/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?瑷畾 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?*/
 .settings-card {
   background: var(--card);
   border: 1px solid var(--border);
@@ -1969,7 +1983,7 @@ body.light-mode #changelog-content .changelog-time {
   height: 36px;
   border-radius: 10px;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, .06);
+  background: rgba(255, 255, 255, .04);
   color: var(--text);
   font-size: 18px;
   font-weight: 700;
@@ -2026,33 +2040,37 @@ body.light-mode #changelog-content .changelog-time {
 
 .save-btn {
   background: var(--blue) !important;
-  color: #fff !important;
+  color: #ffffff !important;
   border: none !important;
   font-weight: 600
 }
 
-/* ═══════════ Modal ═══════════ */
+/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?Modal 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?*/
 .modal-overlay {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(0, 0, 0, .65);
+  background: rgba(0, 0, 0, .45);
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
   pointer-events: none;
-  transition: opacity .25s;
-  padding: 20px
+  
+  transition: opacity 0.25s cubic-bezier(0.2, 0, 0, 1);
+  padding: 20px;
+  will-change: opacity;
 }
 
 .modal-overlay.visible {
   opacity: 1;
-  pointer-events: auto
+  pointer-events: auto;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
 }
 
 .modal-card {
-  background: rgba(44, 44, 46, 0.85);
+  background: rgba(16, 16, 24, 0.92);
   backdrop-filter: blur(25px) saturate(180%);
   -webkit-backdrop-filter: blur(25px) saturate(180%);
   border: 1px solid var(--border2);
@@ -2069,7 +2087,7 @@ body.light-mode #changelog-content .changelog-time {
   transform: scale(1)
 }
 
-/* ── 系統公告日誌專屬 3D 展開/收回動畫 ── */
+/* 鈹€鈹€ 绯荤当鍏憡鏃ヨ獙灏堝爆 3D 灞曢枊/鏀跺洖鍕曠暙 鈹€鈹€ */
 #changelog-modal {
   perspective: 1200px;
 }
@@ -2124,7 +2142,7 @@ body.light-mode #changelog-content .changelog-time {
 
 .modal-btn.confirm {
   background: var(--blue);
-  color: #fff
+  color: var(--text)
 }
 
 .modal-btn:active {
@@ -2137,7 +2155,7 @@ body.light-mode #changelog-content .changelog-time {
   text-align: center;
   font-size: 28px;
   letter-spacing: 10px;
-  background: rgba(255, 255, 255, .06);
+  background: rgba(255, 255, 255, .04);
   border: 1px solid var(--border);
   border-radius: 12px;
   color: var(--text);
@@ -2193,7 +2211,7 @@ body.light-mode #changelog-content .changelog-time {
 .styled-select, .styled-input {
   width: 100%;
   padding: 12px;
-  background: rgba(255, 255, 255, .06);
+  background: rgba(255, 255, 255, .04);
   border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text);
@@ -2208,7 +2226,7 @@ body.light-mode #changelog-content .changelog-time {
   border-color: var(--purple)
 }
 
-/* ─ Responsive ─ */
+/* 鈹€ Responsive 鈹€ */
 @media(max-width:380px) {
   html {
     font-size: 13px
@@ -2250,7 +2268,7 @@ body.light-mode #changelog-content .changelog-time {
   background: rgba(139, 92, 246, .3)
 }
 
-/* ── 導覽列自訂圖示 ── */
+/* 鈹€鈹€ 灏庤鍒楄嚜瑷傚湒绀?鈹€鈹€ */
 .nav-icon-img {
   width: 24px;
   height: 24px;
@@ -2264,7 +2282,7 @@ body.light-mode #changelog-content .changelog-time {
   filter: drop-shadow(0 4px 12px rgba(139, 92, 246, .6))
 }
 
-/* 設定頁：圖示上傳 */
+/* 瑷畾闋侊細鍦栫ず涓婂偝 */
 .icon-upload-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2277,7 +2295,7 @@ body.light-mode #changelog-content .changelog-time {
   align-items: center;
   gap: 10px;
   padding: 10px;
-  background: rgba(255, 255, 255, .03);
+  background: rgba(255, 255, 255, .02);
   border: 1px solid var(--border);
   border-radius: 10px
 }
@@ -2286,7 +2304,7 @@ body.light-mode #changelog-content .changelog-time {
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, .06);
+  background: rgba(255, 255, 255, .04);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2323,7 +2341,7 @@ body.light-mode #changelog-content .changelog-time {
   padding: 4px 8px;
   border-radius: 6px;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, .06);
+  background: rgba(255, 255, 255, .04);
   color: var(--text);
   cursor: pointer;
   white-space: nowrap
@@ -2338,7 +2356,7 @@ body.light-mode #changelog-content .changelog-time {
   border-color: rgba(239, 68, 68, .3)
 }
 
-/* ── 開發者調適區 ── */
+/* 鈹€鈹€ 闁嬬櫦鑰呰閬╁崁 鈹€鈹€ */
 .dev-trigger {
   display: flex;
   align-items: center;
@@ -2406,7 +2424,7 @@ body.light-mode #changelog-content .changelog-time {
   margin-bottom: 8px
 }
 
-/* ── 更新日誌與按鈕 ── */
+/* 鈹€鈹€ 鏇存柊鏃ヨ獙鑸囨寜閳?鈹€鈹€ */
 .changelog-btn {
   position: absolute;
   top: 16px;
@@ -2453,7 +2471,7 @@ body.light-mode #changelog-content .changelog-time {
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3 {
-  color: #fff;
+  color: var(--text);
   margin-top: 16px;
   margin-bottom: 8px;
   font-weight: 700;
@@ -2656,7 +2674,7 @@ body.light-mode #changelog-content .changelog-time {
 }
 
 /* ========================================================= */
-/* 🌞 LIGHT MODE OVERRIDES FOR HARDCODED WHITE VALUES        */
+/* 馃尀 LIGHT MODE OVERRIDES FOR HARDCODED WHITE VALUES        */
 /* ========================================================= */
 
 body.light-mode .dev-input,
@@ -2793,17 +2811,17 @@ body.light-mode .icon-upload-preview {
 }
 
 body.light-mode .modal-btn.confirm {
-  color: #fff;
+  color: #ffffff;
 }
 body.light-mode .save-btn {
-  color: #fff !important;
+  color: #ffffff !important;
 }
 
 body.light-mode .home-anim-bg::before {
   opacity: 0.15;
 }
 
-/* ── 新增修復項目 ── */
+/* 鈹€鈹€ 鏂板淇京闋呯洰 鈹€鈹€ */
 body.light-mode .back-btn {
   background: rgba(0, 0, 0, 0.05);
   color: var(--text);
@@ -2819,7 +2837,7 @@ body.light-mode .cal-badge {
   color: #000;
 }
 
-/* ── 全白模式主畫面可見度全面修復 ── */
+/* 鈹€鈹€ 鍏ㄧ櫧妯″紡涓荤暙闈㈠彲瑕嬪害鍏ㄩ潰淇京 鈹€鈹€ */
 body.light-mode .section-label {
   color: rgba(0, 0, 0, 0.45);
 }
@@ -2924,7 +2942,7 @@ body.light-mode .rc-squad-name {
   color: var(--text);
 }
 
-/* ── 問題 2：公告文字在白底模式看不清楚 ── */
+/* 鈹€鈹€ 鍟忛 2锛氬叕鍛婃枃瀛楀湪鐧藉簳妯″紡鐪嬩笉娓呮 鈹€鈹€ */
 body.light-mode #changelog-modal .modal-card h3 {
   color: #1a1a1a;
 }
@@ -2940,7 +2958,7 @@ body.light-mode #changelog-content li {
   color: #333 !important;
 }
 
-/* ── 問題 4：點名日期在全白模式下怪怪的 ── */
+/* 鈹€鈹€ 鍟忛 4锛氶粸鍚嶆棩鏈熷湪鍏ㄧ櫧妯″紡涓嬫€€殑 鈹€鈹€ */
 body.light-mode .date-picker-panel {
   background: rgba(255, 255, 255, 0.95);
   border-color: rgba(0, 0, 0, 0.15);
@@ -2961,7 +2979,7 @@ body.light-mode .date-item.active {
   color: var(--purple);
 }
 
-/* ── 問題 5：底下的中隊長回報框跟那條虛線在白底下都消失 ── */
+/* 鈹€鈹€ 鍟忛 5锛氬簳涓嬬殑涓殜闀峰洖鍫辨璺熼偅姊濊櫅绶氬湪鐧藉簳涓嬮兘娑堝け 鈹€鈹€ */
 body.light-mode .rc-confirm-action {
   background: rgba(0, 0, 0, 0.03);
   border-color: rgba(0, 0, 0, 0.1);
@@ -2970,8 +2988,179 @@ body.light-mode .rc-confirm-action::before {
   background-image: radial-gradient(circle, rgba(0, 0, 0, 0.2) 1.5px, transparent 1.5px);
 }
 
+/* 鈹€鈹€ 鐧借壊妯″紡杩藉姞淇京锛氶粸鍚嶇当瑷?瀛哥敓琛?鍒嗛殧绶?toast/灏庤埅 鈹€鈹€ */
+body.light-mode .rc-stat {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.light-mode .student-row {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.light-mode .student-row.absent {
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+body.light-mode .room-divider {
+  color: rgba(0, 0, 0, 0.5);
+  border-bottom-color: rgba(0, 0, 0, 0.1);
+}
+
+body.light-mode .toast {
+  backdrop-filter: blur(20px) saturate(180%);
+}
+
+body.light-mode .toast-success {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+body.light-mode .toast-error {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+body.light-mode .toast-info {
+  background: rgba(99, 102, 241, 0.12);
+  color: #6366f1;
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+body.light-mode .nav-arrow {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+body.light-mode .date-pill {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+body.light-mode .rc-date-clickable {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: var(--text);
+}
+
+body.light-mode .rc-date-clickable:hover {
+  background: rgba(0, 0, 0, 0.08);
+  border-color: rgba(139, 92, 246, 0.35);
+}
+
+body.light-mode .big-stat {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.light-mode .sm-stat {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.light-mode .sqd-card {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.light-mode .changelog-dot {
+  border-color: var(--bg);
+}
+
+body.light-mode .modal-overlay { background: rgba(0, 0, 0, 0.3); }
+
+body.light-mode .student-bed {
+  color: #fff;
+}
+
+body.light-mode .status-badge {
+  font-weight: 700;
+}
+
+body.light-mode .empty-tag {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--muted);
+}
+
+body.light-mode .modal-card h3 {
+  color: var(--text);
+}
+
+body.light-mode .modal-desc {
+  color: var(--dim);
+}
+
+/* 鈹€鈹€ 骞归儴宸ヤ綔鎵嬪唺 Widget 鈹€鈹€ */
+.duty-manual-widget {
+  margin: 0 20px 24px 20px;
+  position: relative;
+  z-index: 10;
+  background: var(--glass-bg);
+  border-radius: 24px;
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 20px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease, background 0.3s ease;
+}
+
+.duty-manual-widget:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: var(--shadow-md);
+}
+
+.duty-manual-widget:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+body.light-mode .duty-manual-widget {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+/* ── 值星排班 Widget ── */
+.duty-roster-widget {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(245, 158, 11, 0.05);
+  padding: 12px 20px;
+  border-radius: 16px;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  margin: 0 20px 24px 20px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease, background 0.3s ease;
+}
+
+.duty-roster-widget:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.15);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.duty-roster-widget:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+body.light-mode .duty-roster-widget {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  box-shadow: 0 2px 12px rgba(245, 158, 11, 0.1);
+}
+
 /* ========================================================= */
-/* 📝 審核卡片 UI (Premium Review Cards)                      */
+/* 瀵╂牳鍗＄墖 UI (Premium Review Cards)                         */
 /* ========================================================= */
 
 .review-card {
@@ -3074,7 +3263,7 @@ body.light-mode .rc-confirm-action::before {
 
 .review-approve-btn {
   background: linear-gradient(135deg, #22c55e, #16a34a);
-  color: #fff;
+  color: var(--text);
   box-shadow: 0 4px 14px rgba(34, 197, 94, 0.3);
 }
 
@@ -3108,7 +3297,7 @@ body.light-mode .review-card {
 }
 
 /* ========================================================= */
-/* 🔧 報修系統頁面樣式                                        */
+/* 馃敡 鍫变慨绯荤当闋侀潰妯ｅ紡                                        */
 /* ========================================================= */
 
 .repair-form-group {
@@ -3212,7 +3401,7 @@ body.light-mode .repair-upload-zone:hover {
   height: 20px;
   border-radius: 50%;
   background: rgba(239, 68, 68, 0.85);
-  color: #fff;
+  color: var(--text);
   border: none;
   font-size: 12px;
   cursor: pointer;
@@ -3231,7 +3420,7 @@ body.light-mode .repair-upload-zone:hover {
   font-weight: 700;
   cursor: pointer;
   background: linear-gradient(135deg, #8b5cf6, #6366f1);
-  color: #fff;
+  color: var(--text);
   box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
   transition: all 0.25s;
   margin-top: 8px;
@@ -3311,7 +3500,7 @@ body.light-mode .repair-record-card {
   font-weight: 600;
   cursor: pointer;
   background: linear-gradient(135deg, #22c55e, #16a34a);
-  color: #fff;
+  color: var(--text);
   box-shadow: 0 3px 10px rgba(34, 197, 94, 0.3);
   transition: all 0.2s;
   margin-top: 8px;
@@ -3326,24 +3515,24 @@ body.light-mode .repair-record-card {
 }
 
 /* ========================================================= */
-/* 🌀 VIEW TRANSITIONS API: CIRCULAR EXPAND/SHRINK EFFECT    */
+/* 馃寑 VIEW TRANSITIONS API: CIRCULAR EXPAND/SHRINK EFFECT    */
 /* ========================================================= */
 
 ::view-transition {
-  pointer-events: none; /* 穿透點擊，讓使用者能在動畫期間狂點按鈕 */
+  pointer-events: none; /* 绌块€忛粸鎿婏紝璁撲娇鐢ㄨ€呰兘鍦ㄥ嫊鐣湡闁撶媯榛炴寜閳?*/
 }
 
-/* 獨立切割開關按鈕，防止它被全螢幕快照給凍結定格 */
+/* 鐛ㄧ珛鍒囧壊闁嬮棞鎸夐垥锛岄槻姝㈠畠琚叏铻㈠箷蹇収绲﹀噸绲愬畾鏍?*/
 label.switch:has(#setting-white-mode) {
   view-transition-name: theme-btn-isolate;
 }
 
-/* 移除開關自己的漸變過渡，讓它能在一瞬間完成切換，展現即時回饋感 */
+/* 绉婚櫎闁嬮棞鑷繁鐨勬几璁婇亷娓★紝璁撳畠鑳藉湪涓€鐬枔瀹屾垚鍒囨彌锛屽睍鐝惧嵆鏅傚洖楗嬫劅 */
 ::view-transition-group(theme-btn-isolate) {
   animation: none;
 }
 ::view-transition-old(theme-btn-isolate) {
-  display: none !important; /* 殺掉舊快照 (關閉前的殘影) */
+  display: none !important; /* 娈烘帀鑸婂揩鐓?(闂滈枆鍓嶇殑娈樺奖) */
 }
 ::view-transition-new(theme-btn-isolate) {
   animation: none !important;
@@ -3355,21 +3544,21 @@ label.switch:has(#setting-white-mode) {
   animation: none;
   mix-blend-mode: normal;
   display: block;
-  /* ⚡ GPU 加速提示：clip-path 動畫走合成器線程，不阻主線程 */
+  /* 鈿?GPU 鍔犻€熸彁绀猴細clip-path 鍕曠暙璧板悎鎴愬櫒绶氱▼锛屼笉闃讳富绶氱▼ */
   will-change: clip-path;
 }
 
 html.transition-dark::view-transition-old(root) {
-  z-index: 2; /* 關閉白底時，讓白畫面蓋在上面並往內圓形縮小 */
+  z-index: 2; /* 闂滈枆鐧藉簳鏅傦紝璁撶櫧鐣潰钃嬪湪涓婇潰涓﹀線鍏у湏褰㈢府灏?*/
 }
 html.transition-dark::view-transition-new(root) {
-  z-index: 1; /* 黑底放在下面被吃掉 */
+  z-index: 1; /* 榛戝簳鏀惧湪涓嬮潰琚悆鎺?*/
 }
 
-/* ⚡ 效能核彈：暫時關閉 backdrop-filter 來加速 View Transition 截圖 */
-/* backdrop-filter: blur() 是 VT 截圖最重的瓶頸 —— 每個元素都要獨立做高斯模糊 */
-/* 截圖期間關閉它們不影響視覺，因為快照本來就是靜態點陣圖 */
-/* 使用萬用字元一次性覆蓋，並且加入 box-shadow 也能進一步降低 GPU 在 Android 上的渲染時間 */
+/* 鈿?鏁堣兘鏍稿綀锛氭毇鏅傞棞闁?backdrop-filter 渚嗗姞閫?View Transition 鎴湒 */
+/* backdrop-filter: blur() 鏄?VT 鎴湒鏈€閲嶇殑鐡堕牳 鈥斺€?姣忓€嬪厓绱犻兘瑕佺崹绔嬪仛楂樻柉妯＄硦 */
+/* 鎴湒鏈熼枔闂滈枆瀹冨€戜笉褰遍熆瑕栬锛屽洜鐐哄揩鐓ф湰渚嗗氨鏄潨鎱嬮粸闄ｅ湒 */
+/* 浣跨敤钀敤瀛楀厓涓€娆℃€ц钃嬶紝涓︿笖鍔犲叆 box-shadow 涔熻兘閫蹭竴姝ラ檷浣?GPU 鍦?Android 涓婄殑娓叉煋鏅傞枔 */
 html.vt-active *:not(.bottom-nav):not(.bottom-nav-glow):not(.nav-item):not(.nav-icon):not(.nav-label) {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -3377,7 +3566,7 @@ html.vt-active *:not(.bottom-nav):not(.bottom-nav-glow):not(.nav-item):not(.nav-
   transition-duration: 0s !important;
 }
 
-/* ── 潘仔模式 (簡潔視角) ── */
+/* 鈹€鈹€ 娼樹粩妯″紡 (绨℃綌瑕栬) 鈹€鈹€ */
 body.panzi-mode .sqd-meta { display: none !important; }
 
 
@@ -3399,7 +3588,7 @@ body.panzi-mode .sqd-meta { display: none !important; }
   transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* Modals should be extremely soft — NO neumorphic glow */
+/* Modals should be extremely soft 鈥?NO neumorphic glow */
 .modal-card {
   border-radius: 32px;
   background: var(--bg2);
@@ -3417,7 +3606,7 @@ body.panzi-mode .sqd-meta { display: none !important; }
 /* Restoring text clarity for buttons */
 .fab-empty-bed, .submit-btn, .modal-btn.confirm {
   background: var(--blue);
-  color: #fff;
+  color: var(--text);
   border: none;
   box-shadow: 0 4px 16px rgba(10, 132, 255, 0.25), var(--neu-out);
 }
@@ -3452,9 +3641,9 @@ body.panzi-mode .sqd-meta { display: none !important; }
 
 /* Beautiful Clean Inset Trenches for Inputs */
 .styled-input, .styled-select, .dev-input, .stepper-input, .repair-textarea {
-  background: rgba(0,0,0,0.02); /* Very faint darkening */
+  background: rgba(0,0,0,0.25); /* Deep inset feel for dark mode */
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: var(--neu-in);
   color: var(--text);
   border-radius: 12px;
@@ -3467,7 +3656,7 @@ body.light-mode .dev-input,
 body.light-mode .stepper-input, 
 body.light-mode .repair-textarea {
   background: rgba(0,0,0,0.02);
-  border: 1px solid rgba(255,255,255,0.6);
+  border: 1px solid rgba(255, 255, 255, 0.6);
 }
 
 .styled-input:focus, .styled-select:focus, .dev-input:focus, .stepper-input:focus, .repair-textarea:focus {
@@ -3486,7 +3675,7 @@ body.light-mode .repair-textarea {
   transition: all 0.12s cubic-bezier(0.2, 0, 0, 1) !important;
 }
 
-/* ═══════════ 意見回饋入口 Pill ═══════════ */
+/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?鎰忚鍥為鍏ュ彛 Pill 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?*/
 .feedback-pill {
   display: flex;
   align-items: center;
@@ -3505,7 +3694,7 @@ body.light-mode .repair-textarea {
 }
 .feedback-pill:hover {
   background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: color-mix(in srgb, var(--text) calc(0.15 * 100%), transparent);
   color: var(--text);
   transform: translateY(-2px) scale(1.02);
 }
@@ -3523,7 +3712,7 @@ body.light-mode .repair-textarea {
   opacity: 1;
 }
 
-/* ═══════════ 回饋送出按鈕 (Send Message) ═══════════ */
+/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?鍥為閫佸嚭鎸夐垥 (Send Message) 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?*/
 .feedback-send-btn {
   --primary: #a78bfa;
   --neutral-1: #2e2e2e;
@@ -3547,7 +3736,7 @@ body.light-mode .repair-textarea {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Noto Sans TC", sans-serif;
   font-size: 18px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--text);
   background: var(--neutral-1);
 }
 .feedback-send-btn:hover {
@@ -3755,9 +3944,9 @@ body.light-mode .feedback-send-btn {
   color: #333;
 }
 
-/* ════════════════════════════════════════════════════════════════════════════════
-   住宿生檔案管理 – Gooey Search Orb
-   ════════════════════════════════════════════════════════════════════════════════ */
+/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲
+   浣忓鐢熸獢妗堢鐞?鈥?Gooey Search Orb
+   鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲 */
 .search-orb-container {
   position: relative;
   width: 100%;
@@ -3788,9 +3977,9 @@ body.light-mode .feedback-send-btn {
 .input-overlay {
   position: relative; z-index: 10;
   width: 90%; height: 52px;
-  background: rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255,255,255,0.2);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 26px;
   display: flex; align-items: center; padding: 0 20px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.15);
@@ -3798,22 +3987,22 @@ body.light-mode .feedback-send-btn {
 }
 .modern-input {
   background: transparent; border: none; outline: none;
-  width: 100%; color: white; font-size: 15px; font-weight: 500;
+  width: 100%; color: var(--text); font-size: 15px; font-weight: 500;
   padding-left: 12px; letter-spacing: 0.02em;
 }
-.modern-input::placeholder { color: rgba(255,255,255,0.6); font-weight: 400; }
-.search-icon-wrapper { color: white; display: flex; align-items: center; justify-content: center; opacity: 0.9; }
+.modern-input::placeholder { color: color-mix(in srgb, var(--text) calc(0.6 * 100%), transparent); font-weight: 400; }
+.search-icon-wrapper { color: var(--text); display: flex; align-items: center; justify-content: center; opacity: 0.9; }
 .search-icon { width: 18px; height: 18px; }
 .focus-indicator {
   position: absolute; bottom: 0; left: 50%; width: 0%; height: 2px;
   background: white; transform: translateX(-50%);
   transition: width 0.4s ease; border-radius: 2px;
-  box-shadow: 0 0 15px rgba(255,255,255,0.5);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
 }
 .search-orb-container:focus-within .input-overlay {
   transform: translateY(-4px);
-  background: rgba(255,255,255,0.12);
-  border-color: rgba(255,255,255,0.4);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: color-mix(in srgb, var(--text) calc(0.4 * 100%), transparent);
   box-shadow: 0 20px 40px rgba(0,0,0,0.25);
 }
 .search-orb-container:focus-within .focus-indicator { width: 40%; }
@@ -3832,14 +4021,14 @@ body.light-mode .modern-input { color: #333; }
 body.light-mode .modern-input::placeholder { color: rgba(0,0,0,0.4); }
 body.light-mode .search-icon-wrapper { color: #333; }
 body.light-mode .input-overlay {
-  background: rgba(255,255,255,0.65);
+  background: rgba(255, 255, 255, 0.65);
   border-color: rgba(0,0,0,0.1);
 }
 body.light-mode .focus-indicator { background: #6366f1; }
 
-/* ════════════════════════════════════════════════════════════════════════════════
-   住宿生檔案管理 – 2D Flat Carousel
-   ════════════════════════════════════════════════════════════════════════════════ */
+/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲
+   浣忓鐢熸獢妗堢鐞?鈥?2D Flat Carousel
+   鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲 */
 .sf-scene-2d {
   position: relative;
   width: 100%;
@@ -3851,9 +4040,8 @@ body.light-mode .focus-indicator { background: #6366f1; }
 
 .sf-card-area-2d {
   position: relative;
-  width: 100%;
   height: 100%;
-  overflow: hidden;
+  overflow: visible; /* Prevent shadows from being clipped vertically */
   display: flex;
   align-items: center;
   touch-action: manipulation;
@@ -3944,7 +4132,7 @@ body.light-mode .focus-indicator { background: #6366f1; }
   top: 0; left: 0; right: 0; bottom: 0;
   border-radius: 32px;
   background: linear-gradient(90deg, #6366f1, #d946ef, #8b5cf6) top/100% 4px no-repeat, var(--card);
-  backdrop-filter: blur(24px) saturate(140%); -webkit-backdrop-filter: blur(24px) saturate(140%);
+  backdrop-filter: blur(30px) saturate(160%); -webkit-backdrop-filter: blur(30px) saturate(160%);
   border: 1px solid var(--border);
   box-shadow: var(--neu-out);
   z-index: -1;
@@ -3952,22 +4140,22 @@ body.light-mode .focus-indicator { background: #6366f1; }
   transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.5s ease;
 }
 
-/* Card thickness layer — visible only in 3D mode, creates extrusion depth */
+/* Card thickness layer 鈥?visible only in 3D mode, creates extrusion depth */
 .sf-student-card-2d::before {
   content: '';
   position: absolute;
   top: 2px; left: 2px; right: 2px; bottom: 2px;
   border-radius: 30px;
-  background: linear-gradient(180deg, rgba(180,180,195,0.4) 0%, rgba(150,150,168,0.35) 100%);
+  background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.1) 100%);
   z-index: -2;
   transform: translateZ(-5px);
   opacity: 0;
   box-shadow: 
-    -1px 0 0 rgba(200,200,215,0.3),
-    -2px 1px 0 rgba(185,185,200,0.25),
-    -3px 2px 0 rgba(170,170,188,0.2),
-    -4px 3px 0 rgba(160,160,180,0.15),
-    -8px 8px 18px rgba(0,0,0,0.4);
+    -1px 0 0 rgba(255,255,255,0.35),
+    -2px 1px 0 rgba(255,255,255,0.3),
+    -3px 2px 0 rgba(255,255,255,0.25),
+    -4px 3px 0 rgba(255,255,255,0.15),
+    -8px 8px 35px rgba(0,0,0,0.9);
   transition: opacity 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -3980,8 +4168,9 @@ body.light-mode .focus-indicator { background: #6366f1; }
 /* 3D card shadow enhancement for dark mode */
 .sf-student-card-2d.is-3d-active::after {
   box-shadow: 
-    rgba(0, 0, 0, 0.5) -15px 25px 30px -10px,
-    rgba(139, 92, 246, 0.08) -8px 12px 20px -5px;
+    rgba(0, 0, 0, 0.9) -30px 50px 80px -20px,
+    rgba(139, 92, 246, 0.3) -15px 25px 40px -10px,
+    rgba(255, 255, 255, 0.18) 0 0 160px 25px;
 }
 
 .sf-card-title {
@@ -4051,6 +4240,7 @@ body.light-mode .focus-indicator { background: #6366f1; }
   color: var(--text);
   border-radius: 50%;
   width: 32px; height: 32px;
+  padding: 0;
   display: flex; align-items: center; justify-content: center;
   font-size: 16px;
   cursor: pointer;
@@ -4083,7 +4273,7 @@ body.light-mode .focus-indicator { background: #6366f1; }
   padding: 12px; 
   font-size: 14px; 
   font-weight: 700;
-  background: rgba(40, 40, 50, 0.4);
+  background: rgba(18, 18, 30, 0.7);
   color: var(--muted);
   border: 1px solid rgba(255, 255, 255, 0.05);
   box-shadow: var(--neu-out);
@@ -4102,7 +4292,7 @@ body.light-mode .focus-indicator { background: #6366f1; }
   box-shadow: var(--neu-in);
 }
 
-/* 3D Popping Interactions — smooth two-way transition for both entering AND leaving 3D */
+/* 3D Popping Interactions 鈥?smooth two-way transition for both entering AND leaving 3D */
 .sf-student-card-2d * {
   transition: transform 1s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s, text-shadow 0.8s, border-radius 0.8s;
   transform: translateZ(0px); /* Hardware layer init for smooth transition */
@@ -4145,11 +4335,11 @@ body.light-mode .focus-indicator { background: #6366f1; }
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   box-shadow: 
-    -1px 1px 0 rgba(140,140,170,0.35),
-    -2px 2px 0 rgba(120,120,150,0.3),
-    -3px 3px 0 rgba(100,100,130,0.25),
-    -4px 4px 0 rgba(80,80,110,0.2),
-    -10px 16px 25px rgba(0,0,0,0.5);
+    -1px 1px 0 rgba(255,255,255,0.3),
+    -2px 2px 0 rgba(255,255,255,0.2),
+    -3px 3px 0 rgba(255,255,255,0.15),
+    -4px 4px 0 rgba(255,255,255,0.08),
+    -10px 16px 25px rgba(0,0,0,0.8);
   /* Smooth tectonic plate transition */
   transition: 
     transform 1s cubic-bezier(0.22, 1, 0.36, 1),
@@ -4164,12 +4354,12 @@ body.light-mode .focus-indicator { background: #6366f1; }
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 14px;
   box-shadow: 
-    -1px 1px 0 rgba(160,160,190,0.4),
-    -2px 2px 0 rgba(140,140,170,0.35),
-    -3px 3px 0 rgba(120,120,150,0.3),
-    -4px 4px 0 rgba(100,100,130,0.25),
-    -5px 5px 0 rgba(85,85,115,0.2),
-    -12px 20px 30px rgba(0,0,0,0.5);
+    -1px 1px 0 rgba(255,255,255,0.35),
+    -2px 2px 0 rgba(255,255,255,0.25),
+    -3px 3px 0 rgba(255,255,255,0.2),
+    -4px 4px 0 rgba(255,255,255,0.15),
+    -5px 5px 0 rgba(255,255,255,0.1),
+    -12px 20px 32px rgba(0,0,0,0.85);
 }
 .sf-student-card-2d.is-3d-active .sf-form-group input:focus,
 .sf-student-card-2d.is-3d-active .sf-form-group textarea:focus {
@@ -4178,17 +4368,17 @@ body.light-mode .focus-indicator { background: #6366f1; }
   border: 1px solid rgba(139, 92, 246, 0.5);
   border-radius: 16px;
   box-shadow: 
-    -1px 1px 0 rgba(180,180,210,0.45),
-    -2px 2px 0 rgba(160,160,190,0.4),
-    -3px 3px 0 rgba(140,140,170,0.35),
-    -4px 4px 0 rgba(120,120,150,0.3),
-    -5px 5px 0 rgba(105,105,138,0.25),
-    -6px 6px 0 rgba(90,90,125,0.2),
-    -7px 7px 0 rgba(80,80,115,0.18),
-    -8px 8px 0 rgba(70,70,105,0.15),
-    -16px 26px 40px rgba(0,0,0,0.55),
-    0 0 0 3px rgba(139, 92, 246, 0.25),
-    0 0 20px rgba(139, 92, 246, 0.15);
+    -1px 1px 0 rgba(255,255,255,0.45),
+    -2px 2px 0 rgba(255,255,255,0.4),
+    -3px 3px 0 rgba(255,255,255,0.35),
+    -4px 4px 0 rgba(255,255,255,0.3),
+    -5px 5px 0 rgba(255,255,255,0.25),
+    -6px 6px 0 rgba(255,255,255,0.2),
+    -7px 7px 0 rgba(255,255,255,0.15),
+    -8px 8px 0 rgba(255,255,255,0.1),
+    -16px 26px 45px rgba(0,0,0,0.9),
+    0 0 0 3px rgba(139, 92, 246, 0.4),
+    0 0 20px rgba(139, 92, 246, 0.3);
 }
 
 .sf-student-card-2d.is-3d-active .sf-toggles {
@@ -4220,11 +4410,11 @@ body.light-mode .focus-indicator { background: #6366f1; }
 }
 
 .sf-student-card-2d.is-3d-active .sf-card-badge-relative {
-  transform: translateZ(45px);
+  transform: translateY(4px) translateZ(45px);
   box-shadow: 0 5px 12px rgba(0,0,0,0.15);
 }
 .sf-student-card-2d.is-3d-active .sf-card-badge-relative:hover {
-  transform: translateZ(65px);
+  transform: translateY(4px) translateZ(65px);
   box-shadow: 0 12px 25px rgba(0,0,0,0.25);
 }
 
@@ -4250,18 +4440,18 @@ body.light-mode .focus-indicator { background: #6366f1; }
   box-shadow: 0 10px 20px rgba(0,0,0,0.2);
 }
 
-/* Save container removed — auto-save */
+/* Save container removed 鈥?auto-save */
 
 /* Indicator dots */
 .sf-card-dots {
   display: flex; align-items: center; justify-content: center;
   gap: 6px; padding: 12px 0 16px;
 }
-/* 隱藏原生 dots 在無限複製情境下會太多，改為不顯示或是自動 overflow隱藏 */
+/* 闅辫棌鍘熺敓 dots 鍦ㄧ劇闄愯瑁芥儏澧冧笅鏈冨お澶氾紝鏀圭偤涓嶉’绀烘垨鏄嚜鍕?overflow闅辫棌 */
 .sf-card-dots { overflow-x: hidden; max-width: 80%; margin: 0 auto; flex-wrap: nowrap; display: none; }
 
 
-/* 搜尋Loader (Uiverse) */
+/* 鎼滃皨Loader (Uiverse) */
 .sf-search-mirror {
   position: absolute;
   top: 50%; left: 50%;
@@ -4320,12 +4510,12 @@ body.light-mode .focus-indicator { background: #6366f1; }
 
 /* Light mode card overrides */
 body.light-mode .sf-student-card-2d {
-  background: rgba(255,255,255,0.8);
+  background: rgba(255, 255, 255, 0.8);
   border-color: rgba(0,0,0,0.1);
   box-shadow: 0 15px 35px rgba(0,0,0,0.1);
 }
 body.light-mode .sf-student-card-2d::after {
-  background: linear-gradient(90deg, #6366f1, #d946ef, #8b5cf6) top/100% 4px no-repeat, rgba(255,255,255,0.92);
+  background: linear-gradient(90deg, #6366f1, #d946ef, #8b5cf6) top/100% 4px no-repeat, rgba(255, 255, 255, 0.92);
 }
 /* Light mode 3D thickness */
 body.light-mode .sf-student-card-2d::before {
@@ -4387,7 +4577,7 @@ body.light-mode .sf-save-action-btn {
   background: rgba(0,0,0,0.04);
   color: #333;
   border-color: rgba(0,0,0,0.1);
-  box-shadow: 2px 2px 4px rgba(0,0,0,0.06), -2px -2px 4px rgba(255,255,255,0.8);
+  box-shadow: 2px 2px 4px rgba(0,0,0,0.06), -2px -2px 4px rgba(255, 255, 255, 0.8);
 }
 body.light-mode .sf-save-action-btn:hover {
   background: rgba(59,130,246,0.1);
@@ -4396,7 +4586,7 @@ body.light-mode .sf-save-action-btn:hover {
 }
 
 /* ========================================================
-   POWER SAVE MODE — Full Effect
+   POWER SAVE MODE 鈥?Full Effect
    ======================================================== */
 body.power-save-mode * {
   backdrop-filter: none !important;
@@ -4427,7 +4617,7 @@ body.power-save-mode .sf-student-card-2d.is-3d-active * {
 body.power-save-mode .sf-scene-2d .sf-student-card-2d.is-3d-active * {
   transform: translateZ(0) !important;
 }
-/* 省電模式下動畫減速到幾乎無感 */
+/* 鐪侀浕妯″紡涓嬪嫊鐣笡閫熷埌骞句箮鐒℃劅 */
 body.power-save-mode *:not(.page):not(.toast) {
   animation-duration: 0s !important;
   transition-duration: 0.1s !important;
@@ -4523,13 +4713,13 @@ body.power-save-mode *:not(.page):not(.toast) {
 .confirm-btn.cancel-btn:active { transform: scale(0.96); }
 .confirm-btn.danger-btn {
   background: linear-gradient(135deg, #ef4444, #dc2626);
-  color: #fff;
+  color: var(--text);
   box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
 }
 .confirm-btn.danger-btn:active { transform: scale(0.96); }
 .confirm-btn.primary-btn {
   background: var(--blue);
-  color: #fff;
+  color: var(--text);
   box-shadow: 0 4px 14px rgba(10, 132, 255, 0.3);
 }
 .confirm-btn.primary-btn:active { transform: scale(0.96); }
@@ -4594,7 +4784,7 @@ body.light-mode .confirm-btn.cancel-btn {
   top: 50%; right: 14px;
   margin-top: -9px;
   border: 2.5px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #fff;
+  border-top-color: var(--text);
   border-radius: 50%;
   animation: btnSpin 0.6s linear infinite;
 }
@@ -4638,9 +4828,9 @@ body.light-mode .confirm-btn.cancel-btn {
   position: absolute;
   top: -40px;
   right: 0;
-  background: rgba(255,255,255,0.2);
+  background: rgba(255, 255, 255, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.3);
-  color: white;
+  color: var(--text);
   width: 32px;
   height: 32px;
   border-radius: 16px;
@@ -4654,3 +4844,21 @@ body.light-mode .confirm-btn.cancel-btn {
 .image-preview-close:active {
   transform: scale(0.9);
 }
+
+.ui-icon {
+  display: inline-block;
+  vertical-align: middle;
+  width: 1.1em;
+  height: 1.1em;
+  margin-right: 4px;
+  margin-top: -2px;
+}
+.sq-card .ui-icon, 
+.sf-icon-btn .ui-icon { margin: 0; }
+.modal-icon .ui-icon { width: 32px; height: 32px; margin: 0; }
+
+body.light-mode .anim-line::after {
+  background: linear-gradient(90deg, transparent 0%, hsla(var(--hue, 240), 80%, 40%, 0.3) 15%, hsla(var(--hue, 240), 80%, 35%, 0.9) 50%, hsla(var(--hue, 240), 80%, 40%, 0.3) 85%, transparent 100%);
+  box-shadow: 0 0 16px 3px hsla(var(--hue, 240), 80%, 40%, 0.5);
+}
+

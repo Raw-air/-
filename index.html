@@ -138,16 +138,46 @@
       <p class="home-sub">點名管理系統</p>
       <div class="home-date" id="home-date"></div>
     </div>
+    
+    <!-- 本週值星幹部 (獨立顯示) -->
+    <div id="duty-roster-widget" class="duty-roster-widget" onclick="openDutyRosterModal()">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="color:var(--orange); display:flex; align-items:center;"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
+        <span id="duty-roster-text" style="font-size:14px; font-weight:700; color:var(--orange);">值星(<span id="duty-roster-week">--</span>): <span id="duty-roster-main">--</span> / <span id="duty-roster-sub">--</span></span>
+      </div>
+      <span style="color:var(--orange); opacity:0.8; display:flex; align-items:center;"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+    </div>
+
     <p class="section-label">選擇你的中隊</p>
     <div id="squad-grid" class="squad-grid-3col"></div>
 
     <p class="section-label" style="margin-top:24px;">幹部專區</p>
     <div id="management-grid" style="display:flex;flex-direction:column;gap:12px;position:relative;z-index:1;"></div>
 
+    <!-- 幹部工作手冊獨立區塊 (移動至此) -->
+    <div id="duty-manual-widget" class="duty-manual-widget" style="margin-top: 12px;" onclick="openDutyManualModal()">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; align-items:center; gap:16px;">
+          <div style="font-size:26px; filter:drop-shadow(0 2px 8px rgba(0,0,0,0.2)); color:var(--text); padding:0 4px 0 8px; display:flex; align-items:center;">
+            <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+          </div>
+          <div>
+            <div style="font-size:15px; color:var(--text); font-weight:800; letter-spacing:0.5px;">幹部工作手冊</div>
+            <div style="font-size:13px; color:var(--dim); font-weight:700; margin-top:4px;" id="current-task-preview">
+              載入中...
+            </div>
+          </div>
+        </div>
+        <div style="width:32px; height:32px; border-radius:50%; background:var(--glass-bg); border: 1px solid var(--glass-border); display:flex; align-items:center; justify-content:center;">
+          <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text); opacity: 0.7;"><path d="m9 18 6-6-6-6"/></svg>
+        </div>
+      </div>
+    </div>
+
     <!-- 意見回饋入口 -->
     <div style="display:flex;justify-content:center;margin-top:32px;margin-bottom:16px;position:relative;z-index:1;">
       <button class="feedback-pill" onclick="openFeedbackForm()">
-        <span>💬</span>
+        <span><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 21 1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z"/></svg></span>
         <span>對此應用有建議嗎?</span>
         <span class="feedback-pill-arrow">›</span>
       </button>
@@ -163,7 +193,7 @@
 
     <div style="padding: 16px;">
       <button class="empty-bed-action" onclick="openReviewPage()">
-        <span class="eb-icon">📝</span>
+        <span class="eb-icon"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
         <div class="eb-content">
           <span class="eb-title" style="color:var(--orange)">住宿生新增進總表審核</span>
           <span class="eb-desc">審核最新提出之住宿生新增申請</span>
@@ -172,7 +202,7 @@
       </button>
 
       <button id="manage-repair-btn" class="empty-bed-action" onclick="openRepairReview()">
-        <span class="eb-icon">🔧</span>
+        <span class="eb-icon"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
         <div class="eb-content">
           <span class="eb-title" style="color:var(--purple)">報修審核</span>
           <span class="eb-desc">查看住宿生提交的設施報修紀錄</span>
@@ -187,7 +217,7 @@
     <div style="display:flex; align-items:center; margin-bottom: 16px;">
       <button class="back-btn" style="position:static; margin-right: 12px; margin-top: 0;"
         onclick="navigateTo('management')">‹ 返回幹部專區</button>
-      <h1 class="page-title" style="margin-bottom:0;">📝 申請審核</h1>
+      <h1 class="page-title" style="margin-bottom:0;"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> 申請審核</h1>
     </div>
     <div id="management-review-list">
       <!-- Javascript 會注入這區的內容 -->
@@ -199,7 +229,7 @@
     <div style="display:flex; align-items:center; margin-bottom: 16px;">
       <button class="back-btn" style="position:static; margin-right: 12px; margin-top: 0;"
         onclick="navigateTo('summary')">‹ 返回總表</button>
-      <h1 class="page-title" style="margin-bottom:0;">📞 電話請假紀錄</h1>
+      <h1 class="page-title" style="margin-bottom:0;"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> 電話請假紀錄</h1>
     </div>
     <div id="leave-records-list">
       <!-- Javascript 會注入紀錄 -->
@@ -218,7 +248,7 @@
       </div>
       <!-- 日期選擇器面板 -->
       <div id="date-picker-panel" class="date-picker-panel">
-        <div class="date-picker-header">📅 選擇點名日期</div>
+        <div class="date-picker-header"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg> 選擇點名日期</div>
         <div id="date-picker-list" class="date-picker-list"></div>
       </div>
       <div class="rc-stats">
@@ -234,24 +264,24 @@
       <!-- 超明顯的確認按鈕 -->
       <button id="rc-confirm-btn" class="rc-confirm-action" onclick="toggleSquadConfirm()"
         style="display:none;width:100%">
-        <span id="rc-confirm-icon">⭕</span>
+        <span id="rc-confirm-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg></span>
         <span id="rc-confirm-text">確認本中隊完成點名</span>
       </button>
     </div>
 
     <!-- 空床回報 FAB -->
     <button class="fab-empty-bed" onclick="openEmptyBedModal()">
-      <span class="fab-icon">🛏️</span>
+      <span class="fab-icon"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg></span>
       <span class="fab-text">我這邊多了個空床!</span>
     </button>
 
-    <button id="submit-btn" class="submit-btn">✅ 提交點名</button>
+    <button id="submit-btn" class="submit-btn"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 提交點名</button>
   </div>
 
   <!-- 提交成功 -->
   <div id="submit-success-modal" class="modal-overlay">
     <div class="modal-card success-modal">
-      <div class="modal-icon">🎉</div>
+      <div class="modal-icon"><svg class="ui-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/></svg></div>
       <h3>點名提交成功！</h3>
       <div class="submit-stats">
         <div>應到 <b id="submit-should">0</b></div>
@@ -265,7 +295,7 @@
   <!-- 空床回報 Modal -->
   <div id="empty-bed-modal" class="modal-overlay">
     <div class="modal-card">
-      <h3>🛏️ 回報空床</h3>
+      <h3><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg> 回報空床</h3>
       <p class="modal-desc">選擇新增空床的房間與床位</p>
       <div class="bed-selector">
         <label>房間號</label>
@@ -283,14 +313,14 @@
   <!-- 換床位 Modal -->
   <div id="swap-bed-modal" class="modal-overlay">
     <div class="modal-card">
-      <h3>🔄 換床位</h3>
+      <h3><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 17H3"/><path d="m6 10-3 3 3 3"/><path d="M3 7h18"/><path d="m18 20 3-3-3-3"/></svg> 換床位</h3>
       <p class="modal-desc">選擇要搬的學生和目標床位</p>
       <div class="bed-selector">
-        <label>📤 來源學生</label>
+        <label><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg> 來源學生</label>
         <select id="sw-from-room" class="styled-select" onchange="updateSwapFromBeds()"></select>
         <select id="sw-from-bed" class="styled-select"></select>
-        <div class="swap-arrow-divider">⬇️ 搬到</div>
-        <label>📥 目標床位</label>
+        <div class="swap-arrow-divider"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><polyline points="19 12 12 19 5 12"/></svg> 搬到</div>
+        <label><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> 目標床位</label>
         <select id="sw-to-room" class="styled-select" onchange="updateSwapToBeds()"></select>
         <select id="sw-to-bed" class="styled-select"></select>
       </div>
@@ -304,7 +334,7 @@
   <!-- 新增住宿生 Modal -->
   <div id="add-resident-modal" class="modal-overlay">
     <div class="modal-card">
-      <h3>👤 新增住宿生</h3>
+      <h3><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> 新增住宿生</h3>
       <p class="modal-desc">選擇空床並填首新生資料以送出審核</p>
       <div class="bed-selector">
         <label>目標房間</label>
@@ -340,20 +370,20 @@
   <div id="counter-leave-modal" class="modal-overlay">
     <div class="modal-card">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <h3 style="margin:0;">📞 櫃台請假填寫</h3>
+        <h3 style="margin:0;"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> 櫃台請假填寫</h3>
         <button
           style="background:var(--dim); padding:6px 12px; border:none; border-radius:8px; color:white; font-size:12px; cursor:pointer;"
-          onclick="closeModal('counter-leave-modal'); navigateTo('leave-records'); renderLeaveRecordsList();">📑
+          onclick="closeModal('counter-leave-modal'); navigateTo('leave-records'); renderLeaveRecordsList();"><svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>
           歷史紀錄</button>
       </div>
       <p class="modal-desc">搜尋學生並快速設定點名表請假區間。</p>
 
       <div class="bed-selector">
-        <label>🔍 搜尋對象 (姓名/房號/床位)</label>
+        <label><svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg> 搜尋對象 (姓名/房號/床位)</label>
         <input type="text" id="cl-search" class="styled-input" placeholder="例如：112 C 或 王小明"
           oninput="handleCounterLeaveSearch()" autocomplete="off">
 
-        <label style="margin-top: 12px;">🧑‍🎓 選擇請假學生</label>
+        <label style="margin-top: 12px;"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg> 選擇請假學生</label>
         <select id="cl-target" class="styled-select">
           <option value="">請先搜尋上方欄位...</option>
         </select>
@@ -363,11 +393,11 @@
 
         <div style="display:flex; gap:12px; margin-top:12px;">
           <div style="flex:1;">
-            <label>📅 開始日期</label>
+            <label><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg> 開始日期</label>
             <input type="date" id="cl-start-date" class="styled-input">
           </div>
           <div style="flex:1;">
-            <label>📅 結束日期</label>
+            <label><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg> 結束日期</label>
             <input type="date" id="cl-end-date" class="styled-input">
           </div>
         </div>
@@ -385,7 +415,7 @@
   <!-- ═══════════ 總表 ═══════════ -->
   <div id="page-summary" class="page">
     <div class="summary-header">
-      <h1>📊 每日總表</h1>
+      <h1><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg> 每日總表</h1>
       <div class="date-nav">
         <button id="summary-prev-date" class="nav-arrow">‹</button>
         <span id="summary-date" class="date-pill"></span>
@@ -411,8 +441,8 @@
 
     <!-- 4-5: 外籍生 / 住宿率 -->
     <div class="summary-row-2">
-      <div class="sm-stat"><span>🌏 外籍生</span><b id="total-foreign">0</b></div>
-      <div class="sm-stat accent"><span>📈 住宿率</span><b id="total-rate">0%</b></div>
+      <div class="sm-stat"><span><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg> 外籍生</span><b id="total-foreign">0</b></div>
+      <div class="sm-stat accent"><span><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg> 住宿率</span><b id="total-rate">0%</b></div>
     </div>
 
     <!-- 6-8: 實到 / 請假 / 未請假 -->
@@ -449,7 +479,7 @@
 
     <!-- 空床回報按鈕 -->
     <button class="empty-bed-action" onclick="openEmptyBedModal()">
-      <span class="eb-icon">🛏️</span>
+      <span class="eb-icon"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg></span>
       <div class="eb-content">
         <span class="eb-title">我這邊多了個空床!</span>
         <span class="eb-desc">選擇房間與床位，直接更新總表</span>
@@ -459,7 +489,7 @@
 
     <!-- 換床位按鈕 -->
     <button class="empty-bed-action swap-action" onclick="openSwapBedModal()">
-      <span class="eb-icon">🔄</span>
+      <span class="eb-icon"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 17H3"/><path d="m6 10-3 3 3 3"/><path d="M3 7h18"/><path d="m18 20 3-3-3-3"/></svg></span>
       <div class="eb-content">
         <span class="eb-title" style="color:#a78bfa">住宿生換床位</span>
         <span class="eb-desc">調整學生的房間與床位配置</span>
@@ -469,7 +499,7 @@
 
     <!-- 新增住宿生按鈕 -->
     <button class="empty-bed-action" onclick="openAddResidentModal()">
-      <span class="eb-icon">👤</span>
+      <span class="eb-icon"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
       <div class="eb-content">
         <span class="eb-title">新增住宿生</span>
         <span class="eb-desc">填寫新生資料並送出審核</span>
@@ -479,7 +509,7 @@
 
     <!-- 櫃台請假按鈕 -->
     <button class="empty-bed-action" onclick="openCounterLeaveModal()">
-      <span class="eb-icon">📞</span>
+      <span class="eb-icon"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span>
       <div class="eb-content">
         <span class="eb-title" style="color:var(--green)">櫃台請假填寫</span>
         <span class="eb-desc">電話通報請假，自動更新總表紀錄</span>
@@ -489,7 +519,7 @@
 
     <!-- 通知報修按鈕 -->
     <button class="empty-bed-action" onclick="openRepairForm()">
-      <span class="eb-icon">🔧</span>
+      <span class="eb-icon"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
       <div class="eb-content">
         <span class="eb-title" style="color:var(--purple)">通知報修</span>
         <span class="eb-desc">回報宿舍設施損壞，上傳照片送出通知</span>
@@ -499,7 +529,7 @@
 
     <!-- 住宿生檔案管理 -->
     <button class="empty-bed-action" onclick="navigateTo('student-files'); initStudentFiles()">
-      <span class="eb-icon">📋</span>
+      <span class="eb-icon"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg></span>
       <div class="eb-content">
         <span class="eb-title" style="color:#6366f1">住宿生檔案管理</span>
         <span class="eb-desc">搜尋住宿生，瀏覽與編輯個人資料卡</span>
@@ -512,7 +542,7 @@
   <div id="page-student-files" class="page">
     <div style="position: relative; margin-bottom: 16px; display: flex; justify-content: center; align-items: center; padding-top: 8px;">
       <button class="back-btn" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin-top: 0;" onclick="navigateTo('tools')">‹ 返回</button>
-      <h1 style="font-size: 20px; font-weight: 800; letter-spacing:1px; margin:0; color: var(--text);">📋 住宿生檔案</h1>
+      <h1 style="font-size: 20px; font-weight: 800; letter-spacing:1px; margin:0; color: var(--text);"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg> 住宿生檔案</h1>
     </div>
 
     <!-- Gooey Search Bar -->
@@ -566,7 +596,7 @@
           </div>
         </div>
         <div style="text-align:center; color: white; font-weight: 500; font-size: 14px; margin-top:16px; letter-spacing:2px; animation: pulse 1s infinite alternate; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">
-          🔍 查找資料中...
+          <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg> 查找資料中...
         </div>
       </div>
 
@@ -591,7 +621,7 @@
       <div id="sf-card-area" class="sf-card-area-2d" style="transition: opacity 0.3s ease;">
         <div id="sf-card-track" class="sf-card-track">
           <div class="sf-empty-hint">
-            <div style="font-size:48px; margin-bottom:12px;">🔍</div>
+            <div style="font-size:48px; margin-bottom:12px;"><svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
             <div style="color:var(--dim); font-size:14px;">輸入關鍵字搜尋住宿生</div>
           </div>
         </div>
@@ -608,37 +638,37 @@
   <div id="page-repair-form" class="page">
     <div style="position: relative; display: flex; justify-content: center; align-items: center; margin-bottom: 20px; padding-top: 8px;">
       <button class="back-btn" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin-top: 0;" onclick="navigateTo('tools')">‹ 返回</button>
-      <h1 style="font-size: 20px; font-weight: 800; margin:0; color: var(--text);">🔧 通知報修</h1>
+      <h1 style="font-size: 20px; font-weight: 800; margin:0; color: var(--text);"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> 通知報修</h1>
     </div>
 
     <div class="repair-form-group">
-      <label>🗣️ 報修人 (姓名/房號)</label>
+      <label><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 1 0-9-9c0 1.48.36 2.89 1 4.12l-1.5 4.5 4.5-1.5c1.23.64 2.64 1 4.12 1z"/><path d="M12 12v.01"/><path d="M16 12v.01"/><path d="M8 12v.01"/></svg> 報修人 (姓名/房號)</label>
       <input type="text" id="repair-reporter" class="styled-input" placeholder="例如：110A 王小明" style="margin-bottom: 16px;">
     </div>
 
     <div class="repair-form-group">
-      <label>📝 報修原因</label>
+      <label><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> 報修原因</label>
       <textarea id="repair-reason" class="repair-textarea" placeholder="請描述設施損壞的位置與狀況..."></textarea>
     </div>
 
     <div class="repair-form-group">
-      <label>📷 狀況照片</label>
+      <label><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg> 狀況照片</label>
       <div class="repair-upload-zone" id="repair-upload-zone" onclick="document.getElementById('repair-file-input').click()">
-        <div class="repair-upload-icon">📸</div>
+        <div class="repair-upload-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></div>
         <div class="repair-upload-text">點擊上傳照片 或 直接拍照</div>
       </div>
       <input type="file" id="repair-file-input" accept="image/*" multiple style="display:none" onchange="handleRepairPhotos(this)">
       <div id="repair-preview-grid" class="repair-preview-grid"></div>
     </div>
 
-    <button class="repair-submit-btn" onclick="submitRepair()">📤 送出報修通知</button>
+    <button class="repair-submit-btn" onclick="submitRepair()"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg> 送出報修通知</button>
   </div>
 
   <!-- ═══════════ 報修審核頁面 ═══════════ -->
   <div id="page-repair-review" class="page">
     <div style="position: relative; display: flex; justify-content: center; align-items: center; margin-bottom: 20px; padding-top: 8px;">
       <button class="back-btn" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin-top: 0;" onclick="navigateTo('management')">‹ 返回幹部專區</button>
-      <h1 style="font-size: 20px; font-weight: 800; margin:0; color: var(--text);">🔧 報修審核</h1>
+      <h1 style="font-size: 20px; font-weight: 800; margin:0; color: var(--text);"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> 報修審核</h1>
     </div>
     <div id="repair-review-list">
       <!-- Javascript 會注入這區的內容 -->
@@ -649,23 +679,23 @@
   <div id="page-feedback-form" class="page">
     <div style="position: relative; display: flex; justify-content: center; align-items: center; margin-bottom: 20px; padding-top: 8px;">
       <button class="back-btn" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin-top: 0;" onclick="navigateTo('home')">‹ 返回</button>
-      <h1 style="font-size: 20px; font-weight: 800; margin:0; color: var(--text);">💬 意見回饋</h1>
+      <h1 style="font-size: 20px; font-weight: 800; margin:0; color: var(--text);"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 21 1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z"/></svg> 意見回饋</h1>
     </div>
 
     <div class="repair-form-group">
-      <label>🙋 您的稱呼 (可匿名)</label>
+      <label><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="m16 11 2-2"/><path d="m18 9 2-2"/><path d="m18 9 2 2"/><path d="m18 9-2-2"/></svg> 您的稱呼 (可匿名)</label>
       <input type="text" id="feedback-name" class="styled-input" placeholder="例如：110A 王小明 或 匿名" style="margin-bottom: 16px;">
     </div>
 
     <div class="repair-form-group">
-      <label>✍️ 您的建議或意見</label>
+      <label><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 5-3-3H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2"/><path d="m12 16 3-3-5-5-3 3"/><path d="M9 11v5h5"/></svg> 您的建議或意見</label>
       <textarea id="feedback-content" class="repair-textarea" placeholder="請輸入您對這個應用的想法、建議或問題回報..."></textarea>
     </div>
 
     <div class="repair-form-group">
-      <label>📷 附加截圖 (可選)</label>
+      <label><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg> 附加截圖 (可選)</label>
       <div class="repair-upload-zone" onclick="document.getElementById('feedback-file-input').click()">
-        <div class="repair-upload-icon">📸</div>
+        <div class="repair-upload-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></div>
         <div class="repair-upload-text">點擊上傳截圖</div>
       </div>
       <input type="file" id="feedback-file-input" accept="image/*" multiple style="display:none" onchange="handleFeedbackPhotos(this)">
@@ -716,7 +746,7 @@
   <div id="page-feedback-review" class="page">
     <div style="position: relative; display: flex; justify-content: center; align-items: center; margin-bottom: 20px; padding-top: 8px;">
       <button class="back-btn" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin-top: 0;" onclick="navigateTo('settings')">‹ 返回設定</button>
-      <h1 style="font-size: 20px; font-weight: 800; margin:0; color: var(--text);">💬 用戶回饋</h1>
+      <h1 style="font-size: 20px; font-weight: 800; margin:0; color: var(--text);"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 21 1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z"/></svg> 用戶回饋</h1>
     </div>
     <div id="feedback-review-list">
       <!-- Javascript 會注入回饋內容 -->
@@ -725,7 +755,7 @@
 
   <!-- ═══════════ 歷史 ═══════════ -->
   <div id="page-history" class="page">
-    <h1 class="page-title">📅 歷史資料</h1>
+    <h1 class="page-title"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg> 歷史資料</h1>
     <div class="cal-nav">
       <button id="cal-prev-month" class="nav-arrow">‹</button>
       <span id="hist-month" class="date-pill"></span>
@@ -740,8 +770,8 @@
     <h1 class="page-title"><img src="./Lp/ICON/SETTIN.svg" style="width:28px;height:28px;vertical-align:middle;margin-right:12px;margin-bottom:6px;">系統設定</h1>
 
     <div class="settings-card">
-      <div class="settings-card-header">✨ 個人化設定</div>
-      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 4px 0;">
+      <div class="settings-card-header"><svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M7 5H3"/><path d="M21 17v4"/><path d="M23 19h-4"/></svg> 個人化設定</div>
+      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 8px 0;">
         <div style="display:flex; flex-direction:column; gap:4px;">
           <span>音效靜音模式</span>
           <span style="color:var(--dim); font-size:11px;">關閉系統的觸發音效</span>
@@ -764,7 +794,31 @@
             </div>
         </label>
       </div>
-      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 4px 0;">
+      
+      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 12px 0;">
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <span>關閉震動</span>
+          <span style="color:var(--dim); font-size:11px;">關閉所有按鍵與互動震動回饋</span>
+        </div>
+        <label class="switch">
+            <input id="setting-haptic" type="checkbox" onchange="toggleHaptic(this)" checked>
+            <div class="slider">
+                <div class="circle">
+                    <svg class="cross" xml:space="preserve" style="enable-background:new 0 0 512 512" viewBox="0 0 365.696 365.696" y="0" x="0" height="6" width="6" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                        <g>
+                            <path data-original="#000000" fill="currentColor" d="M243.188 182.86 356.32 69.726c12.5-12.5 12.5-32.766 0-45.247L341.238 9.398c-12.504-12.503-32.77-12.503-45.25 0L182.86 122.528 69.727 9.374c-12.5-12.5-32.766-12.5-45.247 0L9.375 24.457c-12.5 12.504-12.5 32.77 0 45.25l113.152 113.152L9.398 295.99c-12.503 12.503-12.503 32.769 0 45.25L24.48 356.32c12.5 12.5 32.766 12.5 45.247 0l113.132-113.132L295.99 356.32c12.503 12.5 32.769 12.5 45.25 0l15.081-15.082c12.5-12.504 12.5-32.77 0-45.25zm0 0"></path>
+                        </g>
+                    </svg>
+                    <svg class="checkmark" xml:space="preserve" style="enable-background:new 0 0 512 512" viewBox="0 0 24 24" y="0" x="0" height="10" width="10" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                        <g>
+                            <path class="" data-original="#000000" fill="currentColor" d="M9.707 19.121a.997.997 0 0 1-1.414 0l-5.646-5.647a1.5 1.5 0 0 1 0-2.121l.707-.707a1.5 1.5 0 0 1 2.121 0L9 14.171l9.525-9.525a1.5 1.5 0 0 1 2.121 0l.707.707a1.5 1.5 0 0 1 0 2.121z"></path>
+                        </g>
+                    </svg>
+                </div>
+            </div>
+        </label>
+      </div>
+      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 8px 0;">
         <div style="display:flex; flex-direction:column; gap:4px;">
           <span>全白模式</span>
           <span style="color:var(--dim); font-size:11px;">切換為亮色外觀主題</span>
@@ -787,7 +841,7 @@
             </div>
         </label>
       </div>
-      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 4px 0;">
+      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 8px 0;">
         <div style="display:flex; flex-direction:column; gap:4px;">
           <span>潘仔模式 (簡潔視角)</span>
           <span style="color:var(--dim); font-size:11px;">僅隱藏外籍/空床標籤，保持色彩</span>
@@ -812,7 +866,7 @@
       </div>
 
       <!-- NEW: Power Save Mode -->
-      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 4px 0;">
+      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 8px 0;">
         <div style="display:flex; flex-direction:column; gap:4px;">
           <span>省電順暢模式 (純 2D)</span>
           <span style="color:var(--dim); font-size:11px;">去除所有浮雕、景深與 3D 特效</span>
@@ -888,15 +942,17 @@
           <button class="stepper-btn" onclick="adjustSetting('foreign_offset',1)">+</button>
         </div>
       </div>
-      <p class="settings-hint">💡 空床修正值用於微調全部空床數量，外籍生修正值用於微調外籍生人數</p>
+      <p class="settings-hint"><svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg> 空床修正值用於微調全部空床數量，外籍生修正值用於微調外籍生人數</p>
       <div class="setting-divider"></div>
-      <p class="settings-hint">⚠️ 118/120/122/124/126 為雙人房（自動屏蔽 C/D 床）<br>⚠️ 128 為儲藏室（自動隱藏）</p>
+      <p class="settings-hint"><svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg> 118/120/122/124/126 為雙人房（自動屏蔽 C/D 床）<br><svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg> 128 為儲藏室（自動隱藏）</p>
       <button class="action-btn wide save-btn" onclick="saveDormSettings()">儲存宿舍參數</button>
     </div>
 
+
+
     <div class="settings-card">
       <div class="settings-card-header"><img src="./Lp/ICON/COPY.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">匯出 Excel</div>
-      <button id="export-btn" class="action-btn wide" onclick="exportExcel()">📥 匯出完整 Excel</button>
+      <button id="export-btn" class="action-btn wide" onclick="exportExcel()"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> 匯出完整 Excel</button>
     </div>
 
     <div class="settings-card">
@@ -907,7 +963,7 @@
 
     <!-- 開發者調適區入口 -->
     <div class="dev-trigger" onclick="openDevAuth()">
-      <span class="dev-trigger-icon">🔧</span>
+      <span class="dev-trigger-icon"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
       <span class="dev-trigger-text">開發者調適區</span>
     </div>
 
@@ -915,49 +971,49 @@
     <div id="dev-panel" class="dev-panel">
       <!-- 幹部按鈕自訂 + 密碼 -->
       <div class="dev-card">
-        <div class="dev-card-header">👑 幹部專區設定</div>
+        <div class="dev-card-header"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/></svg> 幹部專區設定</div>
         <p class="dev-card-hint">設定首頁幹部按鈕的 EMOJI、名稱與登入密碼，儲存後即時同步至雲端。</p>
 
         <div style="display:flex;flex-direction:column;gap:12px;">
           <!-- 社長 -->
           <div
             style="padding:12px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.25);border-radius:12px;">
-            <div style="font-size:12px;color:rgba(245,158,11,0.7);font-weight:700;margin-bottom:10px;">😒 社長</div>
+            <div style="font-size:12px;color:rgba(245,158,11,0.7);font-weight:700;margin-bottom:10px;">社長</div>
             <div style="display:flex;gap:8px;margin-bottom:8px;">
               <input type="text" id="dev-icon-president" class="dev-input" placeholder="EMOJI" maxlength="4"
                 style="width:56px;text-align:center;font-size:22px;padding:6px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(245,158,11,0.4);">
               <input type="text" id="dev-label-president" class="dev-input" placeholder="按鈕名稱"
                 style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(245,158,11,0.4);">
               <button class="action-btn" style="padding:8px 12px;font-size:12px;"
-                onclick="saveRoleAppearance('president')">🎨</button>
+                onclick="saveRoleAppearance('president')"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2Z"/></svg></button>
             </div>
             <div style="display:flex;gap:8px;">
               <input type="password" id="cfg-pin-president" class="dev-input" maxlength="6" inputmode="numeric"
                 placeholder="6 位數登入密碼"
                 style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(245,158,11,0.4);letter-spacing:4px;">
               <button class="action-btn" style="padding:8px 12px;font-size:12px;"
-                onclick="saveRolePIN('president', 'cfg-pin-president')">🔐</button>
+                onclick="saveRolePIN('president', 'cfg-pin-president')"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button>
             </div>
           </div>
 
           <!-- 副社長 -->
           <div
             style="padding:12px;background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.25);border-radius:12px;">
-            <div style="font-size:12px;color:rgba(16,185,129,0.7);font-weight:700;margin-bottom:10px;">🥝 副社長</div>
+            <div style="font-size:12px;color:rgba(16,185,129,0.7);font-weight:700;margin-bottom:10px;">副社長</div>
             <div style="display:flex;gap:8px;margin-bottom:8px;">
               <input type="text" id="dev-icon-vice-president" class="dev-input" placeholder="EMOJI" maxlength="4"
                 style="width:56px;text-align:center;font-size:22px;padding:6px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(16,185,129,0.4);">
               <input type="text" id="dev-label-vice-president" class="dev-input" placeholder="按鈕名稱"
                 style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(16,185,129,0.4);">
               <button class="action-btn" style="padding:8px 12px;font-size:12px;"
-                onclick="saveRoleAppearance('vice_president')">🎨</button>
+                onclick="saveRoleAppearance('vice_president')"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2Z"/></svg></button>
             </div>
             <div style="display:flex;gap:8px;">
               <input type="password" id="cfg-pin-vice-president" class="dev-input" maxlength="6" inputmode="numeric"
                 placeholder="6 位數登入密碼"
                 style="flex:1;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.3);color:#fff;border:1px solid rgba(16,185,129,0.4);letter-spacing:4px;">
               <button class="action-btn" style="padding:8px 12px;font-size:12px;"
-                onclick="saveRolePIN('vice_president', 'cfg-pin-vice-president')">🔐</button>
+                onclick="saveRolePIN('vice_president', 'cfg-pin-vice-president')"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button>
             </div>
           </div>
 
@@ -965,9 +1021,9 @@
           <div style="padding:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;display:flex;justify-content:space-between;align-items:center;">
              <label style="font-size:14px; color:#fff; display:flex; align-items:center; gap:8px; cursor:pointer;">
                <input type="checkbox" id="dev-global-pin-auth" style="width:20px;height:20px;accent-color:var(--red)">
-               <span>🛡️ 啟用密碼機制 (會套用至所有幹部與點名)</span>
+               <span><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg> 啟用密碼機制 (會套用至所有幹部與點名)</span>
              </label>
-             <button class="action-btn" style="padding:8px 12px;font-size:12px;background:var(--blue);" onclick="saveGlobalPinAuth()">💾 儲存</button>
+             <button class="action-btn" style="padding:8px 12px;font-size:12px;background:var(--blue);" onclick="saveGlobalPinAuth()"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg> 儲存</button>
           </div>
         </div>
       </div>
@@ -975,7 +1031,7 @@
 
       <!-- 背景影片 (伺服器 URL) -->
       <div class="dev-card" style="margin-top:16px;">
-        <div class="dev-card-header">🎥 伺服器背景影片</div>
+        <div class="dev-card-header"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg> 伺服器背景影片</div>
         <p class="dev-card-hint">輸入影片直連網址 (MP4/WebM)。</p>
         <div style="display:flex;flex-direction:column;gap:8px;">
           <input type="text" id="bg-video-url" class="dev-input" placeholder="https://example.com/video.mp4"
@@ -1000,24 +1056,24 @@
 
       <!-- 更新日誌發布區 -->
       <div class="dev-card" style="margin-top:16px;">
-        <div class="dev-card-header">📢 系統更新日誌發布</div>
+        <div class="dev-card-header"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg> 系統更新日誌發布</div>
         <p class="dev-card-hint">新發布的內容會自動累加在歷史公告的「最上方」，不會覆寫舊資料。請使用 Markdown 語法撰寫即將新增的更新內容。</p>
         <textarea id="dev-changelog-input" class="dev-input"
           style="width:100%; height:150px; padding:12px; border-radius:8px; background:rgba(0,0,0,0.3); color:#fff; border:1px solid rgba(255,255,255,0.2); margin-bottom:8px; font-family:monospace; resize:vertical; font-size:13px"
           placeholder="### 🚀 版本 22.0 更新&#10;- 新增過場動畫&#10;- 修復版面問題"></textarea>
-        <button class="action-btn wide" onclick="saveChangelog()">💾 儲存並新增公告</button>
+        <button class="action-btn wide" onclick="saveChangelog()"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg> 儲存並新增公告</button>
       </div>
 
       <!-- 清理空床殘留資料 -->
       <div class="dev-card" style="margin-top:16px;">
-        <div class="dev-card-header">🧹 清理空床殘留資料</div>
+        <div class="dev-card-header"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg> 清理空床殘留資料</div>
         <p class="dev-card-hint">將所有標記為「空床」的床位，強制清除其殘留的學號、班級、姓名，並將所有日期的請假紀錄覆寫為「✓」，確保資料乾淨統一。</p>
-        <button class="action-btn wide warning" onclick="cleanUpEmptyBeds()">🧹 執行強制清理</button>
+        <button class="action-btn wide warning" onclick="cleanUpEmptyBeds()"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg> 執行強制清理</button>
       </div>
 
       <!-- 資料庫建置中心頁面入口 -->
       <div class="dev-card" style="margin-top:16px;">
-        <div class="dev-card-header">🗄️ 資料庫建置中心</div>
+        <div class="dev-card-header"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg> 資料庫建置中心</div>
         <p class="dev-card-hint">自動在 Notion 建立電話請假、報修、回饋、備註、公告等獨立資料庫。</p>
         <button class="action-btn wide" onclick="navigateTo('database-setup')">
           前往資料庫建置中心 ›
@@ -1026,10 +1082,10 @@
 
       <!-- 查看回饋 -->
       <div class="dev-card" style="margin-top:16px;">
-        <div class="dev-card-header" style="display:flex;align-items:center;gap:8px;">📬 查看用戶回饋 <span id="feedback-unread-dot" style="display:none;width:10px;height:10px;background:var(--red);border-radius:50%;"></span></div>
+        <div class="dev-card-header" style="display:flex;align-items:center;gap:8px;"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg> 查看用戶回饋 <span id="feedback-unread-dot" style="display:none;width:10px;height:10px;background:var(--red);border-radius:50%;"></span></div>
         <p class="dev-card-hint">查看住宿生提交的應用建議與意見回饋。</p>
         <button class="action-btn wide" onclick="openFeedbackReview()" style="position:relative;">
-          📬 進入回饋收件箱
+          <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg> 進入回饋收件箱
           <span id="feedback-badge" style="display:none;position:absolute;top:-4px;right:-4px;width:12px;height:12px;background:var(--red);border-radius:50%;border:2px solid var(--bg);"></span>
         </button>
       </div>
@@ -1040,42 +1096,42 @@
   <div id="page-database-setup" class="page">
     <div style="position: relative; display: flex; justify-content: center; align-items: center; margin-bottom: 20px; padding-top: 8px;">
       <button class="back-btn" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin-top: 0;" onclick="navigateTo('settings'); setTimeout(() => document.getElementById('dev-panel').classList.add('open'), 50);">‹ 返回調適區</button>
-      <h1 style="font-size: 20px; font-weight: 800; margin:0; color: var(--text);">🗄️ 資料庫建置中心</h1>
+      <h1 style="font-size: 20px; font-weight: 800; margin:0; color: var(--text);"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg> 資料庫建置中心</h1>
     </div>
 
     <!-- 系統公告資料庫設定 -->
     <div class="dev-card" style="margin-top:16px;">
-      <div class="dev-card-header">📢 系統公告資料庫設定</div>
+      <div class="dev-card-header"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg> 系統公告資料庫設定</div>
       <p class="dev-card-hint">自動建立專屬公告資料庫，以存放並展示發布的更新內容。</p>
-      <button class="action-btn wide warning" onclick="setupChangelogDB()">⚙️ 自動建立專屬公告資料庫</button>
+      <button class="action-btn wide warning" onclick="setupChangelogDB()"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> 自動建立專屬公告資料庫</button>
     </div>
 
     <!-- 電話請假紀錄系統設定 -->
     <div class="dev-card" style="margin-top:16px;">
-      <div class="dev-card-header">📞 電話請假輔助資料庫設定</div>
+      <div class="dev-card-header"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> 電話請假輔助資料庫設定</div>
       <p class="dev-card-hint">設定「電話請假紀錄」的獨立專屬 Notion 資料庫以存放請假名單與歷程。</p>
-      <button class="action-btn wide warning" onclick="setupLeaveDB()">⚙️ 自動建立電話請假紀錄資料庫</button>
+      <button class="action-btn wide warning" onclick="setupLeaveDB()"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> 自動建立電話請假紀錄資料庫</button>
     </div>
 
     <!-- 報修紀錄系統設定 -->
     <div class="dev-card" style="margin-top:16px;">
-      <div class="dev-card-header">🔧 報修通知資料庫設定</div>
+      <div class="dev-card-header"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> 報修通知資料庫設定</div>
       <p class="dev-card-hint">設定「報修紀錄」的獨立專屬 Notion 資料庫，住宿生可透過此功能上報設施損壞。資料庫包含報修人欄位，副社長可看到是誰通報。</p>
-      <button class="action-btn wide warning" onclick="setupRepairDB()">⚙️ 自動建立報修紀錄資料庫</button>
+      <button class="action-btn wide warning" onclick="setupRepairDB()"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> 自動建立報修紀錄資料庫</button>
     </div>
 
     <!-- 回饋資料庫設定 -->
     <div class="dev-card" style="margin-top:16px;">
-      <div class="dev-card-header">💬 意見回饋資料庫設定</div>
+      <div class="dev-card-header"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 21 1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z"/></svg> 意見回饋資料庫設定</div>
       <p class="dev-card-hint">設定「意見回饋」的獨立專屬 Notion 資料庫，住宿生可透過首頁底部提交建議。</p>
-      <button class="action-btn wide warning" onclick="setupFeedbackDB()">⚙️ 自動建立回饋資料庫</button>
+      <button class="action-btn wide warning" onclick="setupFeedbackDB()"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> 自動建立回饋資料庫</button>
     </div>
 
     <!-- 備註欄位資料庫設定 -->
     <div class="dev-card" style="margin-top:16px;">
-      <div class="dev-card-header">📝 備註欄位資料庫設定</div>
+      <div class="dev-card-header"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> 備註欄位資料庫設定</div>
       <p class="dev-card-hint">設定住宿生卡片專用的「備註」獨立資料庫，自動串接回學生總表系統以便記錄學生狀況。</p>
-      <button class="action-btn wide warning" onclick="setupRemarksDB()">⚙️ 自動建立備註資料庫</button>
+      <button class="action-btn wide warning" onclick="setupRemarksDB()"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> 自動建立備註資料庫</button>
     </div>
   </div>
 
@@ -1086,7 +1142,7 @@
         const res = await fetch(window.CONFIG.WORKER_URL + '/api/setup-leave-db', { method: 'POST' });
         const data = await res.json();
         if (data.success) {
-          prompt('🎉 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 LEAVE_DB_ID：', data.LEAVE_DB_ID);
+          prompt('<svg class="ui-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/></svg> 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 LEAVE_DB_ID：', data.LEAVE_DB_ID);
         } else {
           alert('建立失敗: ' + data.error);
         }
@@ -1101,7 +1157,7 @@
         const res = await fetch(window.CONFIG.WORKER_URL + '/api/setup-changelog-db', { method: 'POST' });
         const data = await res.json();
         if (data.success) {
-          prompt('🎉 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 CHANGELOG_DB_ID：', data.CHANGELOG_DB_ID);
+          prompt('<svg class="ui-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/></svg> 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 CHANGELOG_DB_ID：', data.CHANGELOG_DB_ID);
         } else {
           alert('建立失敗: ' + data.error);
         }
@@ -1116,7 +1172,7 @@
         const res = await fetch(window.CONFIG.WORKER_URL + '/api/setup-repair-db', { method: 'POST' });
         const data = await res.json();
         if (data.success) {
-          prompt('🎉 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 REPAIR_DB_ID：', data.REPAIR_DB_ID);
+          prompt('<svg class="ui-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/></svg> 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 REPAIR_DB_ID：', data.REPAIR_DB_ID);
         } else {
           alert('建立失敗: ' + data.error);
         }
@@ -1131,7 +1187,7 @@
         const res = await fetch(window.CONFIG.WORKER_URL + '/api/setup-feedback-db', { method: 'POST' });
         const data = await res.json();
         if (data.success) {
-          prompt('🎉 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 FEEDBACK_DB_ID：', data.FEEDBACK_DB_ID);
+          prompt('<svg class="ui-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/></svg> 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 FEEDBACK_DB_ID：', data.FEEDBACK_DB_ID);
         } else {
           alert('建立失敗: ' + data.error);
         }
@@ -1146,7 +1202,7 @@
         const res = await fetch(window.CONFIG.WORKER_URL + '/api/setup-remarks-db', { method: 'POST' });
         const data = await res.json();
         if (data.success) {
-          prompt('🎉 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 REMARKS_DB_ID：', data.REMARKS_DB_ID);
+          prompt('<svg class="ui-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/></svg> 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 REMARKS_DB_ID：', data.REMARKS_DB_ID);
         } else {
           alert('建立失敗: ' + data.error);
         }
@@ -1161,7 +1217,7 @@
     <div class="modal-card" style="max-height:80vh;display:flex;flex-direction:column;max-width:500px">
       <div
         style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:12px;">
-        <h3 style="margin:0;font-size:18px">📢 最新更新公告</h3>
+        <h3 style="margin:0;font-size:18px"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg> 最新更新公告</h3>
         <button onclick="closeChangelogModal()"
           style="background:none;border:none;color:var(--dim);font-size:24px;cursor:pointer">&times;</button>
       </div>
@@ -1187,16 +1243,48 @@
   <!-- 底部導航 -->
   <div class="bottom-nav-glow"></div>
   <nav class="bottom-nav">
-    <div class="nav-item active" data-page="home"><span class="nav-icon">🏠</span><span class="nav-label">點名</span>
+    <div class="nav-item active" data-page="home"><span class="nav-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span><span class="nav-label">點名</span>
     </div>
-    <div class="nav-item" data-page="summary"><span class="nav-icon">📊</span><span class="nav-label">總表</span></div>
-    <div class="nav-item" data-page="history"><span class="nav-icon">📅</span><span class="nav-label">歷史</span></div>
-    <div class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">設定</span></div>
+    <div class="nav-item" data-page="summary"><span class="nav-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg></span><span class="nav-label">總表</span></div>
+    <div class="nav-item" data-page="history"><span class="nav-icon"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg></span><span class="nav-label">歷史</span></div>
+    <div class="nav-item" data-page="settings"><span class="nav-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-label">設定</span></div>
   </nav>
 
   <script src="config.js?v=85"></script>
   <script src="api.js?v=85"></script>
   <script src="app.js?v=85"></script>
+
+  <!-- 幹部工作手冊 Modal -->
+  <div id="duty-manual-modal" class="modal-overlay">
+    <div class="modal-card" style="max-height:80vh;display:flex;flex-direction:column;max-width:500px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:12px;">
+        <h3 style="margin:0;font-size:18px"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg> 幹部工作手冊</h3>
+        <button onclick="closeModal('duty-manual-modal')" style="background:none;border:none;color:var(--dim);font-size:24px;cursor:pointer;line-height:1;">&times;</button>
+      </div>
+      <div id="duty-manual-content" style="overflow-y:auto;flex:1;padding-right:8px;font-size:14px;line-height:1.6;color:var(--text);">
+        <!-- Timeline injected here -->
+      </div>
+      <button class="modal-btn cancel" style="margin-top:16px;width:100%" onclick="closeModal('duty-manual-modal')">關閉</button>
+    </div>
+  </div>
+
+  <!-- 值星表 Modal -->
+  <div id="duty-roster-modal" class="modal-overlay">
+    <div class="modal-card" style="max-height:80vh;display:flex;flex-direction:column;max-width:500px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:12px;">
+        <h3 style="margin:0;font-size:18px"><svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> 宿舍幹部值星輪值表</h3>
+        <div>
+          <input type="file" id="duty-roster-upload" accept="image/*" style="display:none" onchange="handleDutyRosterUpload(event)">
+          <button onclick="document.getElementById('duty-roster-upload').click()" style="background:var(--blue);border:none;color:white;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;margin-right:12px;"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg> AI 辨識更新</button>
+          <button onclick="closeModal('duty-roster-modal')" style="background:none;border:none;color:var(--dim);font-size:24px;cursor:pointer;line-height:1;">&times;</button>
+        </div>
+      </div>
+      <div id="duty-roster-content" style="overflow-y:auto;flex:1;padding-right:8px;">
+        <!-- Table injected here -->
+      </div>
+      <button class="modal-btn cancel" style="margin-top:16px;width:100%" onclick="closeModal('duty-roster-modal')">關閉</button>
+    </div>
+  </div>
 
   <!-- 圖片預覽 Modal -->
   <div id="image-preview-modal" class="modal-overlay" onclick="closeImagePreview()">

@@ -17,39 +17,97 @@ const state = {
   recentSyncs: {}, // 用於保護剛同步成功的狀態，避免 eventual consistency 導致閃爍
 };
 
-// ─── 音訊上下文 (全域共用) ───────────────────────────────────────────
+// ─── 觸覺回饋 (進階波形引擎 Web Audio API) ─────────────────────────────
 let audioCtx = null;
 
-// ─── 觸覺回饋 (Android vibrate + iOS AudioContext fallback) ──────────────
+function initAudioCtx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+}
+
+/**
+ * 播放自訂觸覺波形 (支援 ADSR 包絡線)
+ * @param {Array} curve - 強度起伏陣列 (0.0 ~ 1.0)
+ * @param {number} durationMs - 總時長 (毫秒)
+ * @param {string} waveType - 波形類型 ('sine', 'square', 'sawtooth')
+ * @param {number} frequency - 震動基頻 (Hz)
+ */
+function playHapticCurve(curve, durationMs, waveType = 'sine', frequency = 120) {
+  if (localStorage.getItem('mute_haptic') === 'true') return;
+  
+  if (navigator.vibrate && /Android/i.test(navigator.userAgent)) {
+    // Android 原生震動降級方案
+    navigator.vibrate(durationMs);
+    return;
+  }
+
+  try {
+    initAudioCtx();
+    const t = audioCtx.currentTime;
+    const duration = durationMs / 1000;
+    
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    
+    osc.type = waveType;
+    osc.frequency.setValueAtTime(frequency, t);
+    
+    gain.gain.setValueAtTime(0, t);
+    if (curve && curve.length > 0) {
+      const step = duration / curve.length;
+      for (let i = 0; i < curve.length; i++) {
+        const val = Math.max(0.0001, curve[i]);
+        gain.gain.exponentialRampToValueAtTime(val, t + (i + 1) * step);
+      }
+    }
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+    
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    osc.start(t);
+    osc.stop(t + duration + 0.05);
+  } catch (e) {
+    console.error('Haptic curve error:', e);
+  }
+}
+
 function haptic(type = 'light') {
-  // Android: native vibration
-  if (navigator.vibrate) {
+  if (localStorage.getItem('mute_haptic') === 'true') return;
+  
+  if (navigator.vibrate && /Android/i.test(navigator.userAgent)) {
     switch (type) {
-      case 'light': navigator.vibrate(10); break;
+      case 'light': navigator.vibrate(8); break;
       case 'medium': navigator.vibrate(20); break;
-      case 'heavy': navigator.vibrate([10, 30, 10]); break;
-      case 'error': navigator.vibrate([50, 30, 50, 30, 50]); break;
+      case 'heavy': navigator.vibrate([15, 20, 25]); break;
+      case 'error': navigator.vibrate([30, 40, 30, 40, 50]); break;
     }
     return;
   }
-  // iOS fallback: use a very short, nearly-silent AudioContext pulse as tactile feedback
-  try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    const t = audioCtx.currentTime;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain); gain.connect(audioCtx.destination);
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(1, t); // Sub-audible frequency
-    gain.gain.setValueAtTime(0.01, t);  // Nearly silent
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.02);
-    osc.start(t); osc.stop(t + 0.03);
-  } catch (e) { }
+
+  // iOS 預設高精度波形
+  switch (type) {
+    case 'light':
+      playHapticCurve([0.03, 0.01, 0.001], 30, 'sine', 150);
+      break;
+    case 'medium':
+      playHapticCurve([0.08, 0.04, 0.001], 45, 'sine', 100);
+      break;
+    case 'heavy':
+      playHapticCurve([0.2, 0.05, 0.001], 60, 'square', 80);
+      break;
+    case 'error':
+      playHapticCurve([0.2, 0.01, 0.2, 0.01, 0.3], 250, 'sawtooth', 60);
+      break;
+  }
 }
 
 // ─── 自訂確認對話框 (替代原生 confirm) ─────────────────────────────────────
-function showConfirmDialog({ title, message, confirmText = '確定', cancelText = '取消', danger = false, icon = '⚠️' }) {
+function showConfirmDialog({ title, message, confirmText = '確定', cancelText = '取消', danger = false, icon = '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>' }) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.className = 'confirm-overlay';
@@ -79,7 +137,7 @@ function showConfirmDialog({ title, message, confirmText = '確定', cancelText 
   });
 }
 
-// ─── 🎊 撒花慶祝效果 ──────────────────────────────────────────────────────
+// ─── 撒花慶祝效果 ──────────────────────────────────────────────────────
 function launchConfetti() {
   const container = document.createElement('div');
   container.className = 'confetti-container';
@@ -120,8 +178,29 @@ window.addEventListener('pointerdown', (e) => {
     lastTapY = e.clientY;
   }
 }, { passive: true });
+// ─── 觸覺震動反饋 ───────────────────────────────────────────────────────
+function triggerHapticFeedback(type = 'default') {
+  if (localStorage.getItem('mute_haptic') === 'true') return;
+  if (!navigator.vibrate) return;
+  try {
+    switch (type) {
+      case 'confirm': navigator.vibrate(30); break;
+      case 'back': navigator.vibrate([15, 30, 15]); break;
+      case 'unlock': navigator.vibrate([20, 40, 30]); break;
+      case 'pin': navigator.vibrate(10); break;
+      case 'dev_unlock': navigator.vibrate([30, 50, 20, 50, 40]); break;
+      case 'dev_error': navigator.vibrate([40, 50, 40, 50, 60]); break;
+      case 'heavy': navigator.vibrate(40); break;
+      case 'light': navigator.vibrate(10); break;
+      case 'roll_in': navigator.vibrate(5); break;
+      default: navigator.vibrate(15);
+    }
+  } catch(e){}
+}
+
 // ─── UI 清脆音效 (Web Audio API) ───────────────────────────────────────────
 function playClickSound(type = 'default') {
+  triggerHapticFeedback(type);
   if (localStorage.getItem('mute_sound') === 'true') return;
   try {
     // dev_unlock 用 MP3，提前 0.2s 播放（瀏覽器限制，最快就是 0s delay）
@@ -170,7 +249,7 @@ function playClickSound(type = 'default') {
 
     // ── 點名專用音效 ──
     if (type === 'roll_in') {
-      // 到齊：清脆高頻上揚 ⬆️
+      // 到齊：清脆高頻上揚 <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="19" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
       const o = audioCtx.createOscillator(), g = audioCtx.createGain();
       o.connect(g); g.connect(audioCtx.destination);
       o.type = 'sine';
@@ -182,7 +261,7 @@ function playClickSound(type = 'default') {
       return;
     }
     if (type === 'roll_leave') {
-      // 請假/課外：溫和中頻下滑 🟡
+      // 請假/課外：溫和中頻下滑 <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
       const o = audioCtx.createOscillator(), g = audioCtx.createGain();
       o.connect(g); g.connect(audioCtx.destination);
       o.type = 'triangle';
@@ -194,7 +273,7 @@ function playClickSound(type = 'default') {
       return;
     }
     if (type === 'roll_absent') {
-      // 缺席：低沉鍛擊雙擊 🔴
+      // 缺席：低沉鍛擊雙擊 <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
       [0, 0.07].forEach(delay => {
         const o = audioCtx.createOscillator(), g = audioCtx.createGain();
         o.connect(g); g.connect(audioCtx.destination);
@@ -270,7 +349,7 @@ function playClickSound(type = 'default') {
 }
 
 window.addEventListener('click', (e) => {
-  const target = e.target.closest('button, .nav-item, .sq-card, .rc-date-clickable, .date-item, .student-row, .dev-trigger, .changelog-btn, .action-btn, .modal-overlay');
+  const target = e.target.closest('button, .duty-manual-widget, #duty-roster-widget, .nav-item, .sq-card, .rc-date-clickable, .date-item, .student-row, .dev-trigger, .changelog-btn, .action-btn, .modal-overlay, .setting-row label');
   if (target) {
     if (target.id === 'back-btn' || target.classList.contains('cancel') || target.id === 'pin-cancel') {
       playClickSound('back');
@@ -317,6 +396,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (muteToggle) muteToggle.checked = true;
     }
 
+    // 初始狀態：震動反饋
+    if (localStorage.getItem('mute_haptic') === 'true') {
+      const hapticToggle = document.getElementById('setting-haptic');
+      if (hapticToggle) hapticToggle.checked = true;
+    }
+
     // 初始狀態：潘仔模式
     if (localStorage.getItem('panzi_mode') === 'true') {
       document.body.classList.add('panzi-mode');
@@ -338,7 +423,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     navigateTo('home');
     await loadData();
 
-    // ⚡ 即時同步系統 — KV 信號層輪詢
+    // <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg> 即時同步系統 — KV 信號層輪詢
     // 取代舊的 15 秒 Notion 輪詢，改為 3 秒 KV 輪詢（回應 < 10ms）
     let _pollTimer = null;
     let _lastPollTs = 0;      // 上次收到的 confirm 時間戳
@@ -435,6 +520,11 @@ function toggleMute(el) {
   localStorage.setItem('mute_sound', el.checked);
 }
 
+function toggleHaptic(el) {
+  localStorage.setItem('mute_haptic', el.checked);
+  if (!el.checked) triggerHapticFeedback('confirm');
+}
+
 function togglePanzi(el) {
   const isPanzi = el.checked;
   localStorage.setItem('panzi_mode', isPanzi);
@@ -473,13 +563,24 @@ function toggleWhiteMode(el, event) {
     Math.max(y, window.innerHeight - y)
   );
 
+  // 漸變展開的漣漪波形震動 (Ripple Effect 400ms 完全同步視覺)
+  if (localStorage.getItem('mute_haptic') !== 'true') {
+    if (navigator.vibrate && /Android/i.test(navigator.userAgent)) {
+      navigator.vibrate([8, 60, 20, 60, 40, 60, 80]); 
+    } else {
+      // 1:1 同步 400ms 動畫的完美曲線：[微起步, 落, 爬升, 落, 極強衝擊收尾]
+      const rippleCurve = [0.02, 0.01, 0.05, 0.02, 0.15, 0.25, 0.001];
+      playHapticCurve(rippleCurve, 400, 'sine', 120);
+    }
+  }
+
   if (!document.startViewTransition) {
     performAppearanceChange(isLight);
     if (typeof updateAllImagesToTheme === 'function') updateAllImagesToTheme();
     return;
   }
 
-  // 👑 獨家防閃爍算法：推算當前畫面光圈半徑，實現「狂點完美折返」
+  // <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/></svg> 獨家防閃爍算法：推算當前畫面光圈半徑，實現「狂點完美折返」
   let startRadius = isDark ? endRadius : 0;
   const now = Date.now();
   const duration = 400;
@@ -497,12 +598,12 @@ function toggleWhiteMode(el, event) {
     return Math.max(0, startRadius + (targetRadius - startRadius) * progress);
   };
 
-  // ⚡ 在截圖前先暫時關閉 backdrop-filter，大幅降低光柵化成本
+  // <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg> 在截圖前先暫時關閉 backdrop-filter，大幅降低光柵化成本
   document.documentElement.classList.add('vt-active');
 
   if (isDark) document.documentElement.classList.add('transition-dark');
 
-  // 🔥 強制瀏覽器同步重繪此幀，確保 vt-active (拔除 blur/shadow) 實時生效於舊快照的截取
+  // <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg> 強制瀏覽器同步重繪此幀，確保 vt-active (拔除 blur/shadow) 實時生效於舊快照的截取
   void document.documentElement.offsetHeight;
 
   const transition = document.startViewTransition(() => performAppearanceChange(isLight));
@@ -511,7 +612,7 @@ function toggleWhiteMode(el, event) {
     const clipPathStart = `circle(${startRadius}px at ${x}px ${y}px)`;
     const clipPathEnd = `circle(${targetRadius}px at ${x}px ${y}px)`;
 
-    // ⚡ 使用 Web Animations API 直接驅動偽元素，避免動態注入 @keyframes 觸發 style recalc
+    // <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg> 使用 Web Animations API 直接驅動偽元素，避免動態注入 @keyframes 觸發 style recalc
     const pseudo = isDark ? '::view-transition-old(root)' : '::view-transition-new(root)';
     try {
       document.documentElement.animate(
@@ -606,6 +707,15 @@ async function loadData() {
     state.config = config || {};
     state.changelogs = changelogs || [];
 
+    // 嘗試從設定載入 AI 辨識的值星表
+    if (state.config.duty_roster) {
+      try {
+        window.CONFIG.DUTY_ROSTER = JSON.parse(state.config.duty_roster);
+      } catch(e) {
+        console.error('Failed to parse dynamic duty roster', e);
+      }
+    }
+
     // 套用硬性房間規則
     applyRoomRules();
 
@@ -642,6 +752,235 @@ function checkChangelogDot() {
   } else {
     dot.style.display = 'none';
   }
+}
+
+const DUTY_TASKS = {
+  regular: {
+    main: [
+      { time: "06:00", text: "關宿舍電燈" },
+      { time: "07:50", text: "把碧院冷氣關掉 (按鈕從右下關到左上，另外三個撥扭要轉成關)" },
+      { time: "08:00", text: "櫃台桌子要整理 / 綠色本子交給學務處 / 包裹牌子朝門口放" },
+      { time: "08:05", text: "轉電話 (黃色轉 ** 77 2535644 #，白色轉 *301 322)" },
+      { time: "12:00", text: "收包裹牌子 / 管理室門打開 / 開宿舍冷氣 / 櫃檯掛機" },
+      { time: "13:00", text: "關宿舍冷氣 / 放包裹牌子" },
+      { time: "16:00", text: "去中正大樓拿包裹看信件 / 若教官值班則去拿綠本" },
+      { time: "16:50", text: "開宿舍冷氣 / 把碧院各樓層燈打開" },
+      { time: "17:00", text: "收包裹牌子 / 檢查監視器 / 解除電話 (*300, #77#) / 櫃台掛機" },
+      { time: "23:00", text: "每個樓層找一個去拿點名表下來跟檢查" },
+      { time: "23:30", text: "回收點名表 / 上保全 / 回報人數給值班宿舍" },
+      { time: "23:55", text: "風扇冷氣關閉 / 管理室上鎖 / 牌子掛值星寢室 / 轉電話 (*77)" }
+    ],
+    sub: [
+      { time: "12:00", text: "(若主值在忙) 開冷氣 / 收包裹牌子 / 在櫃檯掛機" },
+      { time: "13:00", text: "(若主值在忙) 關宿舍冷氣 / 放包裹牌子" },
+      { time: "20:00", text: "在宿舍櫃台掛機 (注意教官、學生、請假專線)" },
+      { time: "23:00", text: "關掉櫃台附近的電燈" },
+      { time: "23:30", text: "倒櫃台底下的垃圾 / 上保全 (星形鑰匙、藍色門紐)" }
+    ]
+  },
+  friday: {
+    main: [
+      { time: "06:00", text: "關宿舍電燈" },
+      { time: "07:50", text: "把碧院冷氣關掉 (按鈕從右下關到左上，另外三個撥扭要轉成關)" },
+      { time: "08:00", text: "櫃台桌子要整理 / 綠本交給學務處 / 包裹牌子朝門口放" },
+      { time: "08:05", text: "轉電話 (黃色: ** 77 2535644 #, 白色: *301 322)" },
+      { time: "12:00", text: "收包裹牌子" },
+      { time: "12:50", text: "廣播並全棟斷電 (只留1F跟3F走廊燈，其他冷氣電燈全關)" },
+      { time: "13:00", text: "管理室上鎖 / 白板寫上『如果回來打給值星』與電話" },
+      { time: "13:05", text: "管理室門口放紅龍 / 將黃綠紅三把鑰匙交給教官室" }
+    ],
+    sub: [
+      { time: "12:50", text: "協助主值廣播並確認各樓層人員清空" },
+      { time: "13:00", text: "協助檢查各寢室是否斷電與門窗關閉" }
+    ]
+  }
+};
+
+function updateDutyManualPreview() {
+  const previewEl = document.getElementById('current-task-preview');
+  if (!previewEl) return;
+  
+  const now = new Date();
+  const currentStr = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
+  const isFriday = now.getDay() === 5;
+  const tasksGroup = isFriday ? DUTY_TASKS.friday : DUTY_TASKS.regular;
+  
+  // 尋找主值與副值即將或正在進行的任務
+  let activeTask = "目前無待辦事項，請保持機動";
+  
+  // 簡單邏輯：找出大於等於現在時間，或過去一小時內的最近任務
+  let closestTask = null;
+  let maxPastTime = -1;
+  const nowTime = now.getHours() * 60 + now.getMinutes();
+  
+  const checkTasks = (tasks) => {
+    tasks.forEach(t => {
+      const [h, m] = t.time.split(':').map(Number);
+      const taskTime = h * 60 + m;
+      
+      // 任務已經開始（taskTime <= nowTime），且是最接近現在時間的
+      if (taskTime <= nowTime && taskTime > maxPastTime) {
+        maxPastTime = taskTime;
+        closestTask = t;
+      }
+    });
+  };
+  
+  checkTasks(tasksGroup.main);
+  checkTasks(tasksGroup.sub);
+  
+  if (closestTask) {
+    activeTask = `<span style="color:var(--orange); font-weight:800; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">${closestTask.time}</span> - <span style="opacity:0.9;">${closestTask.text}</span>`;
+  }
+  
+  previewEl.innerHTML = activeTask;
+}
+
+// ── 值星幹部 ──
+function openDutyRosterModal() {
+  const container = document.getElementById('duty-roster-content');
+  if (!container) return;
+  
+  if (!window.CONFIG || !window.CONFIG.DUTY_ROSTER) {
+    container.innerHTML = `
+      <div style="text-align:center; padding:40px 20px; color:var(--dim);">
+        <div style="font-size:40px; margin-bottom:12px; opacity:0.3;"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg></div>
+        <p>目前尚無值星輪值資料</p>
+        <p style="font-size:12px; margin-top:8px;">請使用上方「AI 辨識更新」上傳圖片</p>
+      </div>`;
+  } else {
+    const currentDuty = window.getCurrentDutyOfficers ? window.getCurrentDutyOfficers() : null;
+    
+    let html = '<div style="display:flex; flex-direction:column; gap:12px; padding:4px 8px 20px 8px;">';
+    
+    window.CONFIG.DUTY_ROSTER.forEach(row => {
+      const isCurrent = currentDuty && currentDuty.week === row.week;
+      
+      const cardStyle = isCurrent 
+        ? 'background:linear-gradient(145deg, rgba(255,159,10,0.15) 0%, rgba(255,159,10,0.05) 100%); border:1px solid rgba(255,159,10,0.3); transform:scale(1.02); box-shadow:0 8px 24px rgba(0,0,0,0.2);'
+        : 'background:var(--glass-bg); border:1px solid var(--glass-border);';
+      
+      const badge = isCurrent 
+        ? '<span style="font-size:10px; background:var(--orange); color:#000; padding:2px 8px; border-radius:10px; font-weight:900; margin-left:8px; text-transform:uppercase; letter-spacing:0.5px;">Current</span>' 
+        : '';
+        
+      html += `
+      <div style="padding:16px 20px; border-radius:16px; ${cardStyle} transition:all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display:flex; flex-direction:column; gap:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="font-weight:900; font-size:16px; color:${isCurrent ? 'var(--orange)' : 'var(--text)'}; font-family:-apple-system, system-ui; letter-spacing:-0.3px;">
+            第 ${row.week} 週 ${badge}
+          </div>
+          <div style="font-size:12px; color:var(--dim); font-weight:600; font-variant-numeric: tabular-nums;">
+            ${row.start} ~ ${row.end}
+          </div>
+        </div>
+        
+        <div style="display:flex; gap:12px; margin-top:2px; align-items:stretch;">
+          <div style="flex:1; background:var(--glass-bg); padding:10px 12px; border-radius:12px; border:1px solid var(--glass-border); display:flex; flex-direction:column; justify-content:center;">
+            <div style="font-size:10px; color:var(--orange); font-weight:800; margin-bottom:2px; opacity:0.8;">主值星官</div>
+            <div style="font-size:15px; font-weight:700; color:var(--text);">${row.dutyOfficer}</div>
+          </div>
+          <div style="flex:1; background:var(--glass-bg); padding:10px 12px; border-radius:12px; border:1px solid var(--glass-border); display:flex; flex-direction:column; justify-content:center;">
+            <div style="font-size:10px; color:var(--purple); font-weight:800; margin-bottom:2px; opacity:0.8;">副值星官</div>
+            <div style="font-size:15px; font-weight:700; color:var(--text);">${row.deputy}</div>
+          </div>
+        </div>
+      </div>`;
+    });
+    
+    html += '</div>';
+    container.innerHTML = html;
+  }
+  document.getElementById('duty-roster-modal').classList.add('visible');
+}
+
+function openDutyManualModal() {
+  const container = document.getElementById('duty-manual-content');
+  if (!container) return;
+  
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const isFriday = now.getDay() === 5;
+  const tasksGroup = isFriday ? DUTY_TASKS.friday : DUTY_TASKS.regular;
+  
+  const scheduleTypeTitle = isFriday ? '禮拜五中午交接' : '平日勤務';
+  
+  const renderTasks = (tasks, title, color) => {
+    let html = `
+    <div style="margin-top:24px; margin-bottom:16px;">
+      <h2 style="margin:0; font-size:clamp(1.5rem, 5vw + 1rem, 2rem); font-weight:800; color:${color}; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; letter-spacing:-0.5px; display:flex; align-items:center; gap:12px;">
+         <span style="font-size:1.2em;">${title === '主職' ? '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'}</span> ${title}
+      </h2>
+    </div>`;
+    
+    html += '<div style="display:flex; flex-direction:column; gap:12px;">';
+    
+    let activeIndex = -1;
+    let maxPast = -1;
+    tasks.forEach((t, i) => {
+      const [h, m] = t.time.split(':').map(Number);
+      const taskTime = h * 60 + m;
+      if (taskTime <= currentMinutes && taskTime > maxPast) {
+        maxPast = taskTime;
+        activeIndex = i;
+      }
+    });
+    
+    tasks.forEach((t, i) => {
+      const isCurrent = (i === activeIndex);
+      
+      const bgColor = color === '#f59e0b' ? '245,158,11' : '59,130,246';
+      
+      const boxStyle = isCurrent 
+        ? `background:linear-gradient(145deg, rgba(${bgColor}, 0.15) 0%, rgba(${bgColor}, 0.05) 100%); border:1px solid rgba(${bgColor}, 0.3); transform:scale(1.02); box-shadow:0 8px 24px rgba(0,0,0,0.2);`
+        : 'background:var(--glass-bg); border:1px solid var(--glass-border);';
+        
+      const timeColor = isCurrent ? color : 'var(--dim)';
+      const textColor = isCurrent ? 'var(--text)' : 'var(--text)';
+      
+      html += `
+      <div style="padding:16px 20px; border-radius:16px; ${boxStyle} transition:all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display:flex; flex-direction:column; gap:8px;">
+        <div style="font-weight:900; font-size:clamp(1.2rem, 3vw + 0.5rem, 1.5rem); color:${timeColor}; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; letter-spacing:-0.5px; line-height:1;">
+          ${t.time}
+        </div>
+        <div style="color:${textColor}; font-size:15px; font-weight:500; line-height:1.6; letter-spacing:0.3px;">
+          ${t.text}
+        </div>
+      </div>`;
+    });
+    
+    html += '</div>';
+    return html;
+  };
+  
+  container.innerHTML = `
+    <div style="padding:0 4px 20px 4px;">
+      <div style="text-align:center; margin-bottom:32px;">
+        <div style="font-size:clamp(2rem, 6vw + 1rem, 3rem); font-weight:900; color:var(--text); letter-spacing:-1px; margin-bottom:8px; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+          ${scheduleTypeTitle}
+        </div>
+        <div style="display:inline-flex; align-items:center; gap:8px; padding:6px 16px; background:var(--glass-bg); border-radius:20px; border:1px solid var(--glass-border);">
+          <div style="width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 10px var(--green); animation:pulse 2s infinite;"></div>
+          <span style="color:var(--dim); font-size:14px; font-weight:600; letter-spacing:0.5px; font-variant-numeric: tabular-nums;">
+            當前時間 ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}
+          </span>
+        </div>
+      </div>
+      
+      ${renderTasks(tasksGroup.main, '主職', '#f59e0b')}
+      <div style="height:24px;"></div>
+      ${renderTasks(tasksGroup.sub, '副職', '#3b82f6')}
+    </div>
+    <style>
+      @keyframes pulse {
+        0% { transform:scale(0.95); box-shadow:0 0 0 0 rgba(74, 222, 128, 0.7); }
+        70% { transform:scale(1); box-shadow:0 0 0 6px rgba(74, 222, 128, 0); }
+        100% { transform:scale(0.95); box-shadow:0 0 0 0 rgba(74, 222, 128, 0); }
+      }
+    </style>
+  `;
+  
+  document.getElementById('duty-manual-modal').classList.add('visible');
 }
 
 // ── 最新公告與日誌 (Changelog) ──
@@ -717,7 +1056,7 @@ function openChangelogModal() {
       if (timeLabel) {
         html = html.replace(
           /(<\/h[23]>)/,
-          `$1<span class="changelog-time" style="font-size:11px;margin:-2px 0 8px 2px;font-weight:400;letter-spacing:0.5px;display:block;">🕐 ${timeLabel}</span>`
+          `$1<span class="changelog-time" style="font-size:11px;margin:-2px 0 8px 2px;font-weight:400;letter-spacing:0.5px;display:block;"><svg class="ui-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${timeLabel}</span>`
         );
       }
       combinedHTML += html;
@@ -1001,6 +1340,39 @@ function renderHome() {
     animBg.appendChild(sphere);
   }
 
+  const animClass = isInitialHomeRender ? 'pop-initial' : 'pop-return';
+  
+  const dutyWidget = document.getElementById('duty-roster-widget');
+  if (dutyWidget && window.getCurrentDutyOfficers) {
+    const duty = window.getCurrentDutyOfficers();
+    const textSpan = document.getElementById('duty-roster-text');
+    if (duty && textSpan) {
+      textSpan.innerHTML = `值星(<span id="duty-roster-week">第${duty.week}週</span>): <span id="duty-roster-main">${duty.dutyOfficer}</span> / <span id="duty-roster-sub">${duty.deputy}</span>`;
+      dutyWidget.style.display = 'flex';
+    } else if (textSpan) {
+      textSpan.innerHTML = `當周無人值班或無班表`;
+      dutyWidget.style.display = 'flex';
+    }
+    
+    dutyWidget.className = 'duty-roster-widget';
+    void dutyWidget.offsetWidth; // Force reflow
+    dutyWidget.classList.add(animClass);
+    dutyWidget.style.animationDelay = isInitialHomeRender ? '0.1s' : '0s';
+    dutyWidget.style.webkitAnimationDelay = isInitialHomeRender ? '0.1s' : '0s';
+  }
+  
+  const manualWidget = document.getElementById('duty-manual-widget');
+  if (manualWidget) {
+    manualWidget.className = 'duty-manual-widget';
+    void manualWidget.offsetWidth; // Force reflow
+    manualWidget.classList.add(animClass);
+    manualWidget.style.animationDelay = isInitialHomeRender ? '0.15s' : '0s';
+    manualWidget.style.webkitAnimationDelay = isInitialHomeRender ? '0.15s' : '0s';
+  }
+  
+  // 更新幹部工作手冊預覽
+  updateDutyManualPreview();
+
   // 中隊卡片 (3列)
   const grid = document.getElementById('squad-grid');
   const floorLabels = { 1: '1樓', 2: '2樓', 3: '3樓' };
@@ -1032,13 +1404,13 @@ function renderHome() {
         id: 'president',
         label: state.config['role_label_president'] || '社長管理選單',
         color: '#f59e0b',
-        icon: state.config['role_icon_president'] || '😒'
+        icon: state.config['role_icon_president'] || '<svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>'
       },
       {
         id: 'vice_president',
         label: state.config['role_label_vice_president'] || '副社長管理選單',
         color: '#10b981',
-        icon: state.config['role_icon_vice_president'] || '🥝'
+        icon: state.config['role_icon_vice_president'] || '<svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>'
       }
     ];
     // 接續中隊卡片的動畫延遲時間
@@ -1091,7 +1463,7 @@ function enterManagement(roleId, title) {
     }
 
     navigateTo('management');
-  }, `🔐 ${title} 身分驗證`);
+  }, `<svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> ${title} 身分驗證`);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1159,7 +1531,7 @@ function renderRollCall(skipAnimation = false) {
 
   // 更新提交按鈕顯示目前日期
   const submitBtn = document.getElementById('submit-btn');
-  if (submitBtn) submitBtn.textContent = `✅ 提交 ${state.currentDate} 點名`;
+  if (submitBtn) submitBtn.textContent = `<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 提交 ${state.currentDate} 點名`;
 
   // 記住捲動位置
   const listEl = document.getElementById('rc-student-list');
@@ -1183,7 +1555,7 @@ function renderRollCall(skipAnimation = false) {
         <div class="student-info">
           <div class="student-bed" style="background:${getSquadColor(state.currentSquad)}">${s.bed}</div>
           <div>
-            <div class="student-name">${s.isEmpty ? '（空床）' : s.name}${s.isForeign ? ' 🌏' : ''}</div>
+            <div class="student-name">${s.isEmpty ? '（空床）' : s.name}${s.isForeign ? ' <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>' : ''}</div>
             <div class="student-meta">${s.class || ''} ${s.studentId || ''}</div>
           </div>
         </div>
@@ -1306,7 +1678,7 @@ function updateRollCallStats(skipAnimation = false) {
     confirmBtn.style.display = 'flex';
     const isConfirmed = state.confirmedSquads.includes(state.currentSquad);
     confirmBtn.className = 'rc-confirm-action' + (isConfirmed ? ' done' : '');
-    document.getElementById('rc-confirm-icon').textContent = isConfirmed ? '🟢' : '⭕';
+    document.getElementById('rc-confirm-icon').innerHTML = isConfirmed ? '<svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '<svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>';
     document.getElementById('rc-confirm-text').textContent = isConfirmed ? '確認本中隊已完成點名' : '確認本中隊完成點名';
   } else {
     confirmBtn.style.display = 'none';
@@ -1324,7 +1696,7 @@ async function toggleSquadConfirm() {
 
   // 顯示載入中狀態 (卡住按鈕不讓使用者亂點)
   btn.disabled = true;
-  document.getElementById('rc-confirm-text').textContent = '⏳ 即時同步中...';
+  document.getElementById('rc-confirm-text').textContent = '同步中...';
 
   // 預計要變成的最終結果
   let targetSquads = [];
@@ -1343,7 +1715,7 @@ async function toggleSquadConfirm() {
     state.confirmedSquads = targetSquads;
     state.config['confirm_' + today] = targetSquads.join(',');
 
-    showToast(isCurrentlyConfirmed ? '已取消回報' : '✅ 點名回報成功！已即時同步至總表', 'success');
+    showToast(isCurrentlyConfirmed ? '已取消回報' : '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 點名回報成功！已即時同步至總表', 'success');
 
     // 確認點名後永遠播放 Do-Mi-Sol 三連音
     if (!isCurrentlyConfirmed) {
@@ -1363,7 +1735,7 @@ function setupSubmitButton() {
   const btn = document.getElementById('submit-btn');
   btn.onclick = async () => {
     if (!state.changes.length) { showToast('沒有需要提交的變更', 'info'); return; }
-    btn.disabled = true; btn.textContent = '⏳ 提交中...';
+    btn.disabled = true; btn.textContent = '提交中...';
     try {
       for (let i = 0; i < state.changes.length; i += 45)
         await window._api.updateAttendance(state.changes.slice(i, i + 45));
@@ -1371,7 +1743,7 @@ function setupSubmitButton() {
       showSubmitSuccess();
       state.changes = [];
     } catch (err) { showToast('提交失敗：' + err.message, 'error'); }
-    finally { btn.disabled = false; btn.textContent = '✅ 提交今日點名'; }
+    finally { btn.disabled = false; btn.textContent = '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 提交今日點名'; }
   };
 }
 
@@ -1386,7 +1758,7 @@ function showSubmitSuccess() {
   const m = document.getElementById('submit-success-modal');
   m.classList.add('visible'); setTimeout(() => m.classList.remove('visible'), 3000);
 
-  // 🎊 撒花慶祝 + 觸覺
+  // 撒花慶祝 + 觸覺
   launchConfetti();
   haptic('heavy');
 
@@ -1617,7 +1989,7 @@ async function submitSwapBed() {
 
     const nameA = studentA.name || '（空床）';
     const nameB = studentB.name || '（空床）';
-    const msg = `✅ 已完整交換：${fromRoom}${fromBed} ${nameA} ↔ ${toRoom}${toBed} ${nameB}`;
+    const msg = `<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 已完整交換：${fromRoom}${fromBed} ${nameA} ↔ ${toRoom}${toBed} ${nameB}`;
     showToast(msg, 'success');
     closeModal('swap-bed-modal');
     renderSummary();
@@ -1726,7 +2098,7 @@ function renderSummary() {
   const st = computeDailyStats(date);
 
   if (date !== todayStr && state.config['snapshot_' + date]) {
-    document.getElementById('summary-date').textContent = date + ' 🔒';
+    document.getElementById('summary-date').textContent = date + ' (已鎖定)';
   } else {
     document.getElementById('summary-date').textContent = date;
   }
@@ -1773,7 +2145,7 @@ function renderSummary() {
         <div class="sqd-stat-item yellow">假 <b>${sq.leave}</b></div>
         <div class="sqd-stat-item red">缺 <b>${sq.absent}</b></div>
       </div>
-      <div class="sqd-meta">🌏 ${sq.foreign} ・ 🛏️ ${sq.empty}</div>
+      <div class="sqd-meta"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg> ${sq.foreign} ・ <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg> ${sq.empty}</div>
     </div>`;
   }).join('');
 
@@ -1845,7 +2217,7 @@ function showDateDetail(col) {
     html += '<div class="detail-list">';
     for (const s of list) { const si = CONFIG.STATUS[s.status] || CONFIG.STATUS['◎']; html += `<div class="detail-row"><span>${s.room} ${s.bed} ${s.name}</span><span style="color:${si.color}">${si.icon} ${si.label}</span></div>`; }
     html += '</div>';
-  } else html += '<p style="color:var(--dim);text-align:center;padding:20px">全員到齊 🎉</p>';
+  } else html += '<p style="color:var(--dim);text-align:center;padding:20px">全員到齊 <svg class="ui-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/></svg></p>';
   document.getElementById('hist-detail').innerHTML = html;
 }
 
@@ -1870,6 +2242,10 @@ function renderSettings() {
   const foreignInput = document.getElementById('cfg-foreign-offset');
   if (foreignInput) foreignInput.value = foreignOffset;
 
+  const geminiInput = document.getElementById('gemini-api-key');
+  if (geminiInput) {
+    geminiInput.value = localStorage.getItem('gemini_api_key') || '';
+  }
 }
 
 function adjustSetting(key, delta) {
@@ -1917,7 +2293,7 @@ async function saveRolePIN(roleId, inputId) {
     await window._api.setConfig({ [key]: pin });
     state.config[key] = pin;
     input.value = '';
-    showToast('密碼已儲存並同步至雲端 ✅', 'success');
+    showToast('密碼已儲存並同步至雲端 <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>', 'success');
   } catch (err) {
     showToast('儲存失敗：' + err.message, 'error');
   }
@@ -1935,7 +2311,7 @@ async function saveRoleAppearance(roleId) {
   if (label) { updates[`role_label_${roleId}`] = label; state.config[`role_label_${roleId}`] = label; }
   try {
     await window._api.setConfig(updates);
-    showToast('外觀已儲存並即時生效 ✅', 'success');
+    showToast('外觀已儲存並即時生效 <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>', 'success');
     if (iconEl) iconEl.value = '';
     if (labelEl) labelEl.value = '';
     // 即時重繪首頁讓變化立刻看得到
@@ -1948,14 +2324,14 @@ async function saveRoleAppearance(roleId) {
 async function testWorkerConnection() {
   const el = document.getElementById('conn-status');
   if (!el) return;
-  el.textContent = '⏳ 測試連線中...';
+  el.textContent = '測試連線中...';
   el.style.background = 'rgba(255,255,255,.05)'; el.style.color = 'var(--dim)';
   try {
     await window._api.ping();
-    el.textContent = '✅ Worker 連線正常';
+    el.innerHTML = '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Worker 連線正常';
     el.style.background = 'rgba(34,197,94,.1)'; el.style.color = 'var(--green)';
   } catch (err) {
-    el.textContent = '❌ 連線失敗';
+    el.textContent = '連線失敗';
     el.style.background = 'rgba(239,68,68,.1)'; el.style.color = 'var(--red)';
   }
 }
@@ -2223,7 +2599,7 @@ function showToast(msg, type = 'info') {
     oldest.classList.remove('visible');
     oldest.remove();
   }
-  const t = document.createElement('div'); t.className = `toast toast-${type}`; t.textContent = msg;
+  const t = document.createElement('div'); t.className = `toast toast-${type}`; t.innerHTML = msg;
   // 錯誤類型增加搖晃提醒
   if (type === 'error') {
     t.classList.add('toast-error');
@@ -2293,10 +2669,10 @@ function applyRoomRules() {
 }
 
 const NAV_PAGES = [
-  { page: 'home', emoji: '🏠', label: '點名' },
-  { page: 'summary', emoji: '📊', label: '總表' },
-  { page: 'history', emoji: '📅', label: '歷史' },
-  { page: 'settings', emoji: '⚙️', label: '設定' },
+  { page: 'home', emoji: '<svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>', label: '點名' },
+  { page: 'summary', emoji: '<svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>', label: '總表' },
+  { page: 'history', emoji: '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>', label: '歷史' },
+  { page: 'settings', emoji: '<svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>', label: '設定' },
 ];
 
 // 導覽列 ICON 硬編碼映射
@@ -2316,9 +2692,17 @@ function applyNavIcons() {
     const srcBase = NAV_ICON_MAP[page];
     if (srcBase) {
       const src = getIconSrc(srcBase);
-      // 加上 onerror 備援機制，如果發生錯誤就 fallback 回 emoji
-      const defEmoji = NAV_PAGES.find(n => n.page === page)?.emoji || '⚙️';
-      iconEl.innerHTML = `<img class="nav-icon-img" src="${src}" alt="${page}" style="width:28px;height:28px;object-fit:contain;margin-bottom:-2px;" onerror="this.outerHTML='${defEmoji}'">`;
+      // 加上 onerror 備援機制，如果發生錯誤就 fallback 回 emoji (現在已改為 SVG)
+      const defEmoji = NAV_PAGES.find(n => n.page === page)?.emoji || '<svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
+      
+      const img = document.createElement('img');
+      img.className = 'nav-icon-img';
+      img.src = src;
+      img.alt = page;
+      img.style.cssText = 'width:28px;height:28px;object-fit:contain;margin-bottom:-2px;';
+      img.onerror = function() { this.outerHTML = defEmoji; };
+      iconEl.innerHTML = '';
+      iconEl.appendChild(img);
     } else {
       const def = NAV_PAGES.find(n => n.page === page);
       if (def) iconEl.textContent = def.emoji;
@@ -2354,7 +2738,7 @@ function openDevAuth() {
   overlay.className = 'modal-overlay visible';
   overlay.innerHTML = `
     <div class="modal-card">
-      <h3>🔐 開發者驗證</h3>
+      <h3><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> 開發者驗證</h3>
       <p class="modal-desc">請輸入 6 位數開發者密碼</p>
       <input type="password" id="dev-pin-input" class="pin-input" maxlength="6" placeholder="••••••" inputmode="numeric" autocomplete="off">
       <div class="modal-actions">
@@ -2381,7 +2765,7 @@ function openDevAuth() {
           pinAuthCheckbox.checked = state.config['global_pin_auth'] !== 'false';
         }
         initDevChangelog();
-        showToast('🔓 開發者模式已解鎖', 'success');
+        showToast('開發者模式已解鎖', 'success');
       }, 200);
     } else {
       playClickSound('dev_error'); // 錯誤密碼播放「錯誤音」而非成功音
@@ -2408,14 +2792,15 @@ window.saveGlobalPinAuth = saveGlobalPinAuth;
 // ═════════════════════════════════════════════════════════════════════════════
 function loadGlobalBgVideo() {
   // 從 Notion 全域設定讀取
-  const url = state.config['bg_video_url'];
+  const rawUrl = state.config['bg_video_url'];
+  const url = (rawUrl || '').trim();
   const scale = state.config['bg_video_scale'] || 1.0;
   const opacity = state.config['bg_video_opacity'] || 0.25;
 
   const container = document.getElementById('custom-video-bg');
   const animBg = document.querySelector('.home-anim-bg');
 
-  if (url) {
+  if (url && url.startsWith('http')) {
     container.innerHTML = `<video src="${url}" autoplay loop muted playsinline style="--target-scale: ${scale}; --target-opacity: ${opacity}; opacity: 0;"></video>`;
     const vid = container.querySelector('video');
     vid.addEventListener('loadeddata', () => {
@@ -2511,10 +2896,10 @@ async function clearBgVideo() {
 async function cleanUpEmptyBeds() {
   const ok = await showConfirmDialog({
     title: '清理空床資料',
-    message: '確定要將所有空床的「姓名、學號、班級」清空，並「所有日期的請假紀錄」覆寫為 ✅？此操作無法還原！',
+    message: '確定要將所有空床的「姓名、學號、班級」清空，並「所有日期的請假紀錄」覆寫為 <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>？此操作無法還原！',
     confirmText: '確定清理',
     danger: true,
-    icon: '🧹'
+    icon: '<svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>'
   });
   if (!ok) return;
 
@@ -2570,7 +2955,7 @@ async function fillEmptyBedsWithCheckmarks() {
     message: '確定要將「目前所有空床」的請假紀錄全部強制補上「✓」嗎？',
     confirmText: '確定執行',
     danger: false,
-    icon: '✅'
+    icon: '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'
   });
   if (!ok) return;
 
@@ -2650,12 +3035,12 @@ async function renderResidentReviewList() {
         <div class="review-card">
           <div class="review-card-info">
             <div class="review-card-name">${req.name}<span class="review-card-meta">${req.class} • ${req.studentId}</span></div>
-            <div class="review-card-bed">🛏️ 申請補入: ${req.room} ${req.bed} 床</div>
+            <div class="review-card-bed"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg> 申請補入: ${req.room} ${req.bed} 床</div>
             <div class="review-card-time">⏰ 送出時間: ${timeStr}</div>
-            ${req.isForeign ? '<div class="review-card-badge foreign">🌍 外籍生</div>' : ''}
+            ${req.isForeign ? '<div class="review-card-badge foreign"><svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg> 外籍生</div>' : ''}
           </div>
           <div class="review-card-actions">
-            <button class="review-approve-btn" onclick="approveResidentAddReq('${req.id}')">✅ 通過並寫入</button>
+            <button class="review-approve-btn" onclick="approveResidentAddReq('${req.id}')"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 通過並寫入</button>
             <button class="review-reject-btn" onclick="rejectResidentAddReq('${req.id}')">✕ 駁回</button>
           </div>
         </div>
@@ -2671,9 +3056,9 @@ async function approveResidentAddReq(reqId) {
   const ok = await showConfirmDialog({
     title: '核准申請',
     message: '確定要通過申請，將該學生正式寫入總表床位嗎？',
-    confirmText: '✅ 通過並寫入',
+    confirmText: '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 通過並寫入',
     danger: false,
-    icon: '📝'
+    icon: '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>'
   });
   if (!ok) return;
   showLoading(true);
@@ -2727,7 +3112,7 @@ async function rejectResidentAddReq(reqId) {
     message: '確定要駁回此申請嗎？紀錄將被刪除。',
     confirmText: '駁回',
     danger: true,
-    icon: '❌'
+    icon: '<svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>'
   });
   if (!ok) return;
   showLoading(true);
@@ -2825,9 +3210,9 @@ async function renderLeaveRecordsList() {
           <div style="font-size:16px;font-weight:bold;color:var(--text);">${r.title}</div>
           <div style="font-size:12px;color:rgba(255,255,255,0.5);">${new Date(r.createdAt).toLocaleString()}</div>
         </div>
-        <div style="font-size:14px;color:var(--dim);margin-bottom:4px;">🧑‍🎓 ${r.roomBed} ${r.name}</div>
-        <div style="font-size:14px;color:var(--dim);margin-bottom:4px;">📅 ${r.dateStart} ~ ${r.dateEnd}</div>
-        <div style="font-size:14px;color:var(--dim);">👤 處理人：${r.handler || '未填寫'}</div>
+        <div style="font-size:14px;color:var(--dim);margin-bottom:4px;"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg> ${r.roomBed} ${r.name}</div>
+        <div style="font-size:14px;color:var(--dim);margin-bottom:4px;"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg> ${r.dateStart} ~ ${r.dateEnd}</div>
+        <div style="font-size:14px;color:var(--dim);"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> 處理人：${r.handler || '未填寫'}</div>
       </div>
     `).join('');
   } catch (err) {
@@ -3058,7 +3443,7 @@ async function renderRepairReviewList() {
     const records = await res.json();
 
     if (!records || records.length === 0) {
-      container.innerHTML = '<div style="color:var(--dim);text-align:center;padding:40px;">目前沒有任何報修紀錄 🎉</div>';
+      container.innerHTML = '<div style="color:var(--dim);text-align:center;padding:40px;">目前沒有任何報修紀錄 <svg class="ui-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/></svg></div>';
       return;
     }
 
@@ -3071,11 +3456,11 @@ async function renderRepairReviewList() {
 
       html += `
         <div class="repair-record-card">
-          <div class="repair-record-reporter">🗣️ 報修人：${rec.reporter || rec.name || rec.title || rec.Name || rec.author || '（未知填寫人）'}</div>
+          <div class="repair-record-reporter"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 1 0-9-9c0 1.48.36 2.89 1 4.12l-1.5 4.5 4.5-1.5c1.23.64 2.64 1 4.12 1z"/><path d="M12 12v.01"/><path d="M16 12v.01"/><path d="M8 12v.01"/></svg> 報修人：${rec.reporter || rec.name || rec.title || rec.Name || rec.author || '（未知填寫人）'}</div>
           <div class="repair-record-reason">${rec.reason || '（無描述）'}</div>
           ${photosHtml ? `<div class="repair-record-photos">${photosHtml}</div>` : ''}
           <div class="repair-record-time">⏰ ${timeStr}</div>
-          <button class="repair-done-btn" onclick="markRepairDone('${rec.id}')">✅ 已回報處理</button>
+          <button class="repair-done-btn" onclick="markRepairDone('${rec.id}')"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 已回報處理</button>
         </div>
       `;
     });
@@ -3091,7 +3476,7 @@ async function markRepairDone(id) {
     message: '確定此報修已經回報處理完畢？紀錄將會被刪除。',
     confirmText: '確認完成',
     danger: false,
-    icon: '🛠️'
+    icon: '<svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'
   });
   if (!ok) return;
   showLoading(true);
@@ -3215,7 +3600,7 @@ async function submitFeedback() {
     const data = await res.json();
     if (data.success) {
       playClickSound('all_present');
-      showToast('感謝您的回饋！我們會認真閱讀 💜', 'success');
+      showToast('感謝您的回饋！我們會認真閱讀 <svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>', 'success');
       feedbackPhotos = [];
       // 延遲跳轉讓送出動畫播完
       setTimeout(() => navigateTo('home'), 2000);
@@ -3250,7 +3635,7 @@ async function renderFeedbackReviewList() {
     if (badge) badge.style.display = 'none';
 
     if (!records || records.length === 0) {
-      container.innerHTML = '<div style="color:var(--dim);text-align:center;padding:40px;">目前沒有任何用戶回饋 🎉</div>';
+      container.innerHTML = '<div style="color:var(--dim);text-align:center;padding:40px;">目前沒有任何用戶回饋 <svg class="ui-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/></svg></div>';
       return;
     }
 
@@ -3263,11 +3648,11 @@ async function renderFeedbackReviewList() {
 
       html += `
         <div class="repair-record-card">
-          <div class="repair-record-reporter">🙋 ${rec.name || '匿名'}</div>
+          <div class="repair-record-reporter"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="m16 11 2-2"/><path d="m18 9 2-2"/><path d="m18 9 2 2"/><path d="m18 9-2-2"/></svg> ${rec.name || '匿名'}</div>
           <div class="repair-record-reason">${rec.content || '（無內容）'}</div>
           ${photosHtml ? `<div class="repair-record-photos">${photosHtml}</div>` : ''}
           <div class="repair-record-time">⏰ ${timeStr}</div>
-          <button class="repair-done-btn" onclick="markFeedbackRead('${rec.id}')">✅ 已讀並歸檔</button>
+          <button class="repair-done-btn" onclick="markFeedbackRead('${rec.id}')"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 已讀並歸檔</button>
         </div>
       `;
     });
@@ -3283,7 +3668,7 @@ async function markFeedbackRead(id) {
     message: '確定要將此回饋標記為已讀並歸檔嗎？',
     confirmText: '已讀歸檔',
     danger: false,
-    icon: '📨'
+    icon: '<svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>'
   });
   if (!ok) return;
   showLoading(true);
@@ -3411,7 +3796,7 @@ function renderStudentFileCards(sweepIn = false) {
 
   if (_sfResults.length === 0) {
     track.innerHTML = `<div class="sf-empty-hint">
-      <div style="font-size:48px; margin-bottom:12px;">😔</div>
+      <div style="font-size:48px; margin-bottom:12px;"><svg class="ui-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
       <div style="color:var(--dim); font-size:14px;">找不到符合的住宿生或床位</div>
     </div>`;
     return;
@@ -3434,7 +3819,7 @@ function renderStudentFileCards(sweepIn = false) {
     card.innerHTML = `
       <div class="sf-card-title" style="display: flex; align-items: flex-start; position: relative;">
         <span class="sf-title-text" style="flex:1;">${s.room || ''} ${s.bed || ''}</span>
-        <button class="sf-icon-btn sf-broom-btn" onclick="clearStudentData(this)" title="清空床位資料" style="margin-top: 2px; margin-right: 6px;">🧹</button>
+        <button class="sf-icon-btn sf-broom-btn" onclick="clearStudentData(this)" title="清空床位資料" style="margin-top: 2px; margin-right: 6px;"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
         <div class="sf-card-badge-relative" style="margin-top: 4px; margin-right: 4px; transform-origin: center right;">${s.isForeign ? '外籍生' : (s.isEmpty || !s.name ? '空床' : (s.squad || '無班級'))}</div>
       </div>
       
@@ -3463,7 +3848,7 @@ function renderStudentFileCards(sweepIn = false) {
           <label>備註 (情況註記)</label>
           <textarea class="sf-input-remarks styled-input" style="flex: 1; resize: none; font-size: 13px; line-height: 1.4; padding: 10px;" placeholder="住宿生備註欄">${s.remarks || ''}</textarea>
         </div>
-        <button class="sf-save-action-btn" onclick="autoSaveStudentFile(this)" style="margin-top: 16px;">💾 儲存修改</button>
+        <button class="sf-save-action-btn" onclick="autoSaveStudentFile(this)" style="margin-top: 16px;"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg> 儲存修改</button>
       </div>
     `;
 
@@ -3572,6 +3957,7 @@ function setup2DCarouselInteraction() {
     const activeCard = Array.from(track.children).find(c => c.classList.contains('active'));
     if (activeCard) {
       activeCard.classList.add('is-3d-active');
+        haptic('medium');
       _3dCardIndex = _sfActiveIndex;
       window._is3dMode = true;
       if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
@@ -3747,9 +4133,17 @@ function setup2DCarouselInteraction() {
   let _currentTransitionTime = 0.5;
   let _animFrame = null;
 
+  let _lastHapticIdx = -1;
   function updateContinuousScale(trackXStr) {
     let currentTrackX = trackXStr !== undefined ? parseFloat(trackXStr) : _currentX;
     const centerIdxFloat = -currentTrackX / _cardWidth;
+    
+    // 震動反饋：當經過卡片中心點時觸發
+    const currentIdx = Math.round(centerIdxFloat);
+    if (currentIdx !== _lastHapticIdx) {
+      if (_lastHapticIdx !== -1) haptic('light');
+      _lastHapticIdx = currentIdx;
+    }
 
     for (let i = 0; i < track.children.length; i++) {
       const c = track.children[i];
@@ -4031,7 +4425,7 @@ window.autoSaveStudentFile = async function (elem) {
   let oldHtml = '';
   if (btn) {
     oldHtml = btn.innerHTML;
-    btn.innerHTML = '🔄 儲存中...';
+    btn.innerHTML = '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 17H3"/><path d="m6 10-3 3 3 3"/><path d="M3 7h18"/><path d="m18 20 3-3-3-3"/></svg> 儲存中...';
     btn.disabled = true;
   } else {
     showToast('自動儲存中...', 'info');
@@ -4081,7 +4475,7 @@ window.autoSaveStudentFile = async function (elem) {
     localStorage.setItem('biyuan_temp_students_update', JSON.stringify(state.students));
 
     if (btn) {
-      btn.innerHTML = '✅ 已儲存';
+      btn.innerHTML = '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 已儲存';
       btn.style.background = '#10b981';
       btn.style.color = '#fff';
       setTimeout(() => {
@@ -4091,14 +4485,14 @@ window.autoSaveStudentFile = async function (elem) {
         btn.style.color = '';
       }, 1500);
     } else {
-      showToast('資料已自動同步至總表 ✅', 'success');
+      showToast('資料已自動同步至總表 <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>', 'success');
     }
 
     if (typeof playClickSound === 'function') playClickSound('all_present');
 
   } catch (err) {
     if (btn) {
-      btn.innerHTML = '❌ 儲存失敗';
+      btn.innerHTML = '儲存失敗';
       btn.style.background = '#ef4444';
       btn.style.color = '#fff';
       setTimeout(() => {
@@ -4134,4 +4528,97 @@ window.closeImagePreview = function () {
       document.getElementById('image-preview-img').src = '';
     }, 300);
   }
+};
+
+window.saveGeminiKey = function(val) {
+  localStorage.setItem('gemini_api_key', (val || '').trim());
+  showToast('API Key 已儲存本機', 'success');
+};
+
+window.handleDutyRosterUpload = async function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  // API Key 改由 Cloudflare Worker 後端隱藏保護
+  
+  const container = document.getElementById('duty-roster-content');
+  const originalHtml = container.innerHTML;
+  
+  // Apple-style premium loading
+  container.innerHTML = `
+    <div style="text-align:center; padding:60px 20px; color:var(--dim);">
+      <div class="ai-loading-spinner" style="width:60px; height:60px; margin:0 auto 24px; position:relative;">
+        <div style="position:absolute; inset:0; border:4px solid rgba(10,132,255,0.1); border-radius:50%;"></div>
+        <div style="position:absolute; inset:0; border:4px solid transparent; border-top-color:var(--blue); border-radius:50%; animation:spin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;"></div>
+      </div>
+      <div style="font-size:18px; font-weight:700; color:var(--text); margin-bottom:8px; letter-spacing:-0.5px;"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg> AI 智慧辨識中</div>
+      <p style="font-size:14px; opacity:0.6;">正在掃描輪值表細節，請稍候...</p>
+      <div style="margin-top:24px; font-size:11px; font-weight:600; color:var(--blue); background:rgba(10,132,255,0.1); padding:4px 12px; border-radius:20px; display:inline-block; animation:pulse 2s infinite;">⚡ 暴力圖像 2.7 引擎運算中</div>
+    </div>`;
+  
+  try {
+    const reader = new FileReader();
+    const base64Data = await new Promise(resolve => {
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.readAsDataURL(file);
+    });
+    
+    // ... rest of the logic remains same for API call
+    const targetRooms = ['211', '311', '113', '112'];
+    const officers = state.students
+      .filter(s => targetRooms.some(r => s.room && s.room.includes(r)))
+      .map(s => s.name)
+      .filter(n => n && !n.includes('空床'));
+    const officersText = officers.length > 0 ? `\n\n另外，本宿舍的幹部通常住在 211, 311, 113, 112 房。以下是這些房間的住宿生名單作為參考，如果辨識到的名字與這些人相似，請優先修正為名單上的正確名字：\n${officers.join(', ')}` : '';
+
+    const prompt = `你是一個值星表資料擷取專家。請讀取這張圖片中的值星幹部輪值表，並輸出為純 JSON 陣列格式。
+不要輸出任何 Markdown 標記，只要合法的 JSON 陣列。
+陣列中的每個物件需包含：
+- week: (整數，週次，如 1)
+- start: (字串，開始日期，例如 "02/20")
+- end: (字串，結束日期，例如 "02/26")
+- dutyOfficer: (字串，值星官姓名)
+- deputy: (字串，副值星官姓名)
+若有任何辨識不清的地方請自行合理推斷，若有換行請視為同一個字串處理。${officersText}`;
+    
+    const res = await fetch(window.CONFIG.KV_API_URL + '/api/ai-parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: prompt },
+            { inlineData: { mimeType: file.type, data: base64Data } }
+          ]
+        }],
+        generationConfig: {
+          responseMimeType: "application/json"
+        }
+      })
+    });
+    
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    
+    let textResult = data.candidates[0].content.parts[0].text;
+    textResult = textResult.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim();
+    const parsedData = JSON.parse(textResult);
+    
+    if (Array.isArray(parsedData) && parsedData.length > 0) {
+      await window._api.setConfig({ duty_roster: JSON.stringify(parsedData) });
+      state.config.duty_roster = JSON.stringify(parsedData);
+      window.CONFIG.DUTY_ROSTER = parsedData;
+      
+      showToast('值星表更新成功！', 'success');
+      openDutyRosterModal(); 
+      if (typeof renderHome === 'function') renderHome();
+    } else {
+      throw new Error("辨識結果格式不正確");
+    }
+  } catch(err) {
+    showToast('辨識失敗: ' + err.message, 'error');
+    container.innerHTML = originalHtml;
+  }
+  
+  e.target.value = '';
 };
