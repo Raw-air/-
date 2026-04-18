@@ -1275,13 +1275,13 @@ function renderHome() {
   const dutyWidget = document.getElementById('duty-roster-widget');
   if (dutyWidget && window.getCurrentDutyOfficers) {
     const duty = window.getCurrentDutyOfficers();
-    if (duty) {
-      document.getElementById('duty-roster-week').textContent = `第${duty.week}週`;
-      document.getElementById('duty-roster-main').textContent = duty.dutyOfficer;
-      document.getElementById('duty-roster-sub').textContent = duty.deputy;
-      dutyWidget.style.display = 'inline-flex';
-    } else {
-      dutyWidget.style.display = 'none';
+    const textSpan = document.getElementById('duty-roster-text');
+    if (duty && textSpan) {
+      textSpan.innerHTML = `值星(<span id="duty-roster-week">第${duty.week}週</span>): <span id="duty-roster-main">${duty.dutyOfficer}</span> / <span id="duty-roster-sub">${duty.deputy}</span>`;
+      dutyWidget.style.display = 'flex';
+    } else if (textSpan) {
+      textSpan.innerHTML = `當周無人值班或無班表`;
+      dutyWidget.style.display = 'flex';
     }
   }
   
