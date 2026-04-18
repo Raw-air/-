@@ -808,8 +808,7 @@ body {
   justify-content: center;
   font-size: 18px;
   font-weight: 900;
-  color: var(--text);
-  box-shadow: 0 2px 12px color-mix(in srgb, var(--sq-c, var(--indigo)) 40%, transparent)
+  color: #ffffff;\n  box-shadow: 0 2px 12px color-mix(in srgb, var(--sq-c, var(--indigo)) 40%, transparent)
 }
 
 .sq-name {

@@ -1271,7 +1271,8 @@ function renderHome() {
     animBg.appendChild(sphere);
   }
 
-  // ── 值星官小工具 ──
+  const animClass = isInitialHomeRender ? 'pop-initial' : 'pop-return';
+  
   const dutyWidget = document.getElementById('duty-roster-widget');
   if (dutyWidget && window.getCurrentDutyOfficers) {
     const duty = window.getCurrentDutyOfficers();
@@ -1283,6 +1284,21 @@ function renderHome() {
       textSpan.innerHTML = `當周無人值班或無班表`;
       dutyWidget.style.display = 'flex';
     }
+    
+    dutyWidget.className = 'duty-roster-widget';
+    void dutyWidget.offsetWidth; // Force reflow
+    dutyWidget.classList.add(animClass);
+    dutyWidget.style.animationDelay = isInitialHomeRender ? '0.1s' : '0s';
+    dutyWidget.style.webkitAnimationDelay = isInitialHomeRender ? '0.1s' : '0s';
+  }
+  
+  const manualWidget = document.getElementById('duty-manual-widget');
+  if (manualWidget) {
+    manualWidget.className = 'duty-manual-widget';
+    void manualWidget.offsetWidth; // Force reflow
+    manualWidget.classList.add(animClass);
+    manualWidget.style.animationDelay = isInitialHomeRender ? '0.15s' : '0s';
+    manualWidget.style.webkitAnimationDelay = isInitialHomeRender ? '0.15s' : '0s';
   }
   
   // 更新幹部工作手冊預覽
