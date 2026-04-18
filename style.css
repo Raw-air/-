@@ -2056,8 +2056,7 @@ body.light-mode #changelog-content .changelog-time {
   justify-content: center;
   opacity: 0;
   pointer-events: none;
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
+  
   transition: opacity 0.25s cubic-bezier(0.2, 0, 0, 1);
   padding: 20px;
   will-change: opacity;
@@ -2066,6 +2065,8 @@ body.light-mode #changelog-content .changelog-time {
 .modal-overlay.visible {
   opacity: 1;
   pointer-events: auto;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
 }
 
 .modal-card {
@@ -3077,8 +3078,7 @@ body.light-mode .modal-overlay {
   justify-content: center;
   opacity: 0;
   pointer-events: none;
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
+  
   transition: opacity 0.25s cubic-bezier(0.2, 0, 0, 1);
   padding: 20px;
   will-change: opacity;
