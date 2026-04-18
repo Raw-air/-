@@ -10,27 +10,27 @@
 
 :root {
   --rgb-glass: 255, 255, 255;
-  --rgb-bg: 10, 10, 16;
-  --bg: #0a0a10;
-  --bg2: #111118;
-  --card: rgba(22, 22, 32, 0.85);
-  --card-h: rgba(30, 30, 42, 0.92);
-  --border: rgba(255, 255, 255, 0.06);
-  --border2: rgba(255, 255, 255, 0.12);
+  --rgb-bg: 21, 21, 24;
+  --bg: #151518;
+  --bg2: #1c1c20;
+  --card: rgba(38, 38, 44, 0.75);
+  --card-h: rgba(48, 48, 56, 0.85);
+  --border: rgba(255, 255, 255, 0.08);
+  --border2: rgba(255, 255, 255, 0.14);
   --text: #eeeef2;
   --dim: #8a8a96;
   --muted: #5c5c68;
   
   /* Glass effect tokens */
-  --glass-bg: rgba(255, 255, 255, 0.03);
-  --glass-border: rgba(255, 255, 255, 0.06);
-  --shadow-sm: 0 2px 12px rgba(0, 0, 0, 0.4);
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --shadow-sm: 0 2px 12px rgba(0, 0, 0, 0.35);
   
-  /* Enhanced Neumorphic shadow mix — deep obsidian with refined edge highlights */
-  --shadow-dark: rgba(0, 0, 0, 0.9);
-  --shadow-light: rgba(255, 255, 255, 0.06);
-  --neu-out: 8px 8px 20px var(--shadow-dark), -4px -4px 10px var(--shadow-light);
-  --neu-in: inset 4px 4px 10px rgba(0,0,0,0.8), inset -2px -2px 6px rgba(255, 255, 255, 0.04);
+  /* Neumorphic shadow mix — restored original depth */
+  --shadow-dark: rgba(0, 0, 0, 0.55);
+  --shadow-light: rgba(255, 255, 255, 0.08);
+  --neu-out: 6px 6px 16px var(--shadow-dark), -3px -3px 10px var(--shadow-light);
+  --neu-in: inset 4px 4px 10px rgba(0,0,0,0.6), inset -2px -2px 6px rgba(255, 255, 255, 0.05);
 
   --green: #30d158;
   --yellow: #ffd60a;
@@ -4040,13 +4040,13 @@ body.light-mode .focus-indicator { background: #6366f1; }
 
 .sf-card-area-2d {
   position: relative;
-  height: 100%;
+  width: 100%;
+  height: calc(100% + 400px);
+  margin: -200px 0;
   overflow: visible; /* Prevent shadows from being clipped vertically */
   display: flex;
   align-items: center;
   touch-action: manipulation;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 5%, black 95%, transparent 100%);
-  mask-image: linear-gradient(90deg, transparent 0%, black 5%, black 95%, transparent 100%);
 }
 .sf-card-track {
   display: flex;
