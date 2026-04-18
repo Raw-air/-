@@ -72,7 +72,9 @@ body.light-mode {
 }
 
 html {
-  font-size: 15px
+  font-size: 15px;
+  background: var(--bg);
+  height: 100%;
 }
 
 body {
@@ -210,7 +212,7 @@ body {
   }
 }
 
-/* 杞夊牬锛氱祩绔鑷劧鎺夎惤鑸囪儗鏅贰鍑?(涓嶆渻鐪嬪埌鑳屾櫙榛戞瑁佸垏閭婄罚) */
+/* 杞夊牬锛氱祩绔鑷льної鎺夎惤鑸囪儗鏅贰鍑?(涓嶆渻鐪嬪埌鑳屾櫙榛戞瑁佸垏閭婄罚) */
 .loading-overlay.exit-drop {
   animation: fade-out-overlay 0.7s ease-in both;
 }
@@ -372,12 +374,12 @@ body {
 
 @keyframes pageExitLeft {
   from { opacity: 1; transform: translateX(0); }
-  to   { opacity: 0; transform: translateX(-30px); }
+  to   { opacity: 0; transform: translateX(-30px) }
 }
 
 @keyframes pageExitRight {
   from { opacity: 1; transform: translateX(0); }
-  to   { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 0; transform: translateX(30px) }
 }
 
 /* 棣栭爜閫忔槑锛岃畵妤靛厜鐞冭儗鏅閫忥紱鍏朵粬闋侀潰鐢ㄤ笉閫忔槑鑳屾櫙钃嬩綇鍕曠暙 */
@@ -471,8 +473,7 @@ body {
 #custom-video-bg {
   position: fixed;
   inset: 0;
-  z-index: -3;
-  /* 鍦ㄦ墍鏈夋澅瑗胯儗寰?*/
+  z-index: 0;
   pointer-events: none;
   overflow: hidden;
   transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s ease;
@@ -506,7 +507,7 @@ body {
 .home-anim-bg {
   position: fixed;
   inset: 0;
-  z-index: -2;
+  z-index: 0;
   pointer-events: none;
   overflow: hidden;
   display: flex;
@@ -808,7 +809,8 @@ body {
   justify-content: center;
   font-size: 18px;
   font-weight: 900;
-  color: #ffffff;\n  box-shadow: 0 2px 12px color-mix(in srgb, var(--sq-c, var(--indigo)) 40%, transparent)
+  color: #ffffff;
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--sq-c, var(--indigo)) 40%, transparent)
 }
 
 .sq-name {
@@ -1266,7 +1268,6 @@ body {
   transition: all .25s;
   animation: fabPulse 2.5s ease-in-out infinite;
   letter-spacing: 0.5px;
-  box-shadow: 0 4px 16px rgba(10, 132, 255, 0.3);
 }
 
 .fab-empty-bed:hover {
@@ -4853,4 +4854,9 @@ body.light-mode .confirm-btn.cancel-btn {
 }
 .sq-card .ui-icon { margin: 0; }
 .modal-icon .ui-icon { width: 32px; height: 32px; margin: 0; }
+
+body.light-mode .anim-line::after {
+  background: linear-gradient(90deg, transparent 0%, hsla(var(--hue, 240), 80%, 40%, 0.3) 15%, hsla(var(--hue, 240), 80%, 35%, 0.9) 50%, hsla(var(--hue, 240), 80%, 40%, 0.3) 85%, transparent 100%);
+  box-shadow: 0 0 16px 3px hsla(var(--hue, 240), 80%, 40%, 0.5);
+}
 
