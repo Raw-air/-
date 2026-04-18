@@ -505,11 +505,15 @@ function toggleWhiteMode(el, event) {
     Math.max(y, window.innerHeight - y)
   );
 
-  // 漸漸放大的波紋震動效果
-  if (navigator.vibrate) {
-    navigator.vibrate([15, 30, 25, 40, 50]); 
+  // 漸漸放大的波紋震動效果 (配合 400ms 的展開動畫)
+  if (navigator.vibrate && /Android/i.test(navigator.userAgent)) {
+    navigator.vibrate([10, 50, 15, 60, 20, 70, 30]); 
   } else {
-    haptic('medium');
+    // iOS 或其他裝置的漸變漣漪震動
+    haptic('light');
+    setTimeout(() => haptic('light'), 100);
+    setTimeout(() => haptic('medium'), 220);
+    setTimeout(() => haptic('heavy'), 360);
   }
 
   if (!document.startViewTransition) {
