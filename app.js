@@ -505,6 +505,8 @@ function toggleWhiteMode(el, event) {
     Math.max(y, window.innerHeight - y)
   );
 
+  haptic('medium');
+
   if (!document.startViewTransition) {
     performAppearanceChange(isLight);
     if (typeof updateAllImagesToTheme === 'function') updateAllImagesToTheme();
@@ -4062,9 +4064,17 @@ function setup2DCarouselInteraction() {
   let _currentTransitionTime = 0.5;
   let _animFrame = null;
 
+  let _lastHapticIdx = -1;
   function updateContinuousScale(trackXStr) {
     let currentTrackX = trackXStr !== undefined ? parseFloat(trackXStr) : _currentX;
     const centerIdxFloat = -currentTrackX / _cardWidth;
+    
+    // 震動反饋：當經過卡片中心點時觸發
+    const currentIdx = Math.round(centerIdxFloat);
+    if (currentIdx !== _lastHapticIdx) {
+      if (_lastHapticIdx !== -1) haptic('light');
+      _lastHapticIdx = currentIdx;
+    }
 
     for (let i = 0; i < track.children.length; i++) {
       const c = track.children[i];
