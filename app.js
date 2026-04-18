@@ -38,7 +38,7 @@ function initAudioCtx() {
  */
 function playHapticCurve(curve, durationMs, waveType = 'sine', frequency = 120) {
   if (localStorage.getItem('mute_haptic') === 'true') return;
-  
+
   if (navigator.vibrate && /Android/i.test(navigator.userAgent)) {
     // Android 原生震動降級方案
     navigator.vibrate(durationMs);
@@ -49,13 +49,13 @@ function playHapticCurve(curve, durationMs, waveType = 'sine', frequency = 120) 
     initAudioCtx();
     const t = audioCtx.currentTime;
     const duration = durationMs / 1000;
-    
+
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
-    
+
     osc.type = waveType;
     osc.frequency.setValueAtTime(frequency, t);
-    
+
     gain.gain.setValueAtTime(0, t);
     if (curve && curve.length > 0) {
       const step = duration / curve.length;
@@ -65,10 +65,10 @@ function playHapticCurve(curve, durationMs, waveType = 'sine', frequency = 120) 
       }
     }
     gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
-    
+
     osc.connect(gain);
     gain.connect(audioCtx.destination);
-    
+
     osc.start(t);
     osc.stop(t + duration + 0.05);
   } catch (e) {
@@ -78,7 +78,7 @@ function playHapticCurve(curve, durationMs, waveType = 'sine', frequency = 120) 
 
 function haptic(type = 'light') {
   if (localStorage.getItem('mute_haptic') === 'true') return;
-  
+
   if (navigator.vibrate && /Android/i.test(navigator.userAgent)) {
     switch (type) {
       case 'light': navigator.vibrate(8); break;
@@ -195,7 +195,7 @@ function triggerHapticFeedback(type = 'default') {
       case 'roll_in': navigator.vibrate(5); break;
       default: navigator.vibrate(15);
     }
-  } catch(e){}
+  } catch (e) { }
 }
 
 // ─── UI 清脆音效 (Web Audio API) ───────────────────────────────────────────
@@ -566,7 +566,7 @@ function toggleWhiteMode(el, event) {
   // 漸變展開的漣漪波形震動 (Ripple Effect 400ms 完全同步視覺)
   if (localStorage.getItem('mute_haptic') !== 'true') {
     if (navigator.vibrate && /Android/i.test(navigator.userAgent)) {
-      navigator.vibrate([8, 60, 20, 60, 40, 60, 80]); 
+      navigator.vibrate([8, 60, 20, 60, 40, 60, 80]);
     } else {
       // 1:1 同步 400ms 動畫的完美曲線：[微起步, 落, 爬升, 落, 極強衝擊收尾]
       const rippleCurve = [0.02, 0.01, 0.05, 0.02, 0.15, 0.25, 0.001];
@@ -711,7 +711,7 @@ async function loadData() {
     if (state.config.duty_roster) {
       try {
         window.CONFIG.DUTY_ROSTER = JSON.parse(state.config.duty_roster);
-      } catch(e) {
+      } catch (e) {
         console.error('Failed to parse dynamic duty roster', e);
       }
     }
@@ -799,25 +799,25 @@ const DUTY_TASKS = {
 function updateDutyManualPreview() {
   const previewEl = document.getElementById('current-task-preview');
   if (!previewEl) return;
-  
+
   const now = new Date();
   const currentStr = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
   const isFriday = now.getDay() === 5;
   const tasksGroup = isFriday ? DUTY_TASKS.friday : DUTY_TASKS.regular;
-  
+
   // 尋找主值與副值即將或正在進行的任務
   let activeTask = "目前無待辦事項，請保持機動";
-  
+
   // 簡單邏輯：找出大於等於現在時間，或過去一小時內的最近任務
   let closestTask = null;
   let maxPastTime = -1;
   const nowTime = now.getHours() * 60 + now.getMinutes();
-  
+
   const checkTasks = (tasks) => {
     tasks.forEach(t => {
       const [h, m] = t.time.split(':').map(Number);
       const taskTime = h * 60 + m;
-      
+
       // 任務已經開始（taskTime <= nowTime），且是最接近現在時間的
       if (taskTime <= nowTime && taskTime > maxPastTime) {
         maxPastTime = taskTime;
@@ -825,14 +825,14 @@ function updateDutyManualPreview() {
       }
     });
   };
-  
+
   checkTasks(tasksGroup.main);
   checkTasks(tasksGroup.sub);
-  
+
   if (closestTask) {
     activeTask = `<span style="color:var(--orange); font-weight:800; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">${closestTask.time}</span> - <span style="opacity:0.9;">${closestTask.text}</span>`;
   }
-  
+
   previewEl.innerHTML = activeTask;
 }
 
@@ -840,7 +840,7 @@ function updateDutyManualPreview() {
 function openDutyRosterModal() {
   const container = document.getElementById('duty-roster-content');
   if (!container) return;
-  
+
   if (!window.CONFIG || !window.CONFIG.DUTY_ROSTER) {
     container.innerHTML = `
       <div style="text-align:center; padding:40px 20px; color:var(--dim);">
@@ -850,20 +850,20 @@ function openDutyRosterModal() {
       </div>`;
   } else {
     const currentDuty = window.getCurrentDutyOfficers ? window.getCurrentDutyOfficers() : null;
-    
+
     let html = '<div style="display:flex; flex-direction:column; gap:12px; padding:4px 8px 20px 8px;">';
-    
+
     window.CONFIG.DUTY_ROSTER.forEach(row => {
       const isCurrent = currentDuty && currentDuty.week === row.week;
-      
-      const cardStyle = isCurrent 
+
+      const cardStyle = isCurrent
         ? 'background:linear-gradient(145deg, rgba(255,159,10,0.15) 0%, rgba(255,159,10,0.05) 100%); border:1px solid rgba(255,159,10,0.3); transform:scale(1.02); box-shadow:0 8px 24px rgba(0,0,0,0.2);'
         : 'background:var(--glass-bg); border:1px solid var(--glass-border);';
-      
-      const badge = isCurrent 
-        ? '<span style="font-size:10px; background:var(--orange); color:#000; padding:2px 8px; border-radius:10px; font-weight:900; margin-left:8px; text-transform:uppercase; letter-spacing:0.5px;">Current</span>' 
+
+      const badge = isCurrent
+        ? '<span style="font-size:10px; background:var(--orange); color:#000; padding:2px 8px; border-radius:10px; font-weight:900; margin-left:8px; text-transform:uppercase; letter-spacing:0.5px;">Current</span>'
         : '';
-        
+
       html += `
       <div style="padding:16px 20px; border-radius:16px; ${cardStyle} transition:all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display:flex; flex-direction:column; gap:10px;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -887,7 +887,7 @@ function openDutyRosterModal() {
         </div>
       </div>`;
     });
-    
+
     html += '</div>';
     container.innerHTML = html;
   }
@@ -897,14 +897,14 @@ function openDutyRosterModal() {
 function openDutyManualModal() {
   const container = document.getElementById('duty-manual-content');
   if (!container) return;
-  
+
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const isFriday = now.getDay() === 5;
   const tasksGroup = isFriday ? DUTY_TASKS.friday : DUTY_TASKS.regular;
-  
+
   const scheduleTypeTitle = isFriday ? '禮拜五中午交接' : '平日勤務';
-  
+
   const renderTasks = (tasks, title, color) => {
     let html = `
     <div style="margin-top:24px; margin-bottom:16px;">
@@ -912,9 +912,9 @@ function openDutyManualModal() {
          <span style="font-size:1.2em;">${title === '主職' ? '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'}</span> ${title}
       </h2>
     </div>`;
-    
+
     html += '<div style="display:flex; flex-direction:column; gap:12px;">';
-    
+
     let activeIndex = -1;
     let maxPast = -1;
     tasks.forEach((t, i) => {
@@ -925,19 +925,19 @@ function openDutyManualModal() {
         activeIndex = i;
       }
     });
-    
+
     tasks.forEach((t, i) => {
       const isCurrent = (i === activeIndex);
-      
+
       const bgColor = color === '#f59e0b' ? '245,158,11' : '59,130,246';
-      
-      const boxStyle = isCurrent 
+
+      const boxStyle = isCurrent
         ? `background:linear-gradient(145deg, rgba(${bgColor}, 0.15) 0%, rgba(${bgColor}, 0.05) 100%); border:1px solid rgba(${bgColor}, 0.3); transform:scale(1.02); box-shadow:0 8px 24px rgba(0,0,0,0.2);`
         : 'background:var(--glass-bg); border:1px solid var(--glass-border);';
-        
+
       const timeColor = isCurrent ? color : 'var(--dim)';
       const textColor = isCurrent ? 'var(--text)' : 'var(--text)';
-      
+
       html += `
       <div style="padding:16px 20px; border-radius:16px; ${boxStyle} transition:all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display:flex; flex-direction:column; gap:8px;">
         <div style="font-weight:900; font-size:clamp(1.2rem, 3vw + 0.5rem, 1.5rem); color:${timeColor}; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; letter-spacing:-0.5px; line-height:1;">
@@ -948,11 +948,11 @@ function openDutyManualModal() {
         </div>
       </div>`;
     });
-    
+
     html += '</div>';
     return html;
   };
-  
+
   container.innerHTML = `
     <div style="padding:0 4px 20px 4px;">
       <div style="text-align:center; margin-bottom:32px;">
@@ -979,7 +979,7 @@ function openDutyManualModal() {
       }
     </style>
   `;
-  
+
   document.getElementById('duty-manual-modal').classList.add('visible');
 }
 
@@ -1341,7 +1341,7 @@ function renderHome() {
   }
 
   const animClass = isInitialHomeRender ? 'pop-initial' : 'pop-return';
-  
+
   const dutyWidget = document.getElementById('duty-roster-widget');
   if (dutyWidget && window.getCurrentDutyOfficers) {
     const duty = window.getCurrentDutyOfficers();
@@ -1353,14 +1353,14 @@ function renderHome() {
       textSpan.innerHTML = `當周無人值班或無班表`;
       dutyWidget.style.display = 'flex';
     }
-    
+
     dutyWidget.className = 'duty-roster-widget';
     void dutyWidget.offsetWidth; // Force reflow
     dutyWidget.classList.add(animClass);
     dutyWidget.style.animationDelay = isInitialHomeRender ? '0.1s' : '0s';
     dutyWidget.style.webkitAnimationDelay = isInitialHomeRender ? '0.1s' : '0s';
   }
-  
+
   const manualWidget = document.getElementById('duty-manual-widget');
   if (manualWidget) {
     manualWidget.className = 'duty-manual-widget';
@@ -1369,7 +1369,7 @@ function renderHome() {
     manualWidget.style.animationDelay = isInitialHomeRender ? '0.15s' : '0s';
     manualWidget.style.webkitAnimationDelay = isInitialHomeRender ? '0.15s' : '0s';
   }
-  
+
   // 更新幹部工作手冊預覽
   updateDutyManualPreview();
 
@@ -2703,13 +2703,13 @@ function applyNavIcons() {
       const src = getIconSrc(srcBase);
       // 加上 onerror 備援機制，如果發生錯誤就 fallback 回 emoji (現在已改為 SVG)
       const defEmoji = NAV_PAGES.find(n => n.page === page)?.emoji || '<svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
-      
+
       const img = document.createElement('img');
       img.className = 'nav-icon-img';
       img.src = src;
       img.alt = page;
       img.style.cssText = 'width:28px;height:28px;object-fit:contain;margin-bottom:-2px;';
-      img.onerror = function() { this.outerHTML = defEmoji; };
+      img.onerror = function () { this.outerHTML = defEmoji; };
       iconEl.innerHTML = '';
       iconEl.appendChild(img);
     } else {
@@ -3870,7 +3870,6 @@ function renderStudentFileCards(sweepIn = false) {
   const middleIndex = Math.floor(repeats / 2) * _sfResults.length;
   _sfActiveIndex = middleIndex;
   _currentX = -(_sfActiveIndex * _cardWidth);
-
   if (sweepIn && window._updateContinuousScale) {
     // 模擬從假裝找的右側（或左邊）高速滑入，這裡我們讓它從右邊飛進來（+8張卡片）
     let startX = -((_sfActiveIndex - 8) * _cardWidth);
@@ -3964,428 +3963,428 @@ function setup2DCarouselInteraction() {
     if (isDragging || _isAnimating) return;
 
     const activeCard = Array.from(track.children).find(c => c.classList.contains('active'));
-    if (activeCard) {
-      activeCard.classList.add('is-3d-active');
-        haptic('medium');
-      _3dCardIndex = _sfActiveIndex;
-      window._is3dMode = true;
+  if (activeCard) {
+    activeCard.classList.add('is-3d-active');
+    haptic('medium');
+    _3dCardIndex = _sfActiveIndex;
+    window._is3dMode = true;
+    if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
+  }
+}
+
+function disable3D() {
+  const was3dMode = window._is3dMode;
+  window._is3dMode = false;
+  if (_3dTimer) {
+    clearTimeout(_3dTimer);
+    _3dTimer = null;
+  }
+  let changed = false;
+  Array.from(track.children).forEach(c => {
+    if (c.classList.contains('is-3d-active')) {
+      c.classList.remove('is-3d-active');
+
+      c.dataset.was3d = 'true';
+      // Extended timeout: give the CSS transition enough time to fully complete (1s transition + buffer)
+      setTimeout(() => { c.dataset.was3d = 'false'; }, 1200);
+      changed = true;
+    } else if (was3dMode) {
+      // Only mark wasAway if we were actually in 3D mode (side cards were spread out)
+      c.dataset.wasAway = 'true';
+      setTimeout(() => { c.dataset.wasAway = 'false'; }, 1200);
+      changed = true;
+    }
+  });
+  if (changed && window._updateContinuousScale) window._updateContinuousScale(_currentX);
+}
+
+// ═══════ Weighted velocity calculation from recent samples ═══════
+function getWeightedVelocity() {
+  if (_velocitySamples.length === 0) return 0;
+
+  // Filter out stale samples (older than 100ms from last sample)
+  const now = performance.now();
+  const recent = _velocitySamples.filter(s => now - s.time < 100);
+  if (recent.length === 0) return 0;
+
+  let weightedSum = 0;
+  let weightTotal = 0;
+
+  for (let i = 0; i < recent.length; i++) {
+    // More recent samples get exponentially higher weight
+    const weight = Math.pow(VELOCITY_WEIGHT_DECAY, recent.length - 1 - i);
+    weightedSum += recent[i].velocity * weight;
+    weightTotal += weight;
+  }
+
+  return weightTotal > 0 ? weightedSum / weightTotal : 0;
+}
+// Track which card index is in 3D, for displacement calculation
+let _3dCardIndex = -1;
+
+// Softly stop the side-card spread without removing is-3d-active from active card
+function softDisable3DSpread() {
+  window._is3dMode = false;
+  if (_3dTimer) { clearTimeout(_3dTimer); _3dTimer = null; }
+  // Mark side cards for smooth return transition
+  Array.from(track.children).forEach(c => {
+    if (!c.classList.contains('is-3d-active')) {
+      c.dataset.wasAway = 'true';
+      setTimeout(() => { c.dataset.wasAway = 'false'; }, 1200);
+    }
+  });
+}
+
+function teleportToCenterIfNeeded() {
+  const total = track.children.length;
+  const baseN = _sfResults.length;
+  if (baseN > 0 && total >= baseN * 3) {
+    if (_sfActiveIndex < total * 0.2 || _sfActiveIndex > total * 0.8) {
+      const targetCenterBase = Math.floor((total / 2) / baseN) * baseN;
+      const localOffset = _sfActiveIndex % baseN;
+      _sfActiveIndex = targetCenterBase + localOffset;
+      _currentX = -(_sfActiveIndex * _cardWidth);
+      track.style.transition = 'none';
+      track.style.transform = `translateX(${_currentX}px)`;
       if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
     }
   }
+}
 
-  function disable3D() {
-    const was3dMode = window._is3dMode;
-    window._is3dMode = false;
-    if (_3dTimer) {
-      clearTimeout(_3dTimer);
-      _3dTimer = null;
+function onDown(e) {
+  if (scene.classList.contains('is-searching')) return;
+
+  // Stop any ongoing momentum animation immediately (like IG — touching stops glide)
+  cancelAllAnimations();
+
+  const targetCard = e.target.closest('.sf-student-card-2d');
+  const isClickOnActive = targetCard && targetCard.classList.contains('active');
+
+  // If clicking on non-active card, fully disable 3D
+  if (!isClickOnActive) {
+    disable3D();
+  }
+
+  teleportToCenterIfNeeded();
+
+  isDragging = true;
+  isHorizontalSwipe = null;
+  const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+  const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+  startX = clientX;
+  startY = clientY;
+  trackStartX = _currentX;
+
+  _velocitySamples = [{ x: clientX, time: performance.now(), velocity: 0 }];
+
+  track.style.transition = 'none';
+}
+
+function onMove(e) {
+  if (!isDragging) return;
+  const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+  const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+  const deltaX = clientX - startX;
+  const deltaY = clientY - startY;
+
+  // Determine swipe direction on first meaningful movement
+  if (isHorizontalSwipe === null && (Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD)) {
+    isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
+    if (!isHorizontalSwipe) {
+      isDragging = false;
+      return;
     }
-    let changed = false;
-    Array.from(track.children).forEach(c => {
-      if (c.classList.contains('is-3d-active')) {
+    // First confirmed horizontal swipe — softly retract side cards but keep active card's 3D
+    if (window._is3dMode) {
+      softDisable3DSpread();
+    }
+  }
+
+  if (isHorizontalSwipe !== true && Math.abs(deltaX) < DRAG_THRESHOLD) return;
+  if (e.cancelable) e.preventDefault();
+
+  // Record velocity sample
+  const now = performance.now();
+  const lastSample = _velocitySamples[_velocitySamples.length - 1];
+  const dt = now - lastSample.time;
+  if (dt > 0) {
+    const v = (clientX - lastSample.x) / dt;
+    _velocitySamples.push({ x: clientX, time: now, velocity: v });
+    if (_velocitySamples.length > VELOCITY_SAMPLES) {
+      _velocitySamples.shift();
+    }
+  }
+
+  _currentX = trackStartX + deltaX;
+
+  // 即時無縫瞬間傳送校正
+  const total = track.children.length;
+  const baseN = _sfResults.length;
+  if (baseN > 0 && total >= baseN * 3) {
+    let thresholdLeft = -_cardWidth * (total * 0.3);
+    let thresholdRight = -_cardWidth * (total * 0.7);
+    if (_currentX > thresholdLeft || _currentX < thresholdRight) {
+      const centerPos = -Math.floor(total / 2) * _cardWidth;
+      const diff = centerPos - _currentX;
+      const shiftMultiples = Math.round(diff / (baseN * _cardWidth));
+      const shiftDist = shiftMultiples * baseN * _cardWidth;
+
+      _currentX += shiftDist;
+      trackStartX += shiftDist;
+    }
+  }
+
+  track.style.transform = `translateX(${_currentX}px)`;
+  if (window._updateContinuousScale) window._updateContinuousScale();
+}
+
+let _currentTransitionTime = 0.5;
+let _animFrame = null;
+
+let _lastHapticIdx = -1;
+function updateContinuousScale(trackXStr) {
+  let currentTrackX = trackXStr !== undefined ? parseFloat(trackXStr) : _currentX;
+  const centerIdxFloat = -currentTrackX / _cardWidth;
+
+  // 震動反饋：當經過卡片中心點時觸發
+  const currentIdx = Math.round(centerIdxFloat);
+  if (currentIdx !== _lastHapticIdx) {
+    if (_lastHapticIdx !== -1) haptic('light');
+    _lastHapticIdx = currentIdx;
+  }
+
+  for (let i = 0; i < track.children.length; i++) {
+    const c = track.children[i];
+    if (!c) continue;
+    const rawDiff = i - centerIdxFloat;
+    const absDiff = Math.abs(rawDiff);
+
+    // 虛擬化渲染優化
+    if (absDiff > 4) {
+      c.style.visibility = 'hidden';
+      continue;
+    } else {
+      c.style.visibility = 'visible';
+    }
+
+    let t = Math.max(0, 1 - absDiff * 0.45);
+    let scale = 0.85 + 0.15 * (t * t);
+    let alpha = 0.8 + 0.2 * t;
+
+    c.style.zIndex = Math.round(100 - absDiff * 10);
+    c.style.opacity = alpha;
+    c.style.filter = 'none';
+
+    if (c.classList.contains('is-3d-active')) {
+      // ═══════ Progressive 3D rotation based on displacement ═══════
+      // Calculate how far this card has moved from its snap position
+      const snapIdx = _3dCardIndex >= 0 ? _3dCardIndex : _sfActiveIndex;
+      const displacement = Math.abs(i - centerIdxFloat); // how far from center
+
+      // Interpolate rotation: full 15deg at center, 0deg at 0.6 cards away
+      const rotProgress = Math.max(0, Math.min(1, 1 - displacement / 0.6));
+      const rotAngle = 15 * rotProgress;
+      const scaleBoost = 0.05 * rotProgress;
+
+      // If too far from home, fully flatten and remove 3D
+      if (displacement > 0.65 && isDragging) {
         c.classList.remove('is-3d-active');
-
         c.dataset.was3d = 'true';
-        // Extended timeout: give the CSS transition enough time to fully complete (1s transition + buffer)
+        _3dCardIndex = -1;
         setTimeout(() => { c.dataset.was3d = 'false'; }, 1200);
-        changed = true;
-      } else if (was3dMode) {
-        // Only mark wasAway if we were actually in 3D mode (side cards were spread out)
-        c.dataset.wasAway = 'true';
-        setTimeout(() => { c.dataset.wasAway = 'false'; }, 1200);
-        changed = true;
+        // Apply flat transform immediately
+        c.style.transition = 'transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s';
+        c.style.transform = `translateX(0px) scale(${scale})`;
+      } else {
+        // Smooth responsive transition during drag
+        c.style.transition = isDragging
+          ? 'transform 0.15s ease-out'
+          : 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
+        c.style.transform = `perspective(1000px) rotate3d(0.5, 1, 0, ${rotAngle}deg) scale(${scale + scaleBoost})`;
+        c.style.opacity = '1';
       }
-    });
-    if (changed && window._updateContinuousScale) window._updateContinuousScale(_currentX);
-  }
-
-  // ═══════ Weighted velocity calculation from recent samples ═══════
-  function getWeightedVelocity() {
-    if (_velocitySamples.length === 0) return 0;
-
-    // Filter out stale samples (older than 100ms from last sample)
-    const now = performance.now();
-    const recent = _velocitySamples.filter(s => now - s.time < 100);
-    if (recent.length === 0) return 0;
-
-    let weightedSum = 0;
-    let weightTotal = 0;
-
-    for (let i = 0; i < recent.length; i++) {
-      // More recent samples get exponentially higher weight
-      const weight = Math.pow(VELOCITY_WEIGHT_DECAY, recent.length - 1 - i);
-      weightedSum += recent[i].velocity * weight;
-      weightTotal += weight;
-    }
-
-    return weightTotal > 0 ? weightedSum / weightTotal : 0;
-  }
-  // Track which card index is in 3D, for displacement calculation
-  let _3dCardIndex = -1;
-
-  // Softly stop the side-card spread without removing is-3d-active from active card
-  function softDisable3DSpread() {
-    window._is3dMode = false;
-    if (_3dTimer) { clearTimeout(_3dTimer); _3dTimer = null; }
-    // Mark side cards for smooth return transition
-    Array.from(track.children).forEach(c => {
-      if (!c.classList.contains('is-3d-active')) {
-        c.dataset.wasAway = 'true';
-        setTimeout(() => { c.dataset.wasAway = 'false'; }, 1200);
+    } else {
+      // ═══════ 2D card transitions ═══════
+      if (isDragging) {
+        if (c.dataset.was3d === 'true') {
+          c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
+        } else if (c.dataset.wasAway === 'true') {
+          c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
+        } else {
+          c.style.transition = 'none';
+        }
+      } else {
+        if (c.dataset.was3d === 'true' || c.dataset.wasAway === 'true') {
+          c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
+        } else {
+          // Slowed down normal slide from 0.5s to 0.8s for better visibility
+          c.style.transition = 'transform 0.8s cubic-bezier(0.25, 1, 0.5, 1)';
+        }
       }
-    });
-  }
 
-  function teleportToCenterIfNeeded() {
-    const total = track.children.length;
-    const baseN = _sfResults.length;
-    if (baseN > 0 && total >= baseN * 3) {
-      if (_sfActiveIndex < total * 0.2 || _sfActiveIndex > total * 0.8) {
-        const targetCenterBase = Math.floor((total / 2) / baseN) * baseN;
-        const localOffset = _sfActiveIndex % baseN;
-        _sfActiveIndex = targetCenterBase + localOffset;
-        _currentX = -(_sfActiveIndex * _cardWidth);
-        track.style.transition = 'none';
-        track.style.transform = `translateX(${_currentX}px)`;
-        if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
+      if (window._is3dMode && !isDragging) {
+        let spread = rawDiff < 0 ? -1500 : 1500;
+        c.style.transform = `translateX(${spread}px) scale(${scale})`;
+      } else {
+        c.style.transform = `translateX(0px) scale(${scale})`;
       }
     }
   }
+}
+window._updateContinuousScale = updateContinuousScale;
 
-  function onDown(e) {
-    if (scene.classList.contains('is-searching')) return;
+// ═══════ Spring-based snap to nearest card ═══════
+function springSnapTo(targetIndex) {
+  const maxIdx = track.children.length - 1;
+  if (targetIndex < 0) targetIndex = 0;
+  if (targetIndex > maxIdx) targetIndex = maxIdx;
 
-    // Stop any ongoing momentum animation immediately (like IG — touching stops glide)
-    cancelAllAnimations();
+  _sfActiveIndex = targetIndex;
+  const targetX = -(_sfActiveIndex * _cardWidth);
 
-    const targetCard = e.target.closest('.sf-student-card-2d');
-    const isClickOnActive = targetCard && targetCard.classList.contains('active');
+  Array.from(track.children).forEach((c, i) => {
+    c.classList.toggle('active', i === _sfActiveIndex);
+  });
 
-    // If clicking on non-active card, fully disable 3D
-    if (!isClickOnActive) {
-      disable3D();
-    }
+  cancelAllAnimations();
+  _isAnimating = true;
 
-    teleportToCenterIfNeeded();
+  let springVel = 0;
+  let springPos = _currentX;
+  const startTime = performance.now();
 
-    isDragging = true;
-    isHorizontalSwipe = null;
-    const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-    startX = clientX;
-    startY = clientY;
-    trackStartX = _currentX;
+  function springStep() {
+    const displacement = springPos - targetX;
+    const springForce = -SNAP_SPRING_TENSION * displacement;
+    springVel = (springVel + springForce) * SNAP_SPRING_DAMPING;
+    springPos += springVel;
 
-    _velocitySamples = [{ x: clientX, time: performance.now(), velocity: 0 }];
-
+    _currentX = springPos;
     track.style.transition = 'none';
-  }
-
-  function onMove(e) {
-    if (!isDragging) return;
-    const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-    const deltaX = clientX - startX;
-    const deltaY = clientY - startY;
-
-    // Determine swipe direction on first meaningful movement
-    if (isHorizontalSwipe === null && (Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD)) {
-      isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
-      if (!isHorizontalSwipe) {
-        isDragging = false;
-        return;
-      }
-      // First confirmed horizontal swipe — softly retract side cards but keep active card's 3D
-      if (window._is3dMode) {
-        softDisable3DSpread();
-      }
-    }
-
-    if (isHorizontalSwipe !== true && Math.abs(deltaX) < DRAG_THRESHOLD) return;
-    if (e.cancelable) e.preventDefault();
-
-    // Record velocity sample
-    const now = performance.now();
-    const lastSample = _velocitySamples[_velocitySamples.length - 1];
-    const dt = now - lastSample.time;
-    if (dt > 0) {
-      const v = (clientX - lastSample.x) / dt;
-      _velocitySamples.push({ x: clientX, time: now, velocity: v });
-      if (_velocitySamples.length > VELOCITY_SAMPLES) {
-        _velocitySamples.shift();
-      }
-    }
-
-    _currentX = trackStartX + deltaX;
-
-    // 即時無縫瞬間傳送校正
-    const total = track.children.length;
-    const baseN = _sfResults.length;
-    if (baseN > 0 && total >= baseN * 3) {
-      let thresholdLeft = -_cardWidth * (total * 0.3);
-      let thresholdRight = -_cardWidth * (total * 0.7);
-      if (_currentX > thresholdLeft || _currentX < thresholdRight) {
-        const centerPos = -Math.floor(total / 2) * _cardWidth;
-        const diff = centerPos - _currentX;
-        const shiftMultiples = Math.round(diff / (baseN * _cardWidth));
-        const shiftDist = shiftMultiples * baseN * _cardWidth;
-
-        _currentX += shiftDist;
-        trackStartX += shiftDist;
-      }
-    }
-
     track.style.transform = `translateX(${_currentX}px)`;
-    if (window._updateContinuousScale) window._updateContinuousScale();
-  }
+    updateContinuousScale(_currentX);
 
-  let _currentTransitionTime = 0.5;
-  let _animFrame = null;
-
-  let _lastHapticIdx = -1;
-  function updateContinuousScale(trackXStr) {
-    let currentTrackX = trackXStr !== undefined ? parseFloat(trackXStr) : _currentX;
-    const centerIdxFloat = -currentTrackX / _cardWidth;
-    
-    // 震動反饋：當經過卡片中心點時觸發
-    const currentIdx = Math.round(centerIdxFloat);
-    if (currentIdx !== _lastHapticIdx) {
-      if (_lastHapticIdx !== -1) haptic('light');
-      _lastHapticIdx = currentIdx;
-    }
-
-    for (let i = 0; i < track.children.length; i++) {
-      const c = track.children[i];
-      if (!c) continue;
-      const rawDiff = i - centerIdxFloat;
-      const absDiff = Math.abs(rawDiff);
-
-      // 虛擬化渲染優化
-      if (absDiff > 4) {
-        c.style.visibility = 'hidden';
-        continue;
-      } else {
-        c.style.visibility = 'visible';
-      }
-
-      let t = Math.max(0, 1 - absDiff * 0.45);
-      let scale = 0.85 + 0.15 * (t * t);
-      let alpha = 0.8 + 0.2 * t;
-
-      c.style.zIndex = Math.round(100 - absDiff * 10);
-      c.style.opacity = alpha;
-      c.style.filter = 'none';
-
-      if (c.classList.contains('is-3d-active')) {
-        // ═══════ Progressive 3D rotation based on displacement ═══════
-        // Calculate how far this card has moved from its snap position
-        const snapIdx = _3dCardIndex >= 0 ? _3dCardIndex : _sfActiveIndex;
-        const displacement = Math.abs(i - centerIdxFloat); // how far from center
-
-        // Interpolate rotation: full 15deg at center, 0deg at 0.6 cards away
-        const rotProgress = Math.max(0, Math.min(1, 1 - displacement / 0.6));
-        const rotAngle = 15 * rotProgress;
-        const scaleBoost = 0.05 * rotProgress;
-
-        // If too far from home, fully flatten and remove 3D
-        if (displacement > 0.65 && isDragging) {
-          c.classList.remove('is-3d-active');
-          c.dataset.was3d = 'true';
-          _3dCardIndex = -1;
-          setTimeout(() => { c.dataset.was3d = 'false'; }, 1200);
-          // Apply flat transform immediately
-          c.style.transition = 'transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s';
-          c.style.transform = `translateX(0px) scale(${scale})`;
-        } else {
-          // Smooth responsive transition during drag
-          c.style.transition = isDragging
-            ? 'transform 0.15s ease-out'
-            : 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
-          c.style.transform = `perspective(1000px) rotate3d(0.5, 1, 0, ${rotAngle}deg) scale(${scale + scaleBoost})`;
-          c.style.opacity = '1';
-        }
-      } else {
-        // ═══════ 2D card transitions ═══════
-        if (isDragging) {
-          if (c.dataset.was3d === 'true') {
-            c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
-          } else if (c.dataset.wasAway === 'true') {
-            c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
-          } else {
-            c.style.transition = 'none';
-          }
-        } else {
-          if (c.dataset.was3d === 'true' || c.dataset.wasAway === 'true') {
-            c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
-          } else {
-            // Slowed down normal slide from 0.5s to 0.8s for better visibility
-            c.style.transition = 'transform 0.8s cubic-bezier(0.25, 1, 0.5, 1)';
-          }
-        }
-
-        if (window._is3dMode && !isDragging) {
-          let spread = rawDiff < 0 ? -1500 : 1500;
-          c.style.transform = `translateX(${spread}px) scale(${scale})`;
-        } else {
-          c.style.transform = `translateX(0px) scale(${scale})`;
-        }
-      }
-    }
-  }
-  window._updateContinuousScale = updateContinuousScale;
-
-  // ═══════ Spring-based snap to nearest card ═══════
-  function springSnapTo(targetIndex) {
-    const maxIdx = track.children.length - 1;
-    if (targetIndex < 0) targetIndex = 0;
-    if (targetIndex > maxIdx) targetIndex = maxIdx;
-
-    _sfActiveIndex = targetIndex;
-    const targetX = -(_sfActiveIndex * _cardWidth);
-
-    Array.from(track.children).forEach((c, i) => {
-      c.classList.toggle('active', i === _sfActiveIndex);
-    });
-
-    cancelAllAnimations();
-    _isAnimating = true;
-
-    let springVel = 0;
-    let springPos = _currentX;
-    const startTime = performance.now();
-
-    function springStep() {
-      const displacement = springPos - targetX;
-      const springForce = -SNAP_SPRING_TENSION * displacement;
-      springVel = (springVel + springForce) * SNAP_SPRING_DAMPING;
-      springPos += springVel;
-
-      _currentX = springPos;
-      track.style.transition = 'none';
+    if (Math.abs(displacement) < 0.5 && Math.abs(springVel) < 0.1) {
+      _currentX = targetX;
       track.style.transform = `translateX(${_currentX}px)`;
       updateContinuousScale(_currentX);
+      _animFrame = null;
+      _isAnimating = false;
+      teleportToCenterIfNeeded();
+      if (window._restart3DTimer) window._restart3DTimer();
+      return;
+    }
 
-      if (Math.abs(displacement) < 0.5 && Math.abs(springVel) < 0.1) {
-        _currentX = targetX;
-        track.style.transform = `translateX(${_currentX}px)`;
-        updateContinuousScale(_currentX);
-        _animFrame = null;
-        _isAnimating = false;
-        teleportToCenterIfNeeded();
-        if (window._restart3DTimer) window._restart3DTimer();
-        return;
-      }
-
-      if (performance.now() - startTime > 2500) {
-        _currentX = targetX;
-        track.style.transform = `translateX(${_currentX}px)`;
-        updateContinuousScale(_currentX);
-        _animFrame = null;
-        _isAnimating = false;
-        teleportToCenterIfNeeded();
-        if (window._restart3DTimer) window._restart3DTimer();
-        return;
-      }
-
-      _animFrame = requestAnimationFrame(springStep);
+    if (performance.now() - startTime > 2500) {
+      _currentX = targetX;
+      track.style.transform = `translateX(${_currentX}px)`;
+      updateContinuousScale(_currentX);
+      _animFrame = null;
+      _isAnimating = false;
+      teleportToCenterIfNeeded();
+      if (window._restart3DTimer) window._restart3DTimer();
+      return;
     }
 
     _animFrame = requestAnimationFrame(springStep);
   }
 
-  function onUp(e) {
-    if (!isDragging) return;
-    isDragging = false;
+  _animFrame = requestAnimationFrame(springStep);
+}
 
-    const clientX = e.type.includes('touch')
-      ? (e.changedTouches ? e.changedTouches[0].clientX : startX)
-      : e.clientX;
+function onUp(e) {
+  if (!isDragging) return;
+  isDragging = false;
 
-    // 點擊不觸發 snapping
-    const totalDeltaX = Math.abs(clientX - startX);
-    if (totalDeltaX < DRAG_THRESHOLD) {
-      return;
-    }
+  const clientX = e.type.includes('touch')
+    ? (e.changedTouches ? e.changedTouches[0].clientX : startX)
+    : e.clientX;
 
-    // Teleport check
-    const total = track.children.length;
-    const baseN = _sfResults.length;
-    if (baseN > 0 && total >= baseN * 3) {
-      const centerPos = -Math.floor(total / 2) * _cardWidth;
-      const diff = centerPos - _currentX;
-      const shiftMultiples = Math.round(diff / (baseN * _cardWidth));
-      const shiftDist = shiftMultiples * baseN * _cardWidth;
-      if (shiftDist !== 0) {
-        _currentX += shiftDist;
-        track.style.transition = 'none';
-        track.style.transform = `translateX(${_currentX}px)`;
-        void track.offsetWidth;
-      }
-    }
+  // 點擊不觸發 snapping
+  const totalDeltaX = Math.abs(clientX - startX);
+  if (totalDeltaX < DRAG_THRESHOLD) {
+    return;
+  }
 
-    // ═══════ Pure velocity-driven momentum ═══════
-    const flickVelocity = getWeightedVelocity(); // px/ms
-
-    if (Math.abs(flickVelocity) < MIN_VELOCITY) {
-      springSnapTo(Math.round(-_currentX / _cardWidth));
-      return;
-    }
-
-    cancelAllAnimations();
-    _isAnimating = true;
-
-    const frameTime = 16.67;
-    let vel = flickVelocity * frameTime; // px/frame
-
-    // Clamp maximum initial velocity to prevent explosion on fast flicks
-    const maxVel = _cardWidth * 0.4; // max ~0.4 card widths per frame
-    if (vel > maxVel) vel = maxVel;
-    if (vel < -maxVel) vel = -maxVel;
-
-    function momentumStep() {
-      vel *= DECEL_RATE;
-      _currentX += vel;
-
+  // Teleport check
+  const total = track.children.length;
+  const baseN = _sfResults.length;
+  if (baseN > 0 && total >= baseN * 3) {
+    const centerPos = -Math.floor(total / 2) * _cardWidth;
+    const diff = centerPos - _currentX;
+    const shiftMultiples = Math.round(diff / (baseN * _cardWidth));
+    const shiftDist = shiftMultiples * baseN * _cardWidth;
+    if (shiftDist !== 0) {
+      _currentX += shiftDist;
       track.style.transition = 'none';
       track.style.transform = `translateX(${_currentX}px)`;
-      updateContinuousScale(_currentX);
+      void track.offsetWidth;
+    }
+  }
 
-      // Teleport during momentum if needed
-      const total2 = track.children.length;
-      const baseN2 = _sfResults.length;
-      if (baseN2 > 0 && total2 >= baseN2 * 3) {
-        let thresholdLeft = -_cardWidth * (total2 * 0.3);
-        let thresholdRight = -_cardWidth * (total2 * 0.7);
-        if (_currentX > thresholdLeft || _currentX < thresholdRight) {
-          const centerPos = -Math.floor(total2 / 2) * _cardWidth;
-          const diff = centerPos - _currentX;
-          const shiftMultiples = Math.round(diff / (baseN2 * _cardWidth));
-          const shiftDist = shiftMultiples * baseN2 * _cardWidth;
-          _currentX += shiftDist;
-        }
+  // ═══════ Pure velocity-driven momentum ═══════
+  const flickVelocity = getWeightedVelocity(); // px/ms
+
+  if (Math.abs(flickVelocity) < MIN_VELOCITY) {
+    springSnapTo(Math.round(-_currentX / _cardWidth));
+    return;
+  }
+
+  cancelAllAnimations();
+  _isAnimating = true;
+
+  const frameTime = 16.67;
+  let vel = flickVelocity * frameTime; // px/frame
+
+  // Clamp maximum initial velocity to prevent explosion on fast flicks
+  const maxVel = _cardWidth * 0.4; // max ~0.4 card widths per frame
+  if (vel > maxVel) vel = maxVel;
+  if (vel < -maxVel) vel = -maxVel;
+
+  function momentumStep() {
+    vel *= DECEL_RATE;
+    _currentX += vel;
+
+    track.style.transition = 'none';
+    track.style.transform = `translateX(${_currentX}px)`;
+    updateContinuousScale(_currentX);
+
+    // Teleport during momentum if needed
+    const total2 = track.children.length;
+    const baseN2 = _sfResults.length;
+    if (baseN2 > 0 && total2 >= baseN2 * 3) {
+      let thresholdLeft = -_cardWidth * (total2 * 0.3);
+      let thresholdRight = -_cardWidth * (total2 * 0.7);
+      if (_currentX > thresholdLeft || _currentX < thresholdRight) {
+        const centerPos = -Math.floor(total2 / 2) * _cardWidth;
+        const diff = centerPos - _currentX;
+        const shiftMultiples = Math.round(diff / (baseN2 * _cardWidth));
+        const shiftDist = shiftMultiples * baseN2 * _cardWidth;
+        _currentX += shiftDist;
       }
+    }
 
-      // When velocity drops low, spring-snap to whatever card is nearest NOW
-      if (Math.abs(vel) < 0.5) {
-        _momentumFrame = null;
-        const nearestIdx = Math.round(-_currentX / _cardWidth);
-        springSnapTo(nearestIdx);
-        return;
-      }
-
-      _momentumFrame = requestAnimationFrame(momentumStep);
+    // When velocity drops low, spring-snap to whatever card is nearest NOW
+    if (Math.abs(vel) < 0.5) {
+      _momentumFrame = null;
+      const nearestIdx = Math.round(-_currentX / _cardWidth);
+      springSnapTo(nearestIdx);
+      return;
     }
 
     _momentumFrame = requestAnimationFrame(momentumStep);
   }
 
-  area.addEventListener('mousedown', onDown);
-  window.addEventListener('mousemove', onMove, { passive: false });
-  window.addEventListener('mouseup', onUp);
+  _momentumFrame = requestAnimationFrame(momentumStep);
+}
 
-  area.addEventListener('touchstart', onDown, { passive: true });
-  area.addEventListener('touchmove', onMove, { passive: false });
-  window.addEventListener('touchend', onUp);
+area.addEventListener('mousedown', onDown);
+window.addEventListener('mousemove', onMove, { passive: false });
+window.addEventListener('mouseup', onUp);
+
+area.addEventListener('touchstart', onDown, { passive: true });
+area.addEventListener('touchmove', onMove, { passive: false });
+window.addEventListener('touchend', onUp);
 }
 
 window.initStudentFiles = function () {
@@ -4394,20 +4393,450 @@ window.initStudentFiles = function () {
   onStudentFileSearch('');
 };
 
-window.clearStudentData = function () {
+function spawnCanvasBlackHole(container, size) {
+    const S = size || 500;
+    const dpr = Math.min(window.devicePixelRatio, 2);
+    const canvas = document.createElement('canvas');
+    canvas.width = S * dpr;
+    canvas.height = S * dpr;
+    canvas.style.width = S + 'px';
+    canvas.style.height = S + 'px';
+    container.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    const CX = S / 2, CY = S / 2;
+    const EH_RADIUS = S * 0.08;          // event horizon
+    const PHOTON_RADIUS = EH_RADIUS * 1.6; // photon sphere
+    const DISC_INNER = EH_RADIUS * 2.2;
+    const DISC_OUTER = S * 0.42;
+
+    // ── Accretion disk particles ──
+    const NUM_DISC = 260;
+    const discP = [];
+    for (let i = 0; i < NUM_DISC; i++) {
+        const r = DISC_INNER + Math.random() * (DISC_OUTER - DISC_INNER);
+        const a = Math.random() * Math.PI * 2;
+        const speed = (0.4 + 0.8 * Math.random()) / (r * 0.012);
+        const hue = 15 + Math.random() * 35; // orange to gold
+        const lum = 50 + Math.random() * 40;
+        const sz = 1.2 + Math.random() * 3;
+        discP.push({ r, a, speed, hue, lum, sz, phase: Math.random() * Math.PI * 2 });
+    }
+
+    // ── Vortex streamer particles ──
+    const NUM_VORTEX = 120;
+    const vortex = [];
+    for (let i = 0; i < NUM_VORTEX; i++) {
+        const r = EH_RADIUS * 1.1 + Math.random() * (DISC_OUTER * 1.3);
+        const a = Math.random() * Math.PI * 2;
+        const speed = (1.2 + Math.random() * 2) / (r * 0.008);
+        const hue = Math.random() < 0.3 ? (200 + Math.random() * 60) : (10 + Math.random() * 40); // blue & orange
+        vortex.push({ r, a, speed, hue, life: Math.random(), sz: 0.5 + Math.random() * 1.5 });
+    }
+
+    // ── Jet particles ──
+    const NUM_JET = 40;
+    const jets = [];
+    for (let i = 0; i < NUM_JET; i++) {
+        jets.push({
+            y: Math.random(),
+            x: (Math.random() - 0.5) * 0.3,
+            speed: 0.3 + Math.random() * 0.6,
+            hue: 200 + Math.random() * 50,
+            sz: 0.8 + Math.random() * 1.5,
+            dir: Math.random() < 0.5 ? -1 : 1
+        });
+    }
+
+    let t = 0;
+    let animId;
+
+    function draw() {
+        animId = requestAnimationFrame(draw);
+        t += 0.016;
+        ctx.clearRect(0, 0, S, S);
+
+        // ── 1. Volumetric space warp glow ──
+        const outerGlow = ctx.createRadialGradient(CX, CY, EH_RADIUS * 0.5, CX, CY, S * 0.48);
+        outerGlow.addColorStop(0, 'rgba(120, 60, 200, 0.0)');
+        outerGlow.addColorStop(0.2, 'rgba(100, 40, 180, 0.04)');
+        outerGlow.addColorStop(0.5, 'rgba(80, 30, 160, 0.02)');
+        outerGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = outerGlow;
+        ctx.fillRect(0, 0, S, S);
+
+        // ── 2. Accretion disk (back half — behind black hole) ──
+        drawAccretionHalf(ctx, CX, CY, discP, t, true);
+
+        // ── 3. Vortex streamers ──
+        ctx.globalCompositeOperation = 'lighter';
+        for (const p of vortex) {
+            p.a += p.speed * 0.016;
+            // Slowly spiral inward
+            p.r -= 0.08;
+            if (p.r < EH_RADIUS * 0.8) {
+                p.r = DISC_OUTER * (0.8 + Math.random() * 0.5);
+                p.a = Math.random() * Math.PI * 2;
+            }
+            const x = CX + Math.cos(p.a) * p.r;
+            const y = CY + Math.sin(p.a) * p.r * 0.35; // oblique view
+            const alpha = Math.max(0, Math.min(0.6, (p.r - EH_RADIUS) / (DISC_OUTER * 0.5)));
+            ctx.beginPath();
+            ctx.arc(x, y, p.sz, 0, Math.PI * 2);
+            ctx.fillStyle = `hsla(${p.hue}, 100%, 70%, ${alpha})`;
+            ctx.fill();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+
+        // ── 4. Photon sphere ring ──
+        const photonPulse = 1 + Math.sin(t * 3) * 0.15;
+        const photonGrad = ctx.createRadialGradient(CX, CY, PHOTON_RADIUS * 0.85, CX, CY, PHOTON_RADIUS * 1.3 * photonPulse);
+        photonGrad.addColorStop(0, 'rgba(255, 200, 100, 0)');
+        photonGrad.addColorStop(0.4, `rgba(255, 180, 60, ${0.15 + Math.sin(t * 5) * 0.05})`);
+        photonGrad.addColorStop(0.6, `rgba(255, 120, 20, ${0.25 + Math.sin(t * 4) * 0.08})`);
+        photonGrad.addColorStop(0.8, 'rgba(255, 80, 0, 0.08)');
+        photonGrad.addColorStop(1, 'rgba(255, 50, 0, 0)');
+        ctx.fillStyle = photonGrad;
+        ctx.beginPath();
+        ctx.arc(CX, CY, PHOTON_RADIUS * 1.3 * photonPulse, 0, Math.PI * 2);
+        ctx.fill();
+
+        // ── 5. Gravitational lensing ring (Einstein ring) ──
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const lensR = PHOTON_RADIUS * 1.15;
+        for (let i = 0; i < 3; i++) {
+            const ringR = lensR + i * 2;
+            const alpha = 0.12 - i * 0.03;
+            ctx.beginPath();
+            ctx.arc(CX, CY, ringR, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(200, 160, 255, ${alpha + Math.sin(t * 2 + i) * 0.02})`;
+            ctx.lineWidth = 1.5 - i * 0.3;
+            ctx.stroke();
+        }
+        ctx.restore();
+
+        // ── 6. Event horizon (the void) ──
+        const ehPulse = EH_RADIUS * (1 + Math.sin(t * 2) * 0.03);
+        const voidGrad = ctx.createRadialGradient(CX, CY, 0, CX, CY, ehPulse * 1.4);
+        voidGrad.addColorStop(0, 'rgba(0, 0, 0, 1)');
+        voidGrad.addColorStop(0.7, 'rgba(0, 0, 0, 0.98)');
+        voidGrad.addColorStop(0.85, 'rgba(5, 0, 15, 0.8)');
+        voidGrad.addColorStop(1, 'rgba(20, 5, 40, 0)');
+        ctx.fillStyle = voidGrad;
+        ctx.beginPath();
+        ctx.arc(CX, CY, ehPulse * 1.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Inner absolute black
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(CX, CY, ehPulse, 0, Math.PI * 2);
+        ctx.fill();
+
+        // ── 7. Accretion disk (front half — over black hole) ──
+        drawAccretionHalf(ctx, CX, CY, discP, t, false);
+
+        // ── 8. Relativistic jets (subtle) ──
+        ctx.globalCompositeOperation = 'lighter';
+        for (const j of jets) {
+            j.y += j.speed * 0.008;
+            if (j.y > 1) { j.y = 0; j.x = (Math.random() - 0.5) * 0.3; }
+            const jx = CX + j.x * EH_RADIUS * 2 * (1 + j.y * 0.5);
+            const jy = CY + j.dir * (EH_RADIUS * 0.5 + j.y * S * 0.35);
+            const alpha = Math.max(0, 0.4 * (1 - j.y));
+            ctx.beginPath();
+            ctx.arc(jx, jy, j.sz, 0, Math.PI * 2);
+            ctx.fillStyle = `hsla(${j.hue}, 80%, 70%, ${alpha})`;
+            ctx.fill();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+
+        // ── 9. Inner glow pulse ──
+        const innerGlow = ctx.createRadialGradient(CX, CY, EH_RADIUS * 0.9, CX, CY, EH_RADIUS * 2.5);
+        innerGlow.addColorStop(0, 'rgba(180, 100, 255, 0)');
+        innerGlow.addColorStop(0.5, `rgba(160, 80, 255, ${0.03 + Math.sin(t * 6) * 0.02})`);
+        innerGlow.addColorStop(1, 'rgba(120, 40, 200, 0)');
+        ctx.fillStyle = innerGlow;
+        ctx.beginPath();
+        ctx.arc(CX, CY, EH_RADIUS * 2.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    function drawAccretionHalf(ctx, cx, cy, particles, time, isBack) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (const p of particles) {
+            p.a += p.speed * 0.016;
+            const x = cx + Math.cos(p.a) * p.r;
+            const y = cy + Math.sin(p.a) * p.r * 0.3; // oblique elliptical view
+            const isBehind = Math.sin(p.a) < 0;
+            if (isBack !== isBehind) continue;
+
+            // Brightness modulation
+            const flicker = 0.7 + 0.3 * Math.sin(time * 8 + p.phase);
+            const distFade = 1 - Math.max(0, (p.r - DISC_INNER) / (DISC_OUTER - DISC_INNER));
+            const alpha = Math.min(0.85, flicker * (0.3 + distFade * 0.5));
+
+            // Draw with glow
+            const grad = ctx.createRadialGradient(x, y, 0, x, y, p.sz * 3);
+            grad.addColorStop(0, `hsla(${p.hue}, 100%, ${p.lum}%, ${alpha})`);
+            grad.addColorStop(0.5, `hsla(${p.hue + 10}, 90%, ${p.lum - 15}%, ${alpha * 0.4})`);
+            grad.addColorStop(1, `hsla(${p.hue + 20}, 80%, ${p.lum - 30}%, 0)`);
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(x, y, p.sz * 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+
+    draw();
+
+    return {
+        canvas,
+        stop: () => cancelAnimationFrame(animId),
+        setIntensity: (v) => {
+            // Dynamically scale — used during card pull
+            for (const p of discP) p.speed *= (1 + v * 0.01);
+        }
+    };
+}
+
+window.clearStudentData = function (btn) {
   const cardArea = document.getElementById('sf-card-area');
-  const cards = cardArea.querySelectorAll('.sf-student-card-2d');
-  const activeCard = Array.from(cards).find(c => c.classList.contains('active')) || cards[0];
+  const sceneEl = document.getElementById('sf-scene');
+  let activeCard;
+  if (btn) { activeCard = btn.closest('.sf-student-card-2d'); }
+  else {
+    const cards = cardArea ? cardArea.querySelectorAll('.sf-student-card-2d') : [];
+    activeCard = Array.from(cards).find(c => c.classList.contains('active')) || cards[0];
+  }
   if (!activeCard) return;
+  if (sceneEl) sceneEl.style.pointerEvents = 'none';
+  const cr = activeCard.getBoundingClientRect();
+  const vw = window.innerWidth;
+  const sX = vw - 80, sY = 80;
 
-  activeCard.querySelector('.sf-input-name').value = '';
-  activeCard.querySelector('.sf-input-id').value = '';
-  activeCard.querySelector('.sf-input-class').value = '';
-  activeCard.querySelector('.sf-input-remarks').value = '';
-  activeCard.querySelector('.sf-chk-foreign').checked = false;
-  activeCard.querySelector('.sf-chk-empty').checked = true;
+  // ═══ Capture current 3D state before anything changes ═══
+  const liveTransform = window.getComputedStyle(activeCard).transform || 'none';
+  const was3D = activeCard.classList.contains('is-3d-active');
 
-  // 不自動儲存，留給用戶確認後再按下方的儲存按鈕
+  // ═══ Atmosphere — cinematic vignette centered on singularity ═══
+  const atmo = document.createElement('div');
+  atmo.style.cssText = `position:fixed;inset:0;z-index:9996;background:radial-gradient(circle at ${sX}px ${sY}px,transparent 5%,rgba(0,0,0,0.35) 30%,rgba(0,0,0,0.75) 100%);pointer-events:none;opacity:0;transition:opacity 1s;`;
+  document.body.appendChild(atmo);
+  requestAnimationFrame(() => { atmo.style.opacity = '1'; });
+
+  // ═══ Canvas2D Black Hole at top-right ═══
+  const BH_SIZE = 420;
+  const bhEl = document.createElement('div');
+  bhEl.className = 'webgl-blackhole-canvas';
+  bhEl.style.cssText = `position:fixed;top:${sY - BH_SIZE/2}px;left:${sX - BH_SIZE/2}px;width:${BH_SIZE}px;height:${BH_SIZE}px;pointer-events:none;z-index:9999;opacity:0;transform:scale(0.1);transition:opacity 0.8s,transform 1.2s cubic-bezier(0.175,0.885,0.32,1.275);`;
+  document.body.appendChild(bhEl);
+  let bhApp;
+  setTimeout(() => {
+    bhApp = spawnCanvasBlackHole(bhEl, BH_SIZE);
+    requestAnimationFrame(() => { bhEl.style.opacity = '1'; bhEl.style.transform = 'scale(1)'; });
+  }, 10);
+
+  const pC = ['#ff4500','#00bfff','#8a2be2','#ff006e','#fff','#ffaa00'];
+  if (window.haptic) { window.haptic('heavy'); setTimeout(() => window.haptic('heavy'), 250); }
+
+  // ═══ SVG Displacement Filter — pixel-level gravitational warping ═══
+  const fId = 'bh-warp-' + Date.now();
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.style.cssText = 'position:absolute;width:0;height:0;pointer-events:none;';
+  const defs = document.createElementNS(svgNS, 'defs');
+  const filt = document.createElementNS(svgNS, 'filter');
+  filt.setAttribute('id', fId);
+  // Huge filter region so warped pixels aren't clipped
+  filt.setAttribute('x', '-100%'); filt.setAttribute('y', '-100%');
+  filt.setAttribute('width', '400%'); filt.setAttribute('height', '400%');
+
+  const turb = document.createElementNS(svgNS, 'feTurbulence');
+  turb.setAttribute('type', 'turbulence');
+  turb.setAttribute('baseFrequency', '0.008 0.006');
+  turb.setAttribute('numOctaves', '5');
+  turb.setAttribute('seed', String(Math.floor(Math.random()*100)));
+  turb.setAttribute('result', 'warpNoise');
+
+  const disp = document.createElementNS(svgNS, 'feDisplacementMap');
+  disp.setAttribute('in', 'SourceGraphic');
+  disp.setAttribute('in2', 'warpNoise');
+  disp.setAttribute('scale', '0');
+  disp.setAttribute('xChannelSelector', 'R');
+  disp.setAttribute('yChannelSelector', 'G');
+
+  filt.appendChild(turb); filt.appendChild(disp);
+  defs.appendChild(filt); svg.appendChild(defs);
+  document.body.appendChild(svg);
+
+  // ═══ Ghost clone — preserves 3D state ═══
+  const ghost = activeCard.cloneNode(true);
+  ghost.classList.remove('anim-suck-into-blackhole','anim-spit-new-card');
+  // Keep is-3d-active class if it was active!
+  const cardCX = cr.left + cr.width / 2, cardCY = cr.top + cr.height / 2;
+  ghost.style.cssText = `position:fixed;top:${cr.top}px;left:${cr.left}px;width:${cr.width}px;height:${cr.height}px;z-index:9998;pointer-events:none;margin:0;padding:0;will-change:transform,filter;backface-visibility:hidden;transform-origin:center center;`;
+  // Apply the EXACT current transform so there's zero visual pop
+  ghost.style.transform = liveTransform;
+  document.body.appendChild(ghost);
+  activeCard.style.visibility = 'hidden';
+
+  // Debris particles — spiral toward singularity
+  function debris(x, y, count) {
+    for (let k = 0; k < (count || 4); k++) {
+      const d = document.createElement('div');
+      const col = pC[Math.floor(Math.random()*pC.length)];
+      const sz = 2 + Math.random() * 5;
+      d.style.cssText = `position:fixed;left:${x}px;top:${y}px;width:${sz}px;height:${sz}px;background:${col};border-radius:50%;pointer-events:none;z-index:10001;box-shadow:0 0 ${sz*3}px ${sz}px ${col};`;
+      document.body.appendChild(d);
+      const dist = 40 + Math.random() * 80;
+      const a = Math.atan2(sY-y, sX-x) + (Math.random()-0.5)*1.2;
+      const dur = 400 + Math.random() * 400;
+      const start = performance.now();
+      (function animDebris() {
+        const p = Math.min((performance.now() - start) / dur, 1);
+        const ep = 1 - (1-p)*(1-p);
+        d.style.transform = `translate(${Math.cos(a)*dist*ep}px,${Math.sin(a)*dist*ep}px) scale(${1-ep})`;
+        d.style.opacity = String(1 - ep);
+        if (p < 1) requestAnimationFrame(animDebris);
+        else d.remove();
+      })();
+    }
+  }
+
+  // ═══ Angle from card center to black hole ═══
+  const angleToSingularity = Math.atan2(sY - cardCY, sX - cardCX);
+
+  // ═══ Animation — 4 cinematic phases ═══
+  const DUR = 3500;
+  const tStart = performance.now();
+  let dT = 0, hT = 0;
+
+  // Screen shake helper
+  function screenShake(intensity) {
+    const dx = (Math.random()-0.5) * intensity;
+    const dy = (Math.random()-0.5) * intensity;
+    document.body.style.transform = `translate(${dx}px,${dy}px)`;
+  }
+
+  function animate(now) {
+    const t = now - tStart;
+    const p = Math.min(t / DUR, 1);
+
+    // ── Phase 1: Gravitational awareness — tremble + subtle pull (0-15%) ──
+    if (p < 0.15) {
+      const tp = p / 0.15;
+      const shk = tp * tp * 10;
+      const dx = (Math.random()-0.5)*shk, dy = (Math.random()-0.5)*shk;
+      disp.setAttribute('scale', String(tp * 15));
+      ghost.style.filter = `url(#${fId}) brightness(${1+tp*0.15})`;
+      ghost.style.transform = `${liveTransform} translate(${dx}px,${dy}px)`;
+      screenShake(tp * 2);
+      requestAnimationFrame(animate);
+      return;
+    }
+
+    // ── Phase 2: Tidal stretching + pull (15-100%) ──
+    const wp = (p - 0.15) / 0.85;
+    const eased = wp * wp;
+    const eCubic = wp * wp * wp;
+    const eQuart = wp * wp * wp * wp;
+
+    // SVG displacement — space-time distortion
+    const warpScale = 15 + eased * 400;
+    disp.setAttribute('scale', String(warpScale));
+    const freq = 0.008 + eCubic * 0.04;
+    turb.setAttribute('baseFrequency', `${freq} ${freq * 0.7}`);
+
+    // Pull toward singularity — accelerating
+    const pullPow = Math.pow(wp, 1.8);
+    const tx = (sX - cardCX) * pullPow * 0.92;
+    const ty = (sY - cardCY) * pullPow * 0.92;
+
+    // Spaghettification — elongate along pull axis
+    const cosA = Math.cos(angleToSingularity);
+    const sinA = Math.sin(angleToSingularity);
+    const stretch = 1 + eCubic * 2.5;   // stretch along pull direction
+    const squeeze = Math.max(0.05, 1 - eCubic * 0.85); // squeeze perpendicular
+    const scaleDown = Math.max(0.01, 1 - eQuart * 0.98);
+
+    // 3D tilt toward black hole
+    const tiltStrength = eased * 45;
+    const rotY = cosA * tiltStrength;
+    const rotX = -sinA * tiltStrength;
+
+    // Spiral rotation accelerating near event horizon
+    const spiral = eCubic * 180 + eQuart * 90;
+
+    // Matrix-compose spaghettification: rotate to pull axis, stretch, rotate back
+    const skewMatrix = `rotate(${Math.atan2(sinA, cosA) * 180 / Math.PI}deg) scaleX(${stretch * scaleDown}) scaleY(${squeeze * scaleDown}) rotate(${-Math.atan2(sinA, cosA) * 180 / Math.PI}deg)`;
+
+    ghost.style.transform = `perspective(600px) translate(${tx}px,${ty}px) rotateX(${rotX}deg) rotateY(${rotY}deg) rotate(${spiral}deg) ${skewMatrix}`;
+
+    // Visual FX — heat glow intensifying
+    const bright = 1 + eased * 3;
+    const hue = eased * 60;
+    const sat = 100 + eased * 200;
+    ghost.style.filter = `url(#${fId}) brightness(${bright}) hue-rotate(${hue}deg) saturate(${sat}%)`;
+    ghost.style.opacity = String(Math.max(0, 1 - Math.pow(wp, 1.5) * 1.15));
+
+    // Screen shake — increases with pull
+    screenShake(eased * 6);
+
+    // Debris emission — more frequent as card approaches
+    const debrisInterval = Math.max(20, 80 - eased * 70);
+    if (wp > 0.08 && wp < 0.9 && now - dT > debrisInterval) {
+      const cx = cardCX + tx + (Math.random()-0.5)*cr.width*(1-eased)*0.5;
+      const cy = cardCY + ty + (Math.random()-0.5)*cr.height*(1-eased)*0.4;
+      debris(cx, cy, Math.ceil(2 + eased * 4));
+      dT = now;
+    }
+
+    // Haptic crescendo
+    const hapInterval = Math.max(60, 200 - eased * 160);
+    if (now - hT > hapInterval && p < 0.95) {
+      if (window.haptic) window.haptic(eased > 0.5 ? 'medium' : 'light');
+      hT = now;
+    }
+
+    if (p < 1) { requestAnimationFrame(animate); return; }
+
+    // ═══ Phase 4: Cleanup — implosion flash ═══
+    document.body.style.transform = '';
+    // Flash
+    const flash = document.createElement('div');
+    flash.style.cssText = `position:fixed;inset:0;z-index:10002;background:radial-gradient(circle at ${sX}px ${sY}px,rgba(255,200,100,0.6),transparent 50%);pointer-events:none;opacity:1;transition:opacity 0.5s;`;
+    document.body.appendChild(flash);
+    if (window.haptic) window.haptic('heavy');
+    requestAnimationFrame(() => { flash.style.opacity = '0'; });
+    setTimeout(() => flash.remove(), 600);
+
+    ghost.remove(); svg.remove();
+    atmo.style.opacity = '0'; setTimeout(() => atmo.remove(), 1000);
+
+    const ni = activeCard.querySelector('.sf-input-name'); if (ni) ni.value = '';
+    const ii = activeCard.querySelector('.sf-input-id'); if (ii) ii.value = '';
+    const ci = activeCard.querySelector('.sf-input-class'); if (ci) ci.value = '';
+    const ri = activeCard.querySelector('.sf-input-remarks'); if (ri) ri.value = '';
+    const cf = activeCard.querySelector('.sf-chk-foreign'); if (cf) cf.checked = false;
+    const ce = activeCard.querySelector('.sf-chk-empty'); if (ce) ce.checked = true;
+
+    activeCard.style.visibility = 'visible';
+    activeCard.classList.add('anim-spit-new-card');
+    if (window.haptic) window.haptic('light');
+    bhEl.style.opacity = '0'; bhEl.style.transform = 'scale(0.1)';
+    setTimeout(() => {
+      activeCard.classList.remove('anim-spit-new-card');
+      if (bhApp) bhApp.stop(); bhEl.remove();
+      activeCard.style.transition = 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
+      if (sceneEl) sceneEl.style.pointerEvents = 'auto';
+    }, 1200);
+  }
+  requestAnimationFrame(animate);
 };
 
 window.debouncedAutoSave = function (elem) {
@@ -4540,20 +4969,20 @@ window.closeImagePreview = function () {
   }
 };
 
-window.saveGeminiKey = function(val) {
+window.saveGeminiKey = function (val) {
   localStorage.setItem('gemini_api_key', (val || '').trim());
   showToast('API Key 已儲存本機', 'success');
 };
 
-window.handleDutyRosterUpload = async function(e) {
+window.handleDutyRosterUpload = async function (e) {
   const file = e.target.files[0];
   if (!file) return;
-  
+
   // API Key 改由 Cloudflare Worker 後端隱藏保護
-  
+
   const container = document.getElementById('duty-roster-content');
   const originalHtml = container.innerHTML;
-  
+
   // Apple-style premium loading
   container.innerHTML = `
     <div style="text-align:center; padding:60px 20px; color:var(--dim);">
@@ -4565,14 +4994,14 @@ window.handleDutyRosterUpload = async function(e) {
       <p style="font-size:14px; opacity:0.6;">正在掃描輪值表細節，請稍候...</p>
       <div style="margin-top:24px; font-size:11px; font-weight:600; color:var(--blue); background:rgba(10,132,255,0.1); padding:4px 12px; border-radius:20px; display:inline-block; animation:pulse 2s infinite;">⚡ 暴力圖像 2.7 引擎運算中</div>
     </div>`;
-  
+
   try {
     const reader = new FileReader();
     const base64Data = await new Promise(resolve => {
       reader.onload = () => resolve(reader.result.split(',')[1]);
       reader.readAsDataURL(file);
     });
-    
+
     // ... rest of the logic remains same for API call
     const targetRooms = ['211', '311', '113', '112'];
     const officers = state.students
@@ -4590,7 +5019,7 @@ window.handleDutyRosterUpload = async function(e) {
 - dutyOfficer: (字串，值星官姓名)
 - deputy: (字串，副值星官姓名)
 若有任何辨識不清的地方請自行合理推斷，若有換行請視為同一個字串處理。${officersText}`;
-    
+
     const res = await fetch(window.CONFIG.KV_API_URL + '/api/ai-parse', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -4606,29 +5035,29 @@ window.handleDutyRosterUpload = async function(e) {
         }
       })
     });
-    
+
     const data = await res.json();
     if (data.error) throw new Error(data.error.message);
-    
+
     let textResult = data.candidates[0].content.parts[0].text;
     textResult = textResult.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim();
     const parsedData = JSON.parse(textResult);
-    
+
     if (Array.isArray(parsedData) && parsedData.length > 0) {
       await window._api.setConfig({ duty_roster: JSON.stringify(parsedData) });
       state.config.duty_roster = JSON.stringify(parsedData);
       window.CONFIG.DUTY_ROSTER = parsedData;
-      
+
       showToast('值星表更新成功！', 'success');
-      openDutyRosterModal(); 
+      openDutyRosterModal();
       if (typeof renderHome === 'function') renderHome();
     } else {
       throw new Error("辨識結果格式不正確");
     }
-  } catch(err) {
+  } catch (err) {
     showToast('辨識失敗: ' + err.message, 'error');
     container.innerHTML = originalHtml;
   }
-  
+
   e.target.value = '';
 };
