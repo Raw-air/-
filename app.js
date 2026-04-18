@@ -2557,6 +2557,15 @@ function animateNumber(el, newValue, skipAnimation = false, customContainer = nu
     box.style.left = endLeft + 'px';
   });
 
+  // 8. 動畫結束後清理：移除覆蓋層，還原真實元素顯示
+  const totalDur = baseDur + (changedIndices.length * stagger) + 50;
+  setTimeout(() => {
+    // 只清理自己的 box（防止快速連點時清到新動畫）
+    if (box.parentElement) box.remove();
+    el.classList.remove('number-anim-hiding');
+    el.style.transition = '';
+  }, totalDur);
+
 }
 
 // ─── 自動備份 ───────────────────────────────────────────────────────────────
