@@ -140,7 +140,7 @@
     </div>
     
     <!-- 本週值星幹部 (獨立顯示) -->
-    <div id="duty-roster-widget" onclick="openDutyRosterModal()" style="display:flex; justify-content:space-between; align-items:center; background:rgba(245,158,11,0.1); padding:12px 20px; border-radius:16px; border:1px solid rgba(245,158,11,0.2); margin: 0 20px 24px 20px; transition:all 0.2s ease; cursor:pointer;">
+    <div id="duty-roster-widget" class="duty-roster-widget" onclick="openDutyRosterModal()">
       <div style="display:flex; align-items:center; gap:8px;">
         <span style="color:var(--orange); display:flex; align-items:center;"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
         <span id="duty-roster-text" style="font-size:14px; font-weight:700; color:var(--orange);">值星(<span id="duty-roster-week">--</span>): <span id="duty-roster-main">--</span> / <span id="duty-roster-sub">--</span></span>
@@ -155,11 +155,11 @@
     <div id="management-grid" style="display:flex;flex-direction:column;gap:12px;position:relative;z-index:1;"></div>
 
     <!-- 幹部工作手冊獨立區塊 (移動至此) -->
-    <div id="duty-manual-widget" class="duty-manual-widget" style="margin-top: 24px; cursor:pointer;" onclick="openDutyManualModal()">
+    <div id="duty-manual-widget" class="duty-manual-widget" style="margin-top: 12px;" onclick="openDutyManualModal()">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div style="display:flex; align-items:center; gap:16px;">
-          <div style="background:var(--glass-bg); border: 1px solid var(--glass-border); width:48px; height:48px; border-radius:14px; display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow-sm);">
-            <svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text);"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+          <div style="font-size:26px; filter:drop-shadow(0 2px 8px rgba(0,0,0,0.2)); color:var(--text); padding:0 4px 0 8px; display:flex; align-items:center;">
+            <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
           </div>
           <div>
             <div style="font-size:15px; color:var(--text); font-weight:800; letter-spacing:0.5px;">幹部工作手冊</div>

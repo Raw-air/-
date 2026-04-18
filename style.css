@@ -2050,19 +2050,22 @@ body.light-mode #changelog-content .changelog-time {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(0, 0, 0, .65);
+  background: rgba(0, 0, 0, .45);
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
   pointer-events: none;
-  transition: opacity .25s;
-  padding: 20px
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  transition: opacity 0.25s cubic-bezier(0.2, 0, 0, 1);
+  padding: 20px;
+  will-change: opacity;
 }
 
 .modal-overlay.visible {
   opacity: 1;
-  pointer-events: auto
+  pointer-events: auto;
 }
 
 .modal-card {
@@ -3065,7 +3068,20 @@ body.light-mode .changelog-dot {
 }
 
 body.light-mode .modal-overlay {
-  background: rgba(0, 0, 0, 0.3);
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, .45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  transition: opacity 0.25s cubic-bezier(0.2, 0, 0, 1);
+  padding: 20px;
+  will-change: opacity;
 }
 
 body.light-mode .student-bed {
@@ -3106,13 +3122,55 @@ body.light-mode .modal-desc {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  transition: background 0.2s ease;
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease, background 0.3s ease;
+}
+
+.duty-manual-widget:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: var(--shadow-md);
+}
+
+.duty-manual-widget:active {
+  transform: translateY(1px) scale(0.98);
 }
 
 body.light-mode .duty-manual-widget {
   background: rgba(255, 255, 255, 0.75);
   border-color: rgba(0, 0, 0, 0.08);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+/* ── 值星排班 Widget ── */
+.duty-roster-widget {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(245, 158, 11, 0.05);
+  padding: 12px 20px;
+  border-radius: 16px;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  margin: 0 20px 24px 20px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease, background 0.3s ease;
+}
+
+.duty-roster-widget:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.15);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.duty-roster-widget:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+body.light-mode .duty-roster-widget {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  box-shadow: 0 2px 12px rgba(245, 158, 11, 0.1);
 }
 
 /* ========================================================= */
