@@ -3,6 +3,142 @@
  * 新增: 硬性房間規則 / 斜線動畫 / 導覽列自訂圖示
  */
 
+// ─── 設定持久化層 (localStorage 為主, cookie + IndexedDB 為備援) ──────────────
+// iOS ITP 7 天上限、「離開時清除網站資料」或部分內嵌瀏覽器會清掉 localStorage，
+// 導致使用者的個人化設定（音效/震動/主題/潘仔/省電）每次重開都被重置。
+// 這裡不改變 localStorage 是主要來源這件事（測試會直接操作 localStorage 的 key），
+// 只是每次寫入時同步備份一份到 cookie 與 IndexedDB，開機時若 localStorage 缺值
+// 才從備援還原回去。
+const PREFS_KEYS = ['mute_sound', 'mute_haptic', 'white_mode', 'panzi_mode', 'power_save_mode'];
+const PREFS_COOKIE_NAME = 'biyuan_prefs';
+const PREFS_IDB_NAME = 'biyuan';
+const PREFS_IDB_STORE = 'prefs';
+
+// cookie 的 path 依目前頁面所在目錄計算（例如 /biyuan/index.html → /biyuan/），
+// 避免整個網域都能讀到，也避免子路徑部署時吃不到 root path 的 cookie。
+function _prefsCookiePath() {
+  try {
+    const p = location.pathname.replace(/[^/]*$/, '');
+    return p || '/';
+  } catch (_) { return '/'; }
+}
+
+function _prefsReadCookie() {
+  try {
+    const m = document.cookie.match(new RegExp('(?:^|;\\s*)' + PREFS_COOKIE_NAME + '=([^;]*)'));
+    if (!m) return null;
+    return JSON.parse(decodeURIComponent(m[1]));
+  } catch (_) { return null; }
+}
+
+function _prefsWriteCookie(obj) {
+  try {
+    const val = encodeURIComponent(JSON.stringify(obj));
+    document.cookie = PREFS_COOKIE_NAME + '=' + val + '; max-age=31536000; path=' + _prefsCookiePath() + '; SameSite=Lax';
+  } catch (_) { /* 私密瀏覽模式等環境可能擋 cookie 寫入，忽略即可 */ }
+}
+
+function _prefsSnapshotFromLocalStorage() {
+  const out = {};
+  PREFS_KEYS.forEach(k => {
+    try {
+      const v = localStorage.getItem(k);
+      if (v !== null) out[k] = v;
+    } catch (_) {}
+  });
+  return out;
+}
+
+function _prefsOpenIDB() {
+  return new Promise((resolve) => {
+    try {
+      if (!window.indexedDB) return resolve(null);
+      const req = indexedDB.open(PREFS_IDB_NAME, 1);
+      req.onupgradeneeded = () => {
+        try { req.result.createObjectStore(PREFS_IDB_STORE); } catch (_) {}
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch (_) { resolve(null); }
+  });
+}
+
+function _prefsIDBGetAll() {
+  return _prefsOpenIDB().then(db => new Promise((resolve) => {
+    if (!db) return resolve(null);
+    try {
+      const tx = db.transaction(PREFS_IDB_STORE, 'readonly');
+      const store = tx.objectStore(PREFS_IDB_STORE);
+      const out = {};
+      let pending = PREFS_KEYS.length;
+      PREFS_KEYS.forEach(k => {
+        try {
+          const r = store.get(k);
+          r.onsuccess = () => { if (r.result !== undefined) out[k] = r.result; if (--pending === 0) resolve(out); };
+          r.onerror = () => { if (--pending === 0) resolve(out); };
+        } catch (_) { if (--pending === 0) resolve(out); }
+      });
+    } catch (_) { resolve(null); }
+  })).catch(() => null);
+}
+
+function _prefsIDBSetAll(obj) {
+  _prefsOpenIDB().then(db => {
+    if (!db) return;
+    try {
+      const tx = db.transaction(PREFS_IDB_STORE, 'readwrite');
+      const store = tx.objectStore(PREFS_IDB_STORE);
+      Object.keys(obj).forEach(k => { try { store.put(obj[k], k); } catch (_) {} });
+    } catch (_) {}
+  }).catch(() => {});
+}
+
+// 五個個人化設定的唯一寫入入口：localStorage 照舊立即寫入，同時非同步備份到 cookie/IndexedDB。
+function setPref(key, value) {
+  const v = String(value);
+  try { localStorage.setItem(key, v); } catch (_) {}
+  if (PREFS_KEYS.includes(key)) {
+    const snap = _prefsSnapshotFromLocalStorage();
+    snap[key] = v;
+    _prefsWriteCookie(snap);
+    _prefsIDBSetAll(snap);
+  }
+  return v;
+}
+
+// 開機還原：cookie 是同步的，所以在這裡（檔案最頂端，早於下方 DOMContentLoaded 的初始化邏輯執行）
+// 就先把 localStorage 缺的 key 補回去，避免畫面先閃一次錯誤主題再跳回來。
+(function _prefsRestoreFromCookie() {
+  try {
+    const cookiePrefs = _prefsReadCookie();
+    if (!cookiePrefs) return;
+    PREFS_KEYS.forEach(k => {
+      if (localStorage.getItem(k) === null && Object.prototype.hasOwnProperty.call(cookiePrefs, k)) {
+        try { localStorage.setItem(k, cookiePrefs[k]); } catch (_) {}
+      }
+    });
+  } catch (_) {}
+})();
+
+// IndexedDB 還原是非同步的，可能在 DOMContentLoaded 之後才回來；若真的補回了任何值，
+// 呼叫 applyStoredPrefs() 重新套用一次（此函式定義於下方 DOMContentLoaded 區塊之前，
+// function 宣告會被提升到整個檔案作用域頂端，所以這裡可以先參照它）。
+(function _prefsRestoreFromIDB() {
+  _prefsIDBGetAll().then(idbPrefs => {
+    if (!idbPrefs) return;
+    let changed = false;
+    PREFS_KEYS.forEach(k => {
+      if (localStorage.getItem(k) === null && Object.prototype.hasOwnProperty.call(idbPrefs, k)) {
+        try { localStorage.setItem(k, idbPrefs[k]); changed = true; } catch (_) {}
+      }
+    });
+    if (changed && typeof applyStoredPrefs === 'function') applyStoredPrefs();
+  }).catch(() => {});
+})();
+
+// 盡量請瀏覽器把儲存空間標記為「持久化」，降低被系統自動清掉的機率；忽略結果與錯誤。
+try { navigator.storage?.persist?.().catch?.(() => {}); } catch (_) {}
+
 // ─── 全域狀態 ───────────────────────────────────────────────────────────────
 const state = {
   students: [],
@@ -384,43 +520,44 @@ document.addEventListener('input', (e) => {
 
 // ─── 初始化 ─────────────────────────────────────────────────────────────────
 
+// 依 localStorage 目前的值套用五個個人化設定（body class + 對應 checkbox 狀態）。
+// DOMContentLoaded 時呼叫一次；若 IndexedDB 備援還原之後補回了新的值，也會再呼叫一次。
+function applyStoredPrefs() {
+  // 全白模式
+  const isLight = localStorage.getItem('white_mode') === 'true';
+  document.body.classList.toggle('light-mode', isLight);
+  const whiteToggle = document.getElementById('setting-white-mode');
+  if (whiteToggle) whiteToggle.checked = isLight;
+  if (isLight && typeof updateAllImagesToTheme === 'function') updateAllImagesToTheme();
+
+  // 靜音模式
+  const muteToggle = document.getElementById('setting-mute');
+  if (muteToggle) muteToggle.checked = localStorage.getItem('mute_sound') === 'true';
+
+  // 震動反饋
+  const hapticToggle = document.getElementById('setting-haptic');
+  if (hapticToggle) hapticToggle.checked = localStorage.getItem('mute_haptic') !== 'true';
+  const hapticHelp = document.getElementById('haptic-help');
+  if (hapticHelp && !hasVibrate()) {
+    hapticHelp.textContent = IS_IOS ? 'iPhone 會用 Safari 觸覺開關與低頻波形模擬震動' : '此瀏覽器不支援網頁震動；音效可另外設定';
+  }
+
+  // 潘仔模式
+  const isPanzi = localStorage.getItem('panzi_mode') === 'true';
+  document.body.classList.toggle('panzi-mode', isPanzi);
+  const panziToggle = document.getElementById('setting-panzi');
+  if (panziToggle) panziToggle.checked = isPanzi;
+
+  // 省電模式
+  const isPS = localStorage.getItem('power_save_mode') === 'true';
+  document.body.classList.toggle('power-save-mode', isPS);
+  const psToggle = document.getElementById('setting-powerSave');
+  if (psToggle) psToggle.checked = isPS;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    // 初始狀態：全白模式
-    if (localStorage.getItem('white_mode') === 'true') {
-      document.body.classList.add('light-mode');
-      const whiteToggle = document.getElementById('setting-white-mode');
-      if (whiteToggle) whiteToggle.checked = true;
-      if (typeof updateAllImagesToTheme === 'function') updateAllImagesToTheme();
-    }
-
-    // 初始狀態：靜音模式
-    if (localStorage.getItem('mute_sound') === 'true') {
-      const muteToggle = document.getElementById('setting-mute');
-      if (muteToggle) muteToggle.checked = true;
-    }
-
-    // 初始狀態：震動反饋
-    const hapticToggle = document.getElementById('setting-haptic');
-    if (hapticToggle) hapticToggle.checked = localStorage.getItem('mute_haptic') !== 'true';
-    const hapticHelp = document.getElementById('haptic-help');
-    if (hapticHelp && !hasVibrate()) {
-      hapticHelp.textContent = IS_IOS ? 'iPhone 會用 Safari 觸覺開關與低頻波形模擬震動' : '此瀏覽器不支援網頁震動；音效可另外設定';
-    }
-
-    // 初始狀態：潘仔模式
-    if (localStorage.getItem('panzi_mode') === 'true') {
-      document.body.classList.add('panzi-mode');
-      const panziToggle = document.getElementById('setting-panzi');
-      if (panziToggle) panziToggle.checked = true;
-    }
-
-    // 初始狀態：省電模式
-    if (localStorage.getItem('power_save_mode') === 'true') {
-      document.body.classList.add('power-save-mode');
-      const psToggle = document.getElementById('setting-powerSave');
-      if (psToggle) psToggle.checked = true;
-    }
+    applyStoredPrefs();
 
     state.currentDate = getTodayColumnName();
     setupNav();
@@ -525,11 +662,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // 個人化設定 Toggle
 function toggleMute(el) {
-  localStorage.setItem('mute_sound', el.checked);
+  setPref('mute_sound', el.checked);
 }
 
 function toggleHaptic(el) {
-  localStorage.setItem('mute_haptic', !el.checked);
+  setPref('mute_haptic', !el.checked);
   if (el.checked) {
     haptic('medium');
     if (!hasVibrate() && !IS_IOS) showToast('此瀏覽器不支援網頁震動', 'info');
@@ -538,14 +675,14 @@ function toggleHaptic(el) {
 
 function togglePanzi(el) {
   const isPanzi = el.checked;
-  localStorage.setItem('panzi_mode', isPanzi);
+  setPref('panzi_mode', isPanzi);
   if (isPanzi) document.body.classList.add('panzi-mode');
   else document.body.classList.remove('panzi-mode');
 }
 
 function togglePowerSave(el) {
   const isPS = el.checked;
-  localStorage.setItem('power_save_mode', isPS);
+  setPref('power_save_mode', isPS);
   if (isPS) document.body.classList.add('power-save-mode');
   else document.body.classList.remove('power-save-mode');
 }
@@ -2483,7 +2620,24 @@ function animateNumber(el, newValue, skipAnimation = false, customContainer = nu
     // 只清理自己的 box（防止快速連點時清到新動畫）
     if (box.parentElement) box.remove();
     el.classList.remove('number-anim-hiding');
-    el.style.transition = '';
+    // 注意：不能在這裡直接把 transition 還原成 ''，
+    // 因為 .stepper-input 有一條較晚宣告的 `transition: all 0.2s`
+    // 規則（style.css 內 .styled-input 共用樣式）會蓋掉原本只列
+    // background-color/border-color/box-shadow 的那條規則，連 color
+    // 也會跟著被 transition 化。文字色從 transparent 還原成正常色時，
+    // 若當下就恢復 transition，會被這條 all 0.2s 抓到，造成數字淡入
+    // 產生一次可見的閃爍。因此先保持 transition:none，等真實數字繪製
+    // 完成（等兩個 rAF，確保已經 paint 過一次）之後才還原 transition，
+    // 讓交接是瞬間完成、無閃爍。
+    el.style.transition = 'none';
+    void el.offsetWidth; // 強制重排套用 transition:none
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        // 若期間又觸發了新的動畫（會重新加上 number-anim-hiding），
+        // 就不要動 transition，交給新動畫自己管理
+        if (!el.classList.contains('number-anim-hiding')) el.style.transition = '';
+      });
+    });
     delete el._numberAnimation;
   }, totalDur);
   run.cancel = () => {
@@ -3687,9 +3841,10 @@ function getRandomStudents(count) {
 }
 
 function sfStudentAt(vIndex) {
+  // 虛擬索引可正可負，取模對應名單 → 名單頭尾相接，可以無限滑
   const n = _sfResults.length;
-  if (vIndex < 0 || vIndex >= n) return null;
-  return _sfResults[vIndex];
+  if (!n) return null;
+  return _sfResults[((vIndex % n) + n) % n];
 }
 
 function sfEsc(v) {
@@ -3742,19 +3897,38 @@ function sfCardHTML(s, draft) {
     `;
 }
 
-// 卡片被回收前，把使用者打到一半的內容存成草稿
-function sfSaveDraft(entry) {
-  const s = entry.student, el = entry.el;
-  if (!s || !el) return;
+// 讀出一張卡目前的欄位內容，並判斷是否跟原始資料相同
+function sfReadCard(el, s) {
+  if (!s || !el) return null;
   const q = (sel) => el.querySelector(sel);
-  const nameEl = q('.sf-input-name'); if (!nameEl) return;
+  const nameEl = q('.sf-input-name'); if (!nameEl) return null;
   const draft = {
     name: nameEl.value, studentId: q('.sf-input-id').value, class: q('.sf-input-class').value,
     remarks: q('.sf-input-remarks').value, isForeign: q('.sf-chk-foreign').checked, isEmpty: q('.sf-chk-empty').checked
   };
   const same = draft.name === (s.name || '') && draft.studentId === (s.studentId || '') && draft.class === (s.class || '') &&
     draft.remarks === (s.remarks || '') && draft.isForeign === !!s.isForeign && draft.isEmpty === (s.isEmpty || !s.name);
-  if (same) _sfDrafts.delete(s.id); else _sfDrafts.set(s.id, draft);
+  return { draft, same };
+}
+
+// 名單少於回收池 (13 張) 時，同一個人會同時出現在好幾張卡上；找出另一張還在畫面上、已經被改過的卡
+function sfLiveDraft(id, exceptEl) {
+  for (const e of _sfPool) {
+    if (!e.student || e.student.id !== id || e.el === exceptEl || e.vIndex === null) continue;
+    const r = sfReadCard(e.el, e.student);
+    if (r && !r.same) return r.draft;
+  }
+  return null;
+}
+
+// 卡片被回收前，把使用者打到一半的內容存成草稿
+function sfSaveDraft(entry) {
+  const s = entry.student, el = entry.el;
+  const r = sfReadCard(el, s);
+  if (!r) return;
+  if (!r.same) _sfDrafts.set(s.id, r.draft);
+  // 這張卡沒改，但同一個人的另一張卡可能改了：不能把那份草稿清掉
+  else if (!sfLiveDraft(s.id, el)) _sfDrafts.delete(s.id);
 }
 
 function sfBindCard(entry, vIndex) {
@@ -3774,7 +3948,7 @@ function sfBindCard(entry, vIndex) {
   el.style.left = `calc(50% - 150px + ${vIndex * _cardWidth}px)`;
   if (vIndex === _sfActiveIndex) el.classList.add('active');
   if (s) {
-    el.innerHTML = sfCardHTML(s, _sfDrafts.get(s.id));
+    el.innerHTML = sfCardHTML(s, _sfDrafts.get(s.id) || sfLiveDraft(s.id, el));
     _sfRenderMap.set(el, s);
   } else {
     el.innerHTML = '';

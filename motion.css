@@ -6,7 +6,7 @@ body.light-mode img[src*="Lp/ICON/"]:not([src*="/BLACK/"]) {filter:brightness(0)
 html.theme-reveal::view-transition-old(root){animation:none;z-index:1;}
 html.theme-reveal::view-transition-new(root){
   z-index:2;mix-blend-mode:normal;
-  animation:theme-circle-reveal 480ms cubic-bezier(.2,.7,.2,1) both;
+  animation:theme-circle-reveal 520ms cubic-bezier(.33,.1,.25,1) both;
 }
 @keyframes theme-circle-reveal {
   from{clip-path:circle(0px at var(--theme-x,50%) var(--theme-y,50%));}

@@ -1,16 +1,21 @@
 # 維護與驗證
 
-正式前端為 https://raw-air.github.io/-/，Pages 來源為 `Soft-UI` 分支根目錄。此版本為資源 v89、Service Worker v53。
+正式前端為 https://raw-air.github.io/-/，Pages 來源為 `Soft-UI` 分支根目錄。此版本為資源 v90、Service Worker v54。
 
 ## 本次修正
 
-- 黑洞由 gravity.js 執行 two-pass GPU 合成：一次擷取周圍畫面及卡片，透鏡同時扭曲背景卡片、搜尋列和碎片。216 片不規則三角形依距離撕裂、潮汐拉伸並旋入黑洞；保留吸積盤、光子環、850／1400 顆軌道粒子、引力畫面震動、塌縮與四芒星收尾。這是視覺近似，不是廣義相對論數值模擬。
 - 擷取時將表單的 3D 堆疊攤平，解決輸入框黑色矩形；固定背景頁面的進場動畫，避免 WebKit 擷取到透明背景。正常介面的陰影與立體效果保留。黑洞期間導覽列維持真正的玻璃材質。
-- 移除每幀移動 body 的效果，限制 framebuffer 像素量，保留卡片貼圖、玻璃、陰影及吸積盤效果；動畫結束或取消時釋放 texture、material、geometry 與 WebGL context。
-- carousel.js 以 Touch Events (觸控) 與 Mouse Events (桌面) 驅動同一個手勢狀態機，不用 Pointer Events：iOS Safari 在可直向捲動的頁面上做水平拖曳時會送出 pointercancel (w3c/pointerevents#303)，即使設了 touch-action:pan-y。touchmove 在判定為水平手勢時立即 preventDefault，直向手勢仍交給原生捲動。每幀一次更新、單段阻尼彈簧吸附、13 張回收池、未聚焦欄位可起手滑動等行為不變。
-- theme.js 在 View Transition 建立前，把開關中心以「實際像素」寫進 <style id="theme-reveal-style"> 的 @keyframes (iOS WebKit 對 ::view-transition 偽元素上的 var() 解析不可靠，會從左上角擴散)，ready 後再用 WAAPI 以同樣像素驅動同一個圓作保險；WebKit 動畫時間停在零時以計時器推進；連續切換只採用最後選擇；無 View Transition 的瀏覽器使用底色圓形擴散及淡出備援。
-- navigation.js / liquid-nav.css 將底部導覽做成 iOS 26 液態玻璃：浮動膠囊 (淺色白、深色深玻璃) 加一顆清透鏡片。鏡片內放一份導覽列圖示的複本並放大 1.12 倍、以圓形裁切，得到跨瀏覽器 (含 iOS Safari) 的放大折射；邊緣亮環、粉/藍色散、粉色光暈以 box-shadow 與漸層疊出；切換分頁時鏡片以 transform 拉長再彈回。這是參考圖的網頁實作，不是 Apple 原生材質 API。
+- carousel.js 以 Touch Events (觸控) 與 Mouse Events (桌面) 驅動同一個手勢狀態機，不用 Pointer Events：iOS Safari 在可直向捲動的頁面上做水平拖曳時會送出 pointercancel (w3c/pointerevents#303)。touchmove 只在判定為水平手勢後才 preventDefault (太早擋會鎖死直向捲動)。名單是環狀的：sfStudentAt 取模，虛擬索引不設上下限，13 張回收池、單段阻尼彈簧吸附、未聚焦欄位可起手滑動等行為不變。
+- theme.js 在 View Transition 建立前，把開關中心以「實際像素」寫進 <style id="theme-reveal-style"> 的 @keyframes (iOS WebKit 對 ::view-transition 偽元素上的 var() 解析不可靠)，同時加上 html.vt-active 讓快照期間關掉毛玻璃/大陰影/所有 transition (快照成本大降)，ready 後移除 vt-active 並以 WAAPI 用同樣像素驅動同一個圓作主驅動 (舊版在 iPhone 上順暢的做法)；WebKit 動畫時間停在零時以計時器推進；連續切換只採用最後選擇；無 View Transition 的瀏覽器使用底色圓形擴散及淡出備援。
+- navigation.js / liquid-nav.css 將底部導覽做成 iOS 26 液態玻璃：浮動膠囊 + 清透鏡片。鏡片內是導覽列圖示的複本放大 1.12 倍並圓形裁切 (跨瀏覽器折射)；--lens-x 以 @property 註冊為 <length>，鏡片、光暈、複本列、真實列上的 mask 洞全部由它驅動，一條 transition 同步，真實圖示在鏡片下被 mask 挖掉所以不會疊影。鏡片可按住拖曳 (Pointer Events + touch-action:none，放開吸到最近分頁並 navigateTo)。寬度 <120px 表示尚未排版，會重算。
 - 數字動畫使用各自的清理權限，修正舊動畫揭露新數字、容器邊框偏移、字寬度量與 WebKit 文字隱藏。
+- 個人化設定 (mute_sound/mute_haptic/white_mode/panzi_mode/power_save_mode) 走 app.js 頂端的 prefs 層：localStorage 為主，setPref() 同步備份到 cookie biyuan_prefs 與 IndexedDB biyuan/prefs，開機時缺值才從備援補回 (cookie 同步、IndexedDB 非同步後 applyStoredPrefs 再套一次)，並呼叫 navigator.storage.persist()。
+- 黑洞重做成「行星般的 3D 物體」：gravity.js 仍是 two-pass GPU 合成（一個 render target、一次全螢幕 pass）。螢幕 shader 用正交視線與傾斜盤面求交點畫吸積盤——傾斜軸 −45°（畫面上長軸左高右低）、俯視傾角使可見橢圓短軸/長軸 = 0.42、外緣 4.3 倍陰影半徑；依交點的 z 判斷盤在球體前或後，前半（偏下）蓋住球體下緣、後半被球體擋住，再用半徑反演把被擋住的後半盤翻到球體上方成一道弧。盤面有差動旋轉的 fbm 細絲與無接縫旋臂、內緣熱白外緣橘紅、上下兩層取樣做出厚度，都卜勒讓往觀察者轉的那半更亮更白。中央是純黑事件視界加一圈細光子環。這是視覺近似，不是廣義相對論數值模擬。
+- 卡片先撕成 216 片不規則三角形，碎片半途化為粉塵（每片配 5／10 顆，顏色依該碎片的 UV 從卡片貼圖取樣），粉塵沿盤面平面螺旋落入視界；另有 600／1300 顆從畫面外側沿盤面飛入的粒子流，亮度隨速度、點大小遞減。手機端粒子總數約 1,680 顆。黑洞登場時背景亮度降到 0.35 並加暗角，塌縮時回亮。擷取時記錄 activeCard 左右鄰卡的 rect（最多 4 個，未用的填 0），螢幕 shader 在矩形內加 ±2–4px 的高頻位移並微微往黑洞方向拉伸，看起來像鄰卡在抵抗引力。
+- 成形速度：html2canvas 一律複製整份文件，所以擷取時用 ignoreElements 砍掉用不到的子樹（卡片貼圖只留卡片本身，背景只留目前分頁、看得到的卡片），卡片 scale ≤ 1.5、手機背景 scale 1；擷取時間約降到原本的 1/4。按下垃圾桶後先用 CSS 先遣層（.bh-seed，位置／半徑／傾角與 WebGL 場景一致）讓黑洞在 0.3 秒內成形並把畫面壓暗，WebGL 場景備妥後直接接手；動畫時鐘從按下算起（最多補 0.5 秒），整段 3.4 秒。
+- 效能：DPR ≤ 1.5、render target ≤ 1.4M 畫素、每幀零配置（只寫 uniform 的 .value），引力震動與變暗係數改在 CPU 算好傳進去；雜訊 hash 不用 sin，鄰卡顫抖的方向與強度在建場景時先算好。前十幾幀量一次真正的畫面間隔，太慢就一次性把解析度降一階（只重配一次）。動畫結束或取消時釋放 texture、material、geometry、render target 與 WebGL context；先遣層在 finally 一併移除。
+- import.js 是設定頁的「匯入 Excel 名單」精靈：用 CDN 的 SheetJS 讀 xlsx/xls/csv (csv 沒 UTF-8 BOM 又不是合法 UTF-8 時以 Big5/950 解碼)，標題模糊比對 (先完全相同再包含、同欄不重複、「區號」不當地址)，房號+床位對到 state.students (略過 hidden 的床)，沒姓名也沒學號視為空床。寫入走與 autoSaveStudentFile 相同的 updateAttendance payload、每批 15 筆循序送，備註只附加不覆蓋。window._importRows(rows,mapping,options) 讓測試不用真檔案。
+- 住宿生檔案名單是環狀的，名單少於 13 人時同一人會同時出現在多張卡：sfSaveDraft 在回收「沒改過」的卡時，若同一人的另一張卡已被改動就不清草稿；sfBindCard 綁新卡時會拿另一張卡的即時內容當初始值 (sfLiveDraft)。
 - 震動設定「開啟代表啟用」。Android 走 Vibration API；iPhone Safari 沒有該 API，改用兩條路：(1) 程式點擊隱藏的 <input type="checkbox" switch> label 觸發 Taptic (iOS 17.4~26.4 有效，26.5 起 Apple 已封鎖)；(2) 低頻喇叭波形 (Web Audio) 讓機身共振，即舊版使用者感受到的「震動」。按鍵音效附帶的回饋只敲 Taptic 不播波形。
 - 宿舍參數保留零床數、拒絕非整數及負總床數；設定儲存失敗不留下錯誤的本地成功狀態。
 - HTTP 失敗不再誤報成功；請求有逾時，寫入不自動重播以避免重複交換床位。輪詢不重疊。備份與卡片儲存不覆蓋傳送途中新增的修改。

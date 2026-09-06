@@ -10,7 +10,8 @@ function setup2DCarouselInteraction() {
   let active=false,dragging=false,touchId=null,mouseActive=false;
   let startX=0,startY=0,startTrack=0,lastX=0,lastTime=0,velocity=0;
   let frame=0,dragFrame=0,idle=0,suppressClick=false,lastIndex=0;
-  const clampIndex=i=>Math.max(0,Math.min(_sfResults.length-1,i));
+  // 名單是環狀的 (sfStudentAt 取模)，索引不設上下限
+  const clampIndex=i=>i;
   function moving(on){page.classList.toggle('sf-moving',on);}
   function stop(){cancelAnimationFrame(frame);cancelAnimationFrame(dragFrame);frame=dragFrame=0;clearTimeout(idle);moving(false);}
   function paint(){
@@ -19,7 +20,7 @@ function setup2DCarouselInteraction() {
     sfSyncWindow(center);
     for(const entry of _sfPool){
       const distance=Math.abs(entry.vIndex-center);
-      const visible=entry.vIndex>=0&&entry.vIndex<_sfResults.length&&distance<3;
+      const visible=distance<3;
       entry.el.classList.toggle('sf-far',!visible);
       if(!visible)continue;
       entry.el.classList.toggle('active',entry.vIndex===_sfActiveIndex);
@@ -86,11 +87,7 @@ function setup2DCarouselInteraction() {
     const dt=now-lastTime;
     if(dt>0)velocity=.6*((x-lastX)/dt*1000)+.4*velocity;
     lastX=x;lastTime=now;
-    const min=-(_sfResults.length-1)*_cardWidth;
-    let px=startTrack+dx;
-    if(px>0)px=100*(1-Math.exp(-px/200));
-    if(px<min)px=min-100*(1-Math.exp((px-min)/200));
-    _currentX=px;
+    _currentX=startTrack+dx;
     if(!dragFrame)dragFrame=requestAnimationFrame(()=>{dragFrame=0;paint();});
     return true;
   }

@@ -1969,6 +1969,285 @@ body.light-mode #changelog-content .changelog-time {
   line-height: 1.5
 }
 
+/* ── Excel 名單匯入 ── */
+.imp-open-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px
+}
+
+.imp-modal-overlay .modal-card,
+.imp-modal-card {
+  max-width: 480px;
+  max-height: 86vh;
+  overflow-y: auto;
+  text-align: left
+}
+
+.imp-dropzone {
+  border: 2px dashed var(--border2);
+  border-radius: 16px;
+  padding: 28px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--dim);
+  transition: all .2s;
+  outline: none
+}
+
+.imp-dropzone:hover,
+.imp-dropzone:focus-visible {
+  border-color: var(--blue);
+  background: rgba(10, 132, 255, .06)
+}
+
+.imp-dropzone.drag {
+  border-color: var(--blue);
+  background: rgba(10, 132, 255, .1)
+}
+
+.imp-drop-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text)
+}
+
+.imp-drop-hint {
+  font-size: 11px;
+  color: var(--dim)
+}
+
+.imp-error {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 69, 58, .12);
+  color: var(--red);
+  font-size: 12px;
+  line-height: 1.5
+}
+
+.imp-retry-btn {
+  margin-left: 6px;
+  border: none;
+  background: var(--red);
+  color: #fff;
+  border-radius: 8px;
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer
+}
+
+.imp-sheet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0
+}
+
+.imp-sheet-btn {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left
+}
+
+.imp-sheet-btn.active,
+.imp-sheet-btn:hover {
+  border-color: var(--blue);
+  background: rgba(10, 132, 255, .08)
+}
+
+.imp-map-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+  max-height: 46vh;
+  overflow-y: auto
+}
+
+.imp-map-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px
+}
+
+.imp-map-label {
+  font-size: 13px;
+  color: var(--dim);
+  flex: 0 0 64px
+}
+
+.imp-map-select {
+  flex: 1;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  color: var(--text);
+  font-size: 13px;
+  min-width: 0
+}
+
+.imp-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 12px 0
+}
+
+.imp-stat {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 6px;
+  text-align: center
+}
+
+.imp-stat-val {
+  font-size: 18px;
+  font-weight: 800
+}
+
+.imp-stat-label {
+  font-size: 10px;
+  color: var(--dim);
+  margin-top: 2px
+}
+
+.imp-stat.warn .imp-stat-val { color: var(--orange) }
+.imp-stat.danger .imp-stat-val { color: var(--red) }
+.imp-stat.ok .imp-stat-val { color: var(--green) }
+
+.imp-table-wrap {
+  max-height: 34vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px
+}
+
+.imp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px
+}
+
+.imp-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg2);
+  padding: 8px 6px;
+  text-align: left;
+  color: var(--dim);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border)
+}
+
+.imp-table td {
+  padding: 7px 6px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap
+}
+
+.imp-row-unmatched td:first-child { color: var(--red) }
+
+.imp-more-hint {
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 6px;
+  text-align: center
+}
+
+.imp-tag {
+  display: inline-block;
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  color: var(--dim)
+}
+
+.imp-tag-warn { background: rgba(255, 159, 10, .15); color: var(--orange) }
+.imp-tag-danger { background: rgba(255, 69, 58, .15); color: var(--red) }
+
+.imp-opts {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px
+}
+
+.imp-opt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer
+}
+
+.imp-opt-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--blue)
+}
+
+.imp-progress-wrap {
+  margin: 14px 0
+}
+
+.imp-progress-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--bg2);
+  overflow: hidden
+}
+
+.imp-progress-fill {
+  height: 100%;
+  background: var(--blue);
+  transition: width .2s
+}
+
+.imp-progress-text {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--dim);
+  text-align: center
+}
+
+.imp-log-list {
+  max-height: 30vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px 10px
+}
+
+.imp-log-item {
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border)
+}
+
+.imp-log-item:last-child { border-bottom: none }
+.imp-log-item.ok { color: var(--green) }
+.imp-log-item.fail { color: var(--red) }
+
+body.light-mode .imp-error { background: rgba(255, 69, 58, .08) }
+body.light-mode .imp-map-select { background: #fff }
+body.light-mode .imp-dropzone:hover,
+body.light-mode .imp-dropzone.drag { background: rgba(10, 132, 255, .06) }
+
 .setting-row {
   display: flex;
   justify-content: space-between;
@@ -3567,6 +3846,11 @@ label.switch:has(#setting-white-mode) {
 html.vt-active *:not(.bottom-nav):not(.bottom-nav-glow):not(.nav-item):not(.nav-icon):not(.nav-label) {
   transition-duration: 0s !important;
 }
+/* 主題切換截圖期間：毛玻璃與大陰影先關掉 (快照便宜很多)，膠囊改成較實的底色補回視覺 */
+html.vt-active .liquid-nav::before { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; background: rgba(28,28,34,.92) !important; }
+html.vt-active body.light-mode .liquid-nav::before { background: rgba(255,255,255,.94) !important; }
+html.vt-active .lens-blur, html.vt-active .input-overlay, html.vt-active .sf-student-card-2d, html.vt-active .fab-empty-bed { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+html.vt-active .home-anim-bg .anim-line::after, html.vt-active .home-anim-bg .ball-sphere, html.vt-active .home-anim-bg::before, html.vt-active .blob-1, html.vt-active .blob-2 { animation-play-state: paused !important; }
 
 /* 鈹€鈹€ 娼樹粩妯″紡 (绨℃綌瑕栬) 鈹€鈹€ */
 body.panzi-mode .sqd-meta { display: none !important; }
@@ -4022,11 +4306,12 @@ body.light-mode .feedback-send-btn {
 .gooey-svg-filter { position: absolute; width: 0; height: 0; pointer-events: none; }
 
 /* Light mode overrides for search orb */
-body.light-mode .modern-input { color: #333; }
-body.light-mode .modern-input::placeholder { color: rgba(0,0,0,0.4); }
-body.light-mode .search-icon-wrapper { color: #333; }
+/* 淺色模式：搜尋框仍是深紫色果凍，字用白色，不要再疊一塊白色底 */
+body.light-mode .modern-input { color: #fff; }
+body.light-mode .modern-input::placeholder { color: rgba(255,255,255,0.72); }
+body.light-mode .search-icon-wrapper { color: #fff; }
 body.light-mode .input-overlay {
-  background: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.12);
   border-color: rgba(0,0,0,0.1);
 }
 body.light-mode .focus-indicator { background: #6366f1; }
@@ -4930,6 +5215,35 @@ body.light-mode .anim-line::after {
   opacity: 0; transition: opacity 0.9s ease;
 }
 .bh-atmo.on { opacity: 1; }
+/* 先遣層：截圖還沒好之前就先讓黑洞成形，位置/半徑/傾角與 WebGL 場景一致 */
+.bh-seed-dim {
+  transition: none;
+  background: radial-gradient(circle at var(--bh-x, 50%) var(--bh-y, 40%),
+    rgba(0, 0, 0, 0.65) 0%, rgba(0, 0, 0, 0.78) 55%, rgba(0, 0, 0, 0.88) 100%);
+}
+.bh-seed {
+  position: fixed;
+  z-index: 9997;
+  pointer-events: none;
+  width: calc(var(--bh-r, 45px) * 10);
+  height: calc(var(--bh-r, 45px) * 10);
+  transform: translate(-50%, -50%);
+}
+.bh-seed i { position: absolute; inset: 0; display: block; border-radius: 50%; }
+/* 吸積盤：壓扁成短軸/長軸 0.42 再轉 -45°，畫面上左高右低 */
+.bh-seed .bh-seed-disk {
+  transform: rotate(-45deg) scaleY(0.42);
+  filter: blur(3px);
+  background: radial-gradient(closest-side,
+    rgba(0, 0, 0, 0) 25%, rgba(255, 190, 110, 0.45) 32%, rgba(255, 216, 168, 0.55) 44%,
+    rgba(255, 120, 40, 0.24) 66%, rgba(0, 0, 0, 0) 86%);
+}
+/* 事件視界：純黑球體加一圈細光子環 */
+.bh-seed .bh-seed-core {
+  background: radial-gradient(closest-side,
+    #000 0%, #000 19%, rgba(255, 240, 218, 0.95) 20.2%, rgba(255, 160, 70, 0.3) 22.5%,
+    rgba(0, 0, 0, 0) 30%);
+}
 
 /* Advanced Spaghettification — driven by JS requestAnimationFrame */
 .anim-suck-into-blackhole {

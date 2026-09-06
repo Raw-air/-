@@ -1,27 +1,39 @@
 /* iOS 26 Liquid Glass 底部導覽 (參考 Dribbble「Liquid Glass」by Mohammadreza Alidoost)
    浮動玻璃膠囊 + 一顆清透鏡片；鏡片裡是放大 1.12 倍的圖示複本，所以每個瀏覽器 (含 iOS Safari) 都有折射放大。
-   鏡片底下的真實圖示會淡出，避免與複本疊成兩層；亮環、粉/藍色散、粉色光暈用 box-shadow 與漸層疊出。 */
+   --lens-x 註冊成真正的 <length>：鏡片、光暈、複本列、真實列上的遮罩洞都吃同一個數值，一條 transition 全部同步，
+   所以不會再出現「真實圖示與複本一前一後滑進來重疊」。鏡片可以按住左右拖 (navigation.js)。 */
+@property --lens-x { syntax: '<length>'; inherits: true; initial-value: 8px; }
 .bottom-nav.liquid-nav,body.light-mode .bottom-nav.liquid-nav {
   left:50%;right:auto;bottom:calc(16px + env(safe-area-inset-bottom,0px));
   width:min(364px,calc(100% - 36px));height:64px;padding:0 8px;
   transform:translateX(-50%);border:0;border-radius:40px;
   background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;
   isolation:isolate;overflow:visible;
-  --lens-x:8px;--lens-size:68px;--nav-w:364px;
+  touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+  --lens-x:8px;--lens-size:68px;--lens-r:34px;--hole-r:31px;--nav-w:364px;
   --lens-ease:cubic-bezier(.22,1.2,.36,1);--lens-time:.55s;
-  --nav-fill:rgba(30,30,37,.6);--nav-rim:rgba(255,255,255,.14);--nav-top:rgba(255,255,255,.2);
+  transition:--lens-x var(--lens-time) var(--lens-ease);
+  /* 深色：玻璃要暗、亮邊要收斂，才不會像一顆發光的球 */
+  --nav-fill:rgba(28,28,34,.64);--nav-rim:rgba(255,255,255,.1);--nav-top:rgba(255,255,255,.12);
   --nav-shadow:0 18px 40px rgba(0,0,0,.45),0 2px 6px rgba(0,0,0,.3);
   --nav-ink:#8e8e96;--nav-ink-active:var(--purple);
-  --lens-fill:rgba(62,62,74,.34);--lens-ring:rgba(255,255,255,.55);
-  --lens-shadow:0 8px 18px rgba(0,0,0,.26);
+  --lens-fill:rgba(40,40,50,.3);--lens-ring:rgba(255,255,255,.28);--lens-bright:1;
+  --rim-top:rgba(255,255,255,.3);--rim-bevel:rgba(255,255,255,.12);--rim-hi:rgba(255,255,255,.16);
+  --rim-cyan:rgba(120,175,255,.2);--rim-pink:rgba(255,140,225,.14);--rim-bottom:rgba(0,0,0,.28);
+  --halo:0 0 24px 3px rgba(255,150,225,.12),0 0 14px 1px rgba(140,200,255,.1);
+  --lens-shadow:0 8px 18px rgba(0,0,0,.3);
 }
 body.light-mode .bottom-nav.liquid-nav {
   --nav-fill:rgba(255,255,255,.74);--nav-rim:rgba(255,255,255,.95);--nav-top:#fff;
   --nav-shadow:0 18px 40px rgba(60,70,100,.16),0 2px 6px rgba(60,70,100,.08);
   --nav-ink:#8a8a8e;--nav-ink-active:var(--purple);
-  --lens-fill:rgba(255,255,255,.34);--lens-ring:rgba(90,100,130,.3);
+  --lens-fill:rgba(255,255,255,.34);--lens-ring:rgba(90,100,130,.3);--lens-bright:1.08;
+  --rim-top:rgba(255,255,255,.75);--rim-bevel:rgba(255,255,255,.35);--rim-hi:rgba(255,255,255,.42);
+  --rim-cyan:rgba(120,175,255,.32);--rim-pink:rgba(255,140,225,.22);--rim-bottom:rgba(0,0,0,.18);
+  --halo:0 0 26px 4px rgba(255,150,225,.24),0 0 16px 1px rgba(140,200,255,.22);
   --lens-shadow:0 8px 18px rgba(60,70,100,.18);
 }
+.liquid-nav.is-dragging {transition:none;}
 /* 膠囊本體 */
 .liquid-nav::before {
   content:'';position:absolute;inset:0;border-radius:inherit;z-index:-2;
@@ -33,27 +45,36 @@ body.light-mode .bottom-nav.liquid-nav {
 .liquid-nav::after {
   content:'';position:absolute;left:0;top:50%;width:var(--lens-size);height:var(--lens-size);
   margin-top:calc(var(--lens-size) / -2);border-radius:50%;z-index:-1;pointer-events:none;
-  transform:translate3d(var(--lens-x),0,0);transition:transform var(--lens-time) var(--lens-ease);
-  box-shadow:0 0 26px 4px rgba(255,150,225,.24),0 0 16px 1px rgba(140,200,255,.22);
+  transform:translate3d(var(--lens-x),0,0);
+  box-shadow:var(--halo);
+}
+/* 真實的四顆按鈕：包成一列，在鏡片位置挖一個洞 → 鏡片下只看得到複本，不會疊影 */
+.liquid-nav .nav-row {
+  display:flex;flex:1;min-width:0;height:64px;align-items:center;
+  -webkit-mask-image:radial-gradient(circle var(--hole-r) at calc(var(--lens-x) - 8px + var(--lens-r)) 50%,transparent 96%,#000 100%);
+  mask-image:radial-gradient(circle var(--hole-r) at calc(var(--lens-x) - 8px + var(--lens-r)) 50%,transparent 96%,#000 100%);
 }
 /* 鏡片外層：只負責位移 */
 .liquid-lens {
   position:absolute;left:0;top:50%;width:var(--lens-size);height:var(--lens-size);
   margin-top:calc(var(--lens-size) / -2);z-index:2;pointer-events:none;
   transform:translate3d(var(--lens-x),0,0);
-  transition:transform var(--lens-time) var(--lens-ease);
   will-change:transform;
 }
-/* 鏡片本體：圓形裁切、行進時的液態擠壓 (模糊放在自己的圓形子層，避開 Safari「圓角裁切 + backdrop-filter」破圖) */
+/* 鏡片本體：圓形裁切、按住時微放大、拖曳時依速度拉長、行進時的液態擠壓 */
 .lens-shape {
   position:absolute;inset:0;border-radius:50%;overflow:hidden;isolation:isolate;
   -webkit-mask-image:-webkit-radial-gradient(#fff,#000);
   background:var(--lens-fill);
   box-shadow:var(--lens-shadow);
+  transform:scale(var(--lens-sx,1),var(--lens-sy,1));
+  transition:transform .18s cubic-bezier(.2,.8,.2,1);
 }
+.liquid-nav.is-pressing .lens-shape {transform:scale(calc(var(--lens-sx,1) * 1.06),calc(var(--lens-sy,1) * 1.06));}
+.liquid-nav.is-dragging .lens-shape {transition:transform .06s linear;}
 .lens-blur {
   position:absolute;inset:0;border-radius:50%;
-  backdrop-filter:blur(2px) saturate(150%) brightness(1.08);-webkit-backdrop-filter:blur(2px) saturate(150%) brightness(1.08);
+  backdrop-filter:blur(2px) saturate(150%) brightness(var(--lens-bright));-webkit-backdrop-filter:blur(2px) saturate(150%) brightness(var(--lens-bright));
 }
 @keyframes liquid-squish {
   0% {transform:scale(1,1);}
@@ -67,7 +88,6 @@ body.light-mode .bottom-nav.liquid-nav {
 .lens-row {
   position:absolute;top:calc((var(--lens-size) - 64px) / 2);left:calc(8px - var(--lens-x));
   width:calc(var(--nav-w) - 16px);height:64px;display:flex;
-  transition:left var(--lens-time) var(--lens-ease);
 }
 .lens-item {
   flex:1;min-width:0;height:64px;padding:9px 0 7px;gap:2px;
@@ -79,32 +99,36 @@ body.light-mode .bottom-nav.liquid-nav {
 /* 邊緣：亮環、上方鏡面高光、底部內陰影 (球面)、右下藍光、左上粉光 (色散) */
 .lens-rim {
   position:absolute;inset:0;border-radius:50%;z-index:2;
-  background:radial-gradient(circle at 32% 22%,rgba(255,255,255,.42),rgba(255,255,255,0) 40%),
-    radial-gradient(circle at 74% 84%,rgba(255,170,235,.22),rgba(255,170,235,0) 45%);
+  background:radial-gradient(circle at 32% 22%,var(--rim-hi),rgba(255,255,255,0) 40%),
+    radial-gradient(circle at 74% 84%,var(--rim-pink),rgba(255,170,235,0) 45%);
   box-shadow:inset 0 0 0 1px var(--lens-ring),
-    inset 0 1px 1px rgba(255,255,255,.75),
-    inset 2px 3px 6px rgba(255,255,255,.35),
-    inset 0 -4px 6px -2px rgba(0,0,0,.18),
-    inset -3px -4px 9px rgba(120,175,255,.32),
-    inset 3px 4px 10px rgba(255,140,225,.22);
+    inset 0 1px 1px var(--rim-top),
+    inset 2px 3px 6px var(--rim-bevel),
+    inset 0 -4px 6px -2px var(--rim-bottom),
+    inset -3px -4px 9px var(--rim-cyan),
+    inset 3px 4px 10px var(--rim-pink);
 }
 /* 導覽項目 */
-.liquid-nav .nav-item {height:64px;padding:9px 0 7px;gap:2px;border:0;background:none;box-shadow:none;min-width:0;flex:1;border-radius:32px;color:var(--nav-ink);font:inherit;transition:transform .2s,color .25s;}
-.liquid-nav .nav-icon,.liquid-nav .nav-label,body.light-mode .liquid-nav .nav-icon,body.light-mode .liquid-nav .nav-label {color:inherit;filter:none;transform:none;opacity:1;transition:opacity .15s;}
+.liquid-nav .nav-item {height:64px;padding:9px 0 7px;gap:2px;border:0;background:none;box-shadow:none;min-width:0;flex:1;border-radius:32px;color:var(--nav-ink);font:inherit;transition:transform .2s,color .25s;touch-action:none;}
+.liquid-nav .nav-icon,.liquid-nav .nav-label,body.light-mode .liquid-nav .nav-icon,body.light-mode .liquid-nav .nav-label {color:inherit;filter:none;transform:none;opacity:1;transition:none;}
 .liquid-nav .nav-label {font-size:10px;line-height:14px;font-weight:600;letter-spacing:.2px;}
 .liquid-nav .nav-icon {display:flex;align-items:center;justify-content:center;height:25px;}
 .liquid-nav .nav-icon svg {width:23px;height:23px;stroke-width:2;}
 .liquid-nav .nav-item.active,body.light-mode .liquid-nav .nav-item.active {color:var(--nav-ink-active);}
-/* 鏡片抵達後，底下的真實圖示淡出，畫面上只剩鏡片裡放大的那一份 */
 .liquid-nav .nav-item.active .nav-icon,.liquid-nav .nav-item.active .nav-label,
-body.light-mode .liquid-nav .nav-item.active .nav-icon,body.light-mode .liquid-nav .nav-item.active .nav-label {color:inherit;filter:none;transform:none;opacity:0;transition:opacity .12s .34s;}
+body.light-mode .liquid-nav .nav-item.active .nav-icon,body.light-mode .liquid-nav .nav-item.active .nav-label {color:inherit;filter:none;transform:none;}
 .liquid-nav .nav-item.active .nav-label,.lens-item.active .nav-label {font-weight:700;}
 .liquid-nav .nav-item.active .nav-icon svg,.lens-item.active .nav-icon svg {fill:rgba(191,90,242,.14);}
 .liquid-nav .nav-item:focus-visible {outline:2px solid #b5e9ff;outline-offset:3px;}
 .liquid-nav .nav-item:active {transform:scale(.93);}
+.liquid-nav.is-dragging .nav-item:active {transform:none;}
 body.gravity-running .liquid-nav {z-index:10010;}
+/* 沒有 @property 的舊瀏覽器：退回逐元素 transition (遮罩洞會直接跳，不會動畫) */
+.liquid-nav.no-prop {transition:none;}
+.liquid-nav.no-prop .liquid-lens,.liquid-nav.no-prop::after {transition:transform var(--lens-time) var(--lens-ease);}
+.liquid-nav.no-prop .lens-row {transition:left var(--lens-time) var(--lens-ease);}
+.liquid-nav.no-prop.is-dragging .liquid-lens,.liquid-nav.no-prop.is-dragging::after,.liquid-nav.no-prop.is-dragging .lens-row {transition:none;}
 @media (prefers-reduced-motion:reduce) {
-  .liquid-lens,.liquid-nav::after,.lens-row {transition:none;}
+  .liquid-nav,.liquid-nav.no-prop .liquid-lens,.liquid-nav.no-prop::after,.liquid-nav.no-prop .lens-row {transition:none;}
   .liquid-lens.is-travelling .lens-shape {animation:none;}
-  .liquid-nav .nav-item.active .nav-icon,.liquid-nav .nav-item.active .nav-label {transition:none;}
 }

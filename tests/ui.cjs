@@ -184,6 +184,25 @@ async function run(engine,viewport){
     return [invalidBlocked,pinSaved,failedAppearancePreserved,failedSwitchRestored,muteSaved];
   });
   assert.deepEqual(adminChecks,[true,true,true,true,true]);
+  // ── Excel 匯入 (import.js)：設定卡片、精靈開關、_importRows 管線 (更新 / 略過相同 / 找不到床位 / 清空) ──
+  await page.evaluate(()=>navigateTo('settings'));await page.waitForTimeout(300);
+  assert.equal(await page.locator('.imp-open-btn').count(),1);
+  await page.evaluate(()=>window.openImportWizard());await page.waitForTimeout(200);
+  assert.equal(await page.locator('#imp-modal.visible').count(),1);
+  await page.evaluate(()=>window._impClose());await page.waitForTimeout(200);
+  const impRows=[[1,'101','1','匯入班','S9001','新生甲','','0911000001','','台北市'],[2,'101','2','','','','','','',''],[3,'101','3','測試班','TEST2','測試住宿生 2','','','',''],[4,'999','1','x','S9','無法比對','','','','']];
+  const impMap={room:1,bed:2,class:3,studentId:4,name:5,phone:7,address:9};
+  const impBefore=requests.filter(r=>r.path==='/api/attendance').length;
+  const imp1=await page.evaluate(({rows,mapping})=>window._importRows(rows,mapping,{blankAsEmpty:false,noteContact:false,skipUnchanged:true}),{rows:impRows,mapping:impMap});
+  assert.equal(imp1.preview.stats.total,4);assert.equal(imp1.preview.stats.matched,3);assert.equal(imp1.preview.stats.unmatchedRows,1);assert.equal(imp1.preview.stats.willChange,1);
+  assert.equal(imp1.result.ok,1);assert.equal(imp1.result.fail,0);
+  const impReqs=requests.filter(r=>r.path==='/api/attendance');assert.equal(impReqs.length,impBefore+1);
+  assert.deepEqual(JSON.parse(impReqs[impReqs.length-1].body).updates,[{pageId:'test-0',updateProfile:{name:'新生甲',class:'匯入班',studentId:'S9001',isForeign:false},markEmpty:false}]);
+  assert.equal(await page.evaluate(()=>state.students.find(s=>s.id==='test-0').name),'新生甲');
+  const imp2=await page.evaluate(({rows,mapping})=>window._importRows(rows,mapping,{blankAsEmpty:true,noteContact:false,skipUnchanged:true}),{rows:impRows,mapping:impMap});
+  assert.equal(imp2.preview.items.find(it=>String(it.room)==='101'&&String(it.bed)==='2').action,'clear');
+  const impClear=JSON.parse(requests.filter(r=>r.path==='/api/attendance').slice(-1)[0].body).updates.find(u=>u.pageId==='test-1');
+  assert.deepEqual(impClear,{pageId:'test-1',updateProfile:{name:'',class:'',studentId:'',isForeign:false},markEmpty:true,clearProfile:true});
   await page.evaluate(()=>localStorage.setItem('white_mode','true'));
   await page.reload();await page.waitForFunction(()=>typeof state!=='undefined'&&!state.loading);
   assert.equal(await page.locator('.liquid-nav .nav-icon img').count(),0);
@@ -200,7 +219,7 @@ async function offline(){
   await page.goto('http://127.0.0.1:'+server.address().port);
   await page.evaluate(()=>navigator.serviceWorker.ready);
   await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
-  assert.ok(await page.evaluate(async()=>(await caches.keys()).includes('biyuan-v53')));
+  assert.ok(await page.evaluate(async()=>(await caches.keys()).includes('biyuan-v54')));
   await context.setOffline(true);
   await page.reload({waitUntil:'domcontentloaded'});
   assert.ok(await page.evaluate(()=>typeof clearStudentData==='function' && typeof THREE==='object'));
