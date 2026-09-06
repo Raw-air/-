@@ -26,15 +26,15 @@ function setupNav(){
   const rim=document.createElement('span');rim.className='lens-rim';shape.appendChild(rim);
   lens.appendChild(shape);nav.prepend(lens);
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
-  const SIZE=68,PAD=8;
+  const LENS_W=84,PAD=8;
   let index=0,lastIndex=-1,travelTimer=0,retryTimer=0,w=0,slot=0,suppressClick=false;
   const pageIndex=()=>{
     const page=['home','summary','history','settings'].includes(currentPage)?currentPage:currentPage==='rollcall'?'home':'settings';
     return Math.max(0,items.findIndex(item=>item.dataset.page===page));
   };
-  const xFor=i=>PAD+slot*(i+.5)-SIZE/2;
+  const xFor=i=>PAD+slot*(i+.5)-LENS_W/2;
   const lensX=()=>parseFloat(nav.style.getPropertyValue('--lens-x'))||xFor(index);
-  const slotAt=x=>Math.max(0,Math.min(3,Math.floor((x+SIZE/2-PAD)/slot)));
+  const slotAt=x=>Math.max(0,Math.min(3,Math.floor((x+LENS_W/2-PAD)/slot)));
   function measure(){w=nav.clientWidth;slot=(w-16)/4;nav.style.setProperty('--nav-w',w+'px');}
   function mark(i){
     for(const [k,item] of items.entries()){
@@ -60,7 +60,7 @@ function setupNav(){
   }
   // ── 按住鏡片左右拖 (iOS 26 tab bar)：鏡片跟著手指、依速度拉長、跨過分頁震一下、放開吸到最近的分頁 ──
   const drag={active:false,moved:false,id:null,startX:0,startLens:0,lastX:0,lastT:0,v:0,hover:-1};
-  const rubber=x=>{const min=PAD,max=w-PAD-SIZE,over=22;
+  const rubber=x=>{const min=PAD,max=w-PAD-LENS_W,over=22;
     if(x<min)return min-over*(1-Math.exp((x-min)/over));
     if(x>max)return max+over*(1-Math.exp(-(x-max)/over));return x;};
   function stretch(){

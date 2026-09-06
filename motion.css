@@ -1,16 +1,27 @@
 /* 主題切換、住宿生卡片相關的動態規則；底部導覽列在 liquid-nav.css */
 label.switch:has(#setting-white-mode){view-transition-name:none;}
-html.theme-reveal * {transition-duration:0s!important;}
+html.theme-reveal *,html.theme-shrink * {transition-duration:0s!important;}
 body.light-mode img[src*="Lp/ICON/"]:not([src*="/BLACK/"]) {filter:brightness(0);}
 ::view-transition-group(root){animation:none;}
+/* 開全白：新畫面從開關「長出來」 */
 html.theme-reveal::view-transition-old(root){animation:none;z-index:1;}
 html.theme-reveal::view-transition-new(root){
   z-index:2;mix-blend-mode:normal;
   animation:theme-circle-reveal 520ms cubic-bezier(.33,.1,.25,1) both;
 }
+/* 開深色：舊畫面往開關「縮回去」，新畫面在底下等著 */
+html.theme-shrink::view-transition-new(root){animation:none;z-index:1;}
+html.theme-shrink::view-transition-old(root){
+  z-index:2;mix-blend-mode:normal;
+  animation:theme-circle-shrink 520ms cubic-bezier(.33,.1,.25,1) both;
+}
 @keyframes theme-circle-reveal {
   from{clip-path:circle(0px at var(--theme-x,50%) var(--theme-y,50%));}
   to{clip-path:circle(var(--theme-radius,150%) at var(--theme-x,50%) var(--theme-y,50%));}
+}
+@keyframes theme-circle-shrink {
+  from{clip-path:circle(var(--theme-radius,150%) at var(--theme-x,50%) var(--theme-y,50%));}
+  to{clip-path:circle(0px at var(--theme-x,50%) var(--theme-y,50%));}
 }
 .sf-card-area-2d {touch-action:pan-y pinch-zoom;}
 .sf-card-area-2d:focus-visible {outline:2px solid var(--blue);outline-offset:-8px;}

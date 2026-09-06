@@ -12,20 +12,31 @@ function _themeClip(x,y,r){return `circle(${r}px at ${x}px ${y}px)`;}
 function _themeWriteKeyframes(x,y,r){
   let s=document.getElementById('theme-reveal-style');
   if(!s){s=document.createElement('style');s.id='theme-reveal-style';document.head.appendChild(s);}
-  s.textContent=`@keyframes theme-circle-reveal{from{clip-path:${_themeClip(x,y,0)}}to{clip-path:${_themeClip(x,y,r)}}}`;
+  s.textContent=`@keyframes theme-circle-reveal{from{clip-path:${_themeClip(x,y,0)}}to{clip-path:${_themeClip(x,y,r)}}}`+
+    `@keyframes theme-circle-shrink{from{clip-path:${_themeClip(x,y,r)}}to{clip-path:${_themeClip(x,y,0)}}}`;
 }
 function _themeFallbackTransition(light,x,y){
   const generation=_themeGeneration,ov=document.createElement('div');_themeFallbackOverlay=ov;
-  ov.style.cssText=`position:fixed;inset:0;z-index:20000;pointer-events:none;background:${light?'#ebecf0':'#151518'}`;
+  const radius=_themeEndRadius(x,y);
+  // 沒有 View Transition 時用一塊純色蓋板模擬：開全白 → 新底色從開關擴散；開深色 → 舊底色往開關縮回去
+  ov.style.cssText=`position:fixed;inset:0;z-index:20000;pointer-events:none;background:${light?'#ebecf0':'#ebecf0'}`;
   document.body.appendChild(ov);
-  const a=ov.animate({clipPath:[_themeClip(x,y,0),_themeClip(x,y,_themeEndRadius(x,y))]},{duration:THEME_VT_DURATION,easing:THEME_VT_EASE,fill:'forwards'});
-  a.finished.then(()=>{if(generation!==_themeGeneration)return;performAppearanceChange(light);return ov.animate({opacity:[1,0]},{duration:160,fill:'forwards'}).finished;}).then(()=>ov.remove()).catch(()=>ov.remove());
+  if(light){
+    const a=ov.animate({clipPath:[_themeClip(x,y,0),_themeClip(x,y,radius)]},{duration:THEME_VT_DURATION,easing:THEME_VT_EASE,fill:'forwards'});
+    a.finished.then(()=>{if(generation!==_themeGeneration)return;performAppearanceChange(light);return ov.animate({opacity:[1,0]},{duration:160,fill:'forwards'}).finished;}).then(()=>ov.remove()).catch(()=>ov.remove());
+    return;
+  }
+  performAppearanceChange(false);
+  const a=ov.animate({clipPath:[_themeClip(x,y,radius),_themeClip(x,y,0)]},{duration:THEME_VT_DURATION,easing:THEME_VT_EASE,fill:'forwards'});
+  a.finished.then(()=>ov.remove()).catch(()=>ov.remove());
 }
 function toggleWhiteMode(el){
   const light=el.checked,generation=++_themeGeneration,root=document.documentElement;
+  // 開全白 = 新畫面擴散出去；開深色 = 舊畫面縮回開關
+  const shrink=!light,animName=shrink?'theme-circle-shrink':'theme-circle-reveal';
   setPref('white_mode',light);
   _themeTransition?.skipTransition();_themeFallbackOverlay?.remove();
-  root.classList.remove('vt-active','theme-reveal');
+  root.classList.remove('vt-active','theme-reveal','theme-shrink');
   const {x,y}=_themeTapPoint(el),radius=_themeEndRadius(x,y);
   if(typeof _themeHaptic==='function')_themeHaptic();else haptic('medium');
   if(matchMedia('(prefers-reduced-motion: reduce)').matches){performAppearanceChange(light);return;}
@@ -36,9 +47,9 @@ function toggleWhiteMode(el){
   root.style.setProperty('--theme-radius',radius+'px');
   _themeWriteKeyframes(x,y,radius);
   // vt-active：截圖期間關掉毛玻璃、陰影與所有 transition，兩張快照的成本大幅下降 (手機才不會掉幀)
-  root.classList.add('theme-reveal','vt-active');
+  root.classList.add(shrink?'theme-shrink':'theme-reveal','vt-active');
   let fallbackClock=0,watchdog=0,safety=0;
-  const cleanup=()=>{clearTimeout(fallbackClock);clearTimeout(watchdog);clearTimeout(safety);if(generation===_themeGeneration){root.classList.remove('theme-reveal','vt-active');_themeTransition=null;}};
+  const cleanup=()=>{clearTimeout(fallbackClock);clearTimeout(watchdog);clearTimeout(safety);if(generation===_themeGeneration){root.classList.remove('theme-reveal','theme-shrink','vt-active');_themeTransition=null;}};
   try{
     const transition=document.startViewTransition(()=>{if(generation===_themeGeneration)performAppearanceChange(light);});
     _themeTransition=transition;
@@ -48,8 +59,9 @@ function toggleWhiteMode(el){
       root.classList.remove('vt-active');
       // 主驅動：WAAPI 以實際像素推同一個圓 (舊版在 iPhone 上順暢的做法)；CSS keyframes 同值同時存在，
       // WebKit 偶爾忽略首次 WAAPI 時由 CSS 接手，兩者疊在一起數值一致不會打架。
-      try{root.animate({clipPath:[_themeClip(x,y,0),_themeClip(x,y,radius)]},{duration:THEME_VT_DURATION,easing:THEME_VT_EASE,fill:'forwards',pseudoElement:'::view-transition-new(root)'});}catch(_){}
-      const animation=document.getAnimations().find(a=>a.animationName==='theme-circle-reveal');
+      const from=shrink?_themeClip(x,y,radius):_themeClip(x,y,0),to=shrink?_themeClip(x,y,0):_themeClip(x,y,radius);
+      try{root.animate({clipPath:[from,to]},{duration:THEME_VT_DURATION,easing:THEME_VT_EASE,fill:'forwards',pseudoElement:shrink?'::view-transition-old(root)':'::view-transition-new(root)'});}catch(_){}
+      const animation=document.getAnimations().find(a=>a.animationName===animName);
       // Some WebKit builds expose a running pseudo animation whose timeline stays at 0.
       // Only in that case, advance the SAME clip animation from the frame clock.
       watchdog=setTimeout(()=>{

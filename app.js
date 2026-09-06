@@ -3841,10 +3841,9 @@ function getRandomStudents(count) {
 }
 
 function sfStudentAt(vIndex) {
-  // 虛擬索引可正可負，取模對應名單 → 名單頭尾相接，可以無限滑
   const n = _sfResults.length;
-  if (!n) return null;
-  return _sfResults[((vIndex % n) + n) % n];
+  if (vIndex < 0 || vIndex >= n) return null;   // 有邊界：第一張左邊、最後一張右邊都沒有卡片
+  return _sfResults[vIndex];
 }
 
 function sfEsc(v) {
@@ -3945,6 +3944,7 @@ function sfBindCard(entry, vIndex) {
   el.style.opacity = '';
   el.style.zIndex = '';
   el.style.visibility = '';
+  el._tf = el._op = el._z = el._tr = null;   // 卡片換人時清掉 carousel.js 的樣式快取
   el.style.left = `calc(50% - 150px + ${vIndex * _cardWidth}px)`;
   if (vIndex === _sfActiveIndex) el.classList.add('active');
   if (s) {

@@ -1,13 +1,13 @@
 # 維護與驗證
 
-正式前端為 https://raw-air.github.io/-/，Pages 來源為 `Soft-UI` 分支根目錄。此版本為資源 v90、Service Worker v54。
+正式前端為 https://raw-air.github.io/-/，Pages 來源為 `Soft-UI` 分支根目錄。此版本為資源 v91、Service Worker v55。
 
 ## 本次修正
 
 - 擷取時將表單的 3D 堆疊攤平，解決輸入框黑色矩形；固定背景頁面的進場動畫，避免 WebKit 擷取到透明背景。正常介面的陰影與立體效果保留。黑洞期間導覽列維持真正的玻璃材質。
-- carousel.js 以 Touch Events (觸控) 與 Mouse Events (桌面) 驅動同一個手勢狀態機，不用 Pointer Events：iOS Safari 在可直向捲動的頁面上做水平拖曳時會送出 pointercancel (w3c/pointerevents#303)。touchmove 只在判定為水平手勢後才 preventDefault (太早擋會鎖死直向捲動)。名單是環狀的：sfStudentAt 取模，虛擬索引不設上下限，13 張回收池、單段阻尼彈簧吸附、未聚焦欄位可起手滑動等行為不變。
-- theme.js 在 View Transition 建立前，把開關中心以「實際像素」寫進 <style id="theme-reveal-style"> 的 @keyframes (iOS WebKit 對 ::view-transition 偽元素上的 var() 解析不可靠)，同時加上 html.vt-active 讓快照期間關掉毛玻璃/大陰影/所有 transition (快照成本大降)，ready 後移除 vt-active 並以 WAAPI 用同樣像素驅動同一個圓作主驅動 (舊版在 iPhone 上順暢的做法)；WebKit 動畫時間停在零時以計時器推進；連續切換只採用最後選擇；無 View Transition 的瀏覽器使用底色圓形擴散及淡出備援。
-- navigation.js / liquid-nav.css 將底部導覽做成 iOS 26 液態玻璃：浮動膠囊 + 清透鏡片。鏡片內是導覽列圖示的複本放大 1.12 倍並圓形裁切 (跨瀏覽器折射)；--lens-x 以 @property 註冊為 <length>，鏡片、光暈、複本列、真實列上的 mask 洞全部由它驅動，一條 transition 同步，真實圖示在鏡片下被 mask 挖掉所以不會疊影。鏡片可按住拖曳 (Pointer Events + touch-action:none，放開吸到最近分頁並 navigateTo)。寬度 <120px 表示尚未排版，會重算。
+- carousel.js 以 Touch Events (觸控) 與 Mouse Events (桌面) 驅動同一個手勢狀態機，不用 Pointer Events：iOS Safari 在可直向捲動的頁面上做水平拖曳時會送出 pointercancel (w3c/pointerevents#303)。touchmove 只在判定為水平手勢後才 preventDefault。名單有邊界 (sfStudentAt 超出範圍回 null、拖過頭橡皮筋回彈)。卡片是立體扇形排列：離中心越遠越往中間擠 (NEAR_PULL/FAR_PULL)、rotateY 越大、translateZ 越深；每張卡只在值真的變了才寫 style。進出 3D 模式的 0.8 秒內改用 CSS 過渡走位 (smoothUntil)，其餘時間逐幀直接寫值才跟得上手指。
+- theme.js 在 View Transition 建立前，把開關中心以「實際像素」寫進 <style id="theme-reveal-style"> 的 @keyframes (iOS WebKit 對 ::view-transition 偽元素上的 var() 解析不可靠)，並加 html.vt-active 讓快照期間關掉毛玻璃 (快照成本大降)，ready 後移除。方向：開全白時新畫面從開關擴散 (theme-reveal)，開深色時舊畫面往開關縮回 (theme-shrink，動 ::view-transition-old 並把它疊到上層)。WebKit 動畫時間停在零時以計時器推進。
+- navigation.js / liquid-nav.css 將底部導覽做成 iOS 26 液態玻璃：浮動膠囊 + 一顆 84×54 的橢圓鏡片。鏡片內是導覽列圖示的複本放大 1.12 倍並橢圓裁切 (跨瀏覽器折射)；--lens-x 以 @property 註冊為 <length>，鏡片、光暈、複本列、真實列上的 mask 洞全部由它驅動。鏡片可按住拖曳；is-dragging 的 transition:none 必須同時寫深色與 body.light-mode 兩個選擇器，否則淺色模式權重較高會讓鏡片還在跑過渡、拖起來不跟手。
 - 數字動畫使用各自的清理權限，修正舊動畫揭露新數字、容器邊框偏移、字寬度量與 WebKit 文字隱藏。
 - 個人化設定 (mute_sound/mute_haptic/white_mode/panzi_mode/power_save_mode) 走 app.js 頂端的 prefs 層：localStorage 為主，setPref() 同步備份到 cookie biyuan_prefs 與 IndexedDB biyuan/prefs，開機時缺值才從備援補回 (cookie 同步、IndexedDB 非同步後 applyStoredPrefs 再套一次)，並呼叫 navigator.storage.persist()。
 - 黑洞重做成「行星般的 3D 物體」：gravity.js 仍是 two-pass GPU 合成（一個 render target、一次全螢幕 pass）。螢幕 shader 用正交視線與傾斜盤面求交點畫吸積盤——傾斜軸 −45°（畫面上長軸左高右低）、俯視傾角使可見橢圓短軸/長軸 = 0.42、外緣 4.3 倍陰影半徑；依交點的 z 判斷盤在球體前或後，前半（偏下）蓋住球體下緣、後半被球體擋住，再用半徑反演把被擋住的後半盤翻到球體上方成一道弧。盤面有差動旋轉的 fbm 細絲與無接縫旋臂、內緣熱白外緣橘紅、上下兩層取樣做出厚度，都卜勒讓往觀察者轉的那半更亮更白。中央是純黑事件視界加一圈細光子環。這是視覺近似，不是廣義相對論數值模擬。

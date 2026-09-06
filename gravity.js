@@ -137,7 +137,7 @@ function createGravityScene({cardImage,background,rect,neighbours},hx,hy,rs){
   const mesh=new THREE.Mesh(geom,mat);mesh.frustumCulled=false;mesh.renderOrder=1;scene.add(mesh);
 
   // ── 粉塵：每片碎片配數十顆，顏色照該碎片的 UV 從卡片貼圖取樣 ──────────────
-  const dustPer=mobile?5:10,dustCount=fragCenters.length/3*dustPer;
+  const dustPer=mobile?10:18,dustCount=fragCenters.length/3*dustPer;
   const dPos=new Float32Array(dustCount*3),dUv=new Float32Array(dustCount*2),dCenter=new Float32Array(dustCount*2),dSeed=new Float32Array(dustCount),dRand=new Float32Array(dustCount*3);
   for(let f=0,n=0;f<fragCenters.length/3;f++){
     const cxp=fragCenters[f*3],cyp=fragCenters[f*3+1],sd=fragCenters[f*3+2];
@@ -169,7 +169,9 @@ function createGravityScene({cardImage,background,rect,neighbours},hx,hy,rs){
         vec2 center=uRect.xy+aCenter,orbit=center-uHole;
         vec2 frag=uHole+rot(t*t*(1.5+aSeed*2.4))*orbit*(1.-pow(t,1.35));
         frag+=(aRand.xy-.5)*vec2(uRect.z/12.,uRect.w/9.)*(1.-t*.55);
-        // 碎片先散成粉塵，再沿盤面平面螺旋落入視界
+        // Telegram 式：碎片先「噗」地散開成細粉塵，再沿盤面平面螺旋落入視界
+        vec2 puff=normalize(frag-center+vec2(aRand.x-.5,aRand.y-.5)*.001);
+        frag+=puff*(6.+aRand.z*26.)*sin(min(t,1.)*3.14159)*(.35+aSeed*.65);
         float ts=.30+aRand.z*.20;
         float k=smoothstep(ts,min(ts+.50,.995),t);
         vec2 d=frag-uHole;float dl=max(length(d),.001);
@@ -181,9 +183,11 @@ function createGravityScene({cardImage,background,rect,neighbours},hx,hy,rs){
         vec2 p=uHole+diskDir(ang)*rd*uRadius;
         p=mix(frag,p,k);
         float alive=smoothstep(0.,.10,t)*(1.-smoothstep(.965,1.,t));
-        vAlpha=alive*uBirth*(1.-uCollapse)*(.55+aRand.x*.85)*smoothstep(.55,1.35,rd);
+        // 距離感：越靠近視界的粒子越小、越暗，像被吸進深處一樣
+        float near=smoothstep(2.4,.42,rd);
+        vAlpha=alive*uBirth*(1.-uCollapse)*(.55+aRand.x*.85)*smoothstep(.42,1.25,rd)*(1.-near*.45);
         vHot=clamp(k*1.1+(1.-smoothstep(1.2,4.,rd))*.5,0.,1.);
-        gl_PointSize=max(1.,(1.1+aRand.y*2.4)*uDpr*(1.-k*.30));
+        gl_PointSize=max(.6,(.85+aRand.y*2.0)*uDpr*(1.-k*.22)*(1.-near*.72));
         gl_Position=vec4(p.x/uResolution.x*2.-1.,1.-p.y/uResolution.y*2.,0.,1.);
       }`,
     fragmentShader:`uniform sampler2D uTexture;varying vec2 vUv;varying float vAlpha,vHot;
