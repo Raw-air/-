@@ -10,7 +10,7 @@
   <meta name="theme-color" content="#151518">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=85">
+  <link rel="stylesheet" href="style.css?v=86">
   <link rel="manifest" href="manifest.json?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=2">
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -107,7 +107,24 @@
           const nextDelay = Math.random() < 0.15 ? Math.random() * 600 + 300 : Math.random() * 60 + 20;
           setTimeout(loopLogs, nextDelay);
         }
-        setTimeout(loopLogs, 50);
+        let logTimer = null;
+        function loopLogsGuard() {
+          const overlay = document.getElementById('loading-overlay');
+          // 載入畫面已經關掉就停下來，不要在背景一直跑 (省電、省效能)
+          if (!overlay || overlay.style.display === 'none' || overlay.classList.contains('exit-drop')) { logTimer = null; return; }
+          loopLogs();
+        }
+        window._startHackingLog = function () { if (logTimer === null) logTimer = setTimeout(loopLogsGuard, 50); };
+        loopLogs = function () {
+          const allLines = bg.textContent.split('\n');
+          if (allLines.length > 120) allLines.splice(0, allLines.length - 120);
+          allLines.push('[' + new Date().toTimeString().slice(0, 8) + '] ' + logs[Math.floor(Math.random() * logs.length)]);
+          bg.textContent = allLines.join('\n');
+          bg.scrollTop = bg.scrollHeight;
+          const nextDelay = Math.random() < 0.15 ? Math.random() * 600 + 300 : Math.random() * 60 + 20;
+          logTimer = setTimeout(loopLogsGuard, nextDelay);
+        };
+        window._startHackingLog();
       }
     })();
   </script>
@@ -1251,9 +1268,9 @@
     <div class="nav-item" data-page="settings"><span class="nav-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=85"></script>
-  <script src="api.js?v=85"></script>
-  <script src="app.js?v=85"></script>
+  <script src="config.js?v=86"></script>
+  <script src="api.js?v=86"></script>
+  <script src="app.js?v=86"></script>
 
   <!-- 幹部工作手冊 Modal -->
   <div id="duty-manual-modal" class="modal-overlay">

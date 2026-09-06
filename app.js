@@ -545,109 +545,130 @@ function performAppearanceChange(isLight) {
   if (typeof updateAllImagesToTheme === 'function') updateAllImagesToTheme();
 }
 
-let vtStartTime = 0;
-let vtRadiusFn = null;
+// ─── 主題切換：一律「從按鈕位置往外擴散」(深色/淺色都一樣) ───────────────────
+// 舊版深色模式是把舊畫面往按鈕「縮進去」，看起來像從四周包過來，不是從按鈕展開。
+// 現在兩個方向都用「新畫面從按鈕位置畫圓擴散」，並補上舊 iPhone (沒有 View Transition) 的替代動畫。
+const THEME_VT_DURATION = 420;
+let _themeFallbackOverlay = null;
 
-function easeOutQuad(t) { return t * (2 - t); }
+function _themeTapPoint() {
+  let x = lastTapX, y = lastTapY;
+  // 保險：若拿不到點擊座標，就用開關本身的位置
+  const sw = document.getElementById('setting-white-mode');
+  const label = sw ? sw.closest('label.switch') : null;
+  if ((!x && !y) && label) {
+    const r = label.getBoundingClientRect();
+    x = r.left + r.width / 2; y = r.top + r.height / 2;
+  }
+  return { x, y };
+}
+
+function _themeEndRadius(x, y) {
+  return Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y)) + 8;
+}
+
+function _themeHaptic() {
+  if (localStorage.getItem('mute_haptic') === 'true') return;
+  if (navigator.vibrate && /Android/i.test(navigator.userAgent)) {
+    navigator.vibrate([8, 60, 20, 60, 40, 60, 80]);
+  } else {
+    const rippleCurve = [0.02, 0.01, 0.05, 0.02, 0.15, 0.25, 0.001];
+    playHapticCurve(rippleCurve, THEME_VT_DURATION, 'sine', 120);
+  }
+}
+
+// 沒有 View Transition API 的瀏覽器 (iOS 17 以下 Safari)：用一層「新主題底色」的圓形擴散蓋過去，
+// 蓋滿的瞬間切換主題，再把那層淡出，視覺上就是從按鈕擴散開的效果。
+function _themeFallbackTransition(isLight, x, y) {
+  const endR = _themeEndRadius(x, y);
+  const targetBg = isLight ? '#ebecf0' : '#151518';
+  if (_themeFallbackOverlay) _themeFallbackOverlay.remove();
+  const ov = document.createElement('div');
+  _themeFallbackOverlay = ov;
+  ov.style.cssText = `position:fixed;inset:0;z-index:20000;pointer-events:none;background:${targetBg};` +
+    `clip-path:circle(0px at ${x}px ${y}px);-webkit-clip-path:circle(0px at ${x}px ${y}px);` +
+    `transition:clip-path ${THEME_VT_DURATION}ms ease-out,-webkit-clip-path ${THEME_VT_DURATION}ms ease-out,opacity 220ms ease;`;
+  document.body.appendChild(ov);
+  void ov.offsetWidth;
+  ov.style.clipPath = `circle(${endR}px at ${x}px ${y}px)`;
+  ov.style.webkitClipPath = `circle(${endR}px at ${x}px ${y}px)`;
+  setTimeout(() => {
+    performAppearanceChange(isLight);
+    ov.style.opacity = '0';
+    setTimeout(() => { ov.remove(); if (_themeFallbackOverlay === ov) _themeFallbackOverlay = null; }, 260);
+  }, THEME_VT_DURATION);
+}
 
 function toggleWhiteMode(el, event) {
   const isLight = el.checked;
   localStorage.setItem('white_mode', isLight);
-  const isDark = !isLight;
 
-  let x = lastTapX;
-  let y = lastTapY;
+  const { x, y } = _themeTapPoint();
+  const endRadius = _themeEndRadius(x, y);
 
-  const endRadius = Math.hypot(
-    Math.max(x, window.innerWidth - x),
-    Math.max(y, window.innerHeight - y)
-  );
+  _themeHaptic();
 
-  // 漸變展開的漣漪波形震動 (Ripple Effect 400ms 完全同步視覺)
-  if (localStorage.getItem('mute_haptic') !== 'true') {
-    if (navigator.vibrate && /Android/i.test(navigator.userAgent)) {
-      navigator.vibrate([8, 60, 20, 60, 40, 60, 80]);
-    } else {
-      // 1:1 同步 400ms 動畫的完美曲線：[微起步, 落, 爬升, 落, 極強衝擊收尾]
-      const rippleCurve = [0.02, 0.01, 0.05, 0.02, 0.15, 0.25, 0.001];
-      playHapticCurve(rippleCurve, 400, 'sine', 120);
-    }
-  }
-
-  if (!document.startViewTransition) {
-    performAppearanceChange(isLight);
-    if (typeof updateAllImagesToTheme === 'function') updateAllImagesToTheme();
+  if (typeof document.startViewTransition !== 'function') {
+    _themeFallbackTransition(isLight, x, y);
     return;
   }
 
-  // <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/></svg> 獨家防閃爍算法：推算當前畫面光圈半徑，實現「狂點完美折返」
-  let startRadius = isDark ? endRadius : 0;
-  const now = Date.now();
-  const duration = 400;
-
-  if (vtRadiusFn && (now - vtStartTime) < duration) {
-    startRadius = vtRadiusFn(now);
-  }
-
-  const targetRadius = isDark ? 0 : endRadius;
-  vtStartTime = now;
-
-  vtRadiusFn = (evalTime) => {
-    let t = Math.min((evalTime - vtStartTime) / duration, 1);
-    let progress = easeOutQuad(t);
-    return Math.max(0, startRadius + (targetRadius - startRadius) * progress);
-  };
-
-  // <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg> 在截圖前先暫時關閉 backdrop-filter，大幅降低光柵化成本
+  // 截圖前先暫時關掉毛玻璃與陰影，讓快照成本大幅下降 (Android 中低階機才不會掉幀)
   document.documentElement.classList.add('vt-active');
-
-  if (isDark) document.documentElement.classList.add('transition-dark');
-
-  // <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg> 強制瀏覽器同步重繪此幀，確保 vt-active (拔除 blur/shadow) 實時生效於舊快照的截取
   void document.documentElement.offsetHeight;
 
-  const transition = document.startViewTransition(() => performAppearanceChange(isLight));
+  let transition;
+  try {
+    transition = document.startViewTransition(() => performAppearanceChange(isLight));
+  } catch (_) {
+    document.documentElement.classList.remove('vt-active');
+    _themeFallbackTransition(isLight, x, y);
+    return;
+  }
+
+  // 保險絲：某些瀏覽器 (分頁被凍結、畫面暫停繪製) 可能讓轉場卡住，1.5 秒沒完成就直接套用主題
+  const cleanup = () => {
+    document.documentElement.classList.remove('vt-active');
+    const styleEl = document.getElementById('vt-fallback');
+    if (styleEl) styleEl.remove();
+  };
+  const safety = setTimeout(() => { performAppearanceChange(isLight); cleanup(); }, 1500);
 
   transition.ready.then(() => {
-    const clipPathStart = `circle(${startRadius}px at ${x}px ${y}px)`;
-    const clipPathEnd = `circle(${targetRadius}px at ${x}px ${y}px)`;
-
-    // <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg> 使用 Web Animations API 直接驅動偽元素，避免動態注入 @keyframes 觸發 style recalc
-    const pseudo = isDark ? '::view-transition-old(root)' : '::view-transition-new(root)';
+    const clipPathStart = `circle(0px at ${x}px ${y}px)`;
+    const clipPathEnd = `circle(${endRadius}px at ${x}px ${y}px)`;
+    // 新畫面永遠從按鈕「長出來」，舊畫面留在底下
     try {
       document.documentElement.animate(
         { clipPath: [clipPathStart, clipPathEnd] },
-        { duration, easing: 'ease-out', fill: 'forwards', pseudoElement: pseudo }
+        { duration: THEME_VT_DURATION, easing: 'ease-out', fill: 'forwards', pseudoElement: '::view-transition-new(root)' }
       );
     } catch (_) {
-      // 降級方案：若 Web Animations API 不支援 pseudoElement，用注入 style 方式
       let fallbackStyle = document.getElementById('vt-fallback');
       if (!fallbackStyle) {
         fallbackStyle = document.createElement('style');
         fallbackStyle.id = 'vt-fallback';
         document.head.appendChild(fallbackStyle);
       }
-      const prefix = isDark ? 'html.transition-dark' : '';
       const animName = 'vt-circle-anim-' + Date.now();
       fallbackStyle.textContent = `
         @keyframes ${animName} {
           from { clip-path: ${clipPathStart}; }
           to   { clip-path: ${clipPathEnd}; }
         }
-        ${prefix}${pseudo} {
-          animation: ${animName} ${duration}ms ease-out forwards !important;
+        ::view-transition-new(root) {
+          animation: ${animName} ${THEME_VT_DURATION}ms ease-out forwards !important;
         }
       `;
     }
   }).catch(() => { });
 
   transition.finished.finally(() => {
-    document.documentElement.classList.remove('transition-dark');
-    document.documentElement.classList.remove('vt-active');
-    const styleEl = document.getElementById('vt-fallback');
-    if (styleEl) styleEl.remove();
+    clearTimeout(safety);
+    cleanup();
   });
 }
+
 
 function getIconSrc(baseName) {
   const isLight = document.body.classList.contains('light-mode');
@@ -2588,6 +2609,7 @@ function showLoading(show) {
   if (show) {
     el.classList.remove('exit-drop');
     el.style.display = 'flex';
+    if (typeof window._startHackingLog === 'function') window._startHackingLog();
   } else {
     // 給予終端機視窗掉落的隨機角度 (-35 到 35 度，避免翻滾太多，維持自然感)
     const rot = (Math.random() * 70 - 35).toFixed(1) + 'deg';
@@ -3730,15 +3752,162 @@ window.checkUnreadFeedback = checkUnreadFeedback;
 // ═════════════════════════════════════════════════════════════════════════════
 let _sfSearchTimer = null;
 let _sfResults = [];
-let _sfActiveIndex = 0;
-let _sfObserver = null;
-let _sfRenderMap = new WeakMap(); // DOM element 到物件的對應
+let _sfActiveIndex = 0;          // 虛擬索引 (整數，可正可負，會自動對應回名單)
+let _sfRenderMap = new WeakMap(); // DOM 元素 -> 學生物件
 let _sfRandomDefaults = [];
+
+// ─── 虛擬化輪播：DOM 永遠只有 13 張卡片，滑到哪就把跑出畫面的卡片回收、換上新內容 ───
+// 以前是把搜尋結果複製 5~60 次全部塞進 DOM (常常 60~500 張卡)，每張又有毛玻璃與上千個硬體圖層，
+// 這就是 iPhone 左右滑會卡的主因。現在 DOM 固定 13 張，滑再多也不會變重。
+const SF_POOL_SIZE = 13;
+const SF_HALF = 6;
+let _sfPool = [];              // [{ el, vIndex, student }]
+let _sfDrafts = new Map();     // student.id -> 尚未儲存的草稿 (卡片被回收時暫存，回來時還原)
+let _sfWindowStart = null;
 
 function getRandomStudents(count) {
   if (!state.students || state.students.length === 0) return [];
   const shuffled = [...state.students].sort(() => 0.5 - Math.random());
   return shuffled.slice(0, count);
+}
+
+function sfStudentAt(vIndex) {
+  const n = _sfResults.length;
+  if (!n) return null;
+  return _sfResults[((vIndex % n) + n) % n];
+}
+
+function sfEsc(v) {
+  return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+function sfCardHTML(s, draft) {
+  const d = draft || {};
+  const name = d.name !== undefined ? d.name : (s.name || '');
+  const sid = d.studentId !== undefined ? d.studentId : (s.studentId || '');
+  const cls = d.class !== undefined ? d.class : (s.class || '');
+  const remarks = d.remarks !== undefined ? d.remarks : (s.remarks || '');
+  const isForeign = d.isForeign !== undefined ? d.isForeign : !!s.isForeign;
+  const isEmpty = d.isEmpty !== undefined ? d.isEmpty : (s.isEmpty || !s.name);
+  const badge = isForeign ? '外籍生' : (isEmpty ? '空床' : (s.squad || '無班級'));
+  return `
+      <div class="sf-card-title" style="display: flex; align-items: flex-start; position: relative;">
+        <span class="sf-title-text" style="flex:1;">${sfEsc(s.room)} ${sfEsc(s.bed)}</span>
+        <button class="sf-icon-btn sf-broom-btn" onclick="clearStudentData(this)" title="清空床位資料" style="margin-top: 2px; margin-right: 6px;"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
+        <div class="sf-card-badge-relative" style="margin-top: 4px; margin-right: 4px; transform-origin: center right;">${badge}</div>
+      </div>
+
+      <div class="sf-edit-form">
+        <div style="display:flex; gap: 8px; transform-style: preserve-3d;">
+            <div class="sf-form-group" style="flex: 1;">
+              <label>姓名</label>
+              <input type="text" class="sf-input-name styled-input" value="${sfEsc(name)}" placeholder="未登記">
+            </div>
+            <div class="sf-form-group" style="flex: 1;">
+              <label>學號</label>
+              <input type="text" class="sf-input-id styled-input" value="${sfEsc(sid)}" placeholder="無">
+            </div>
+        </div>
+        <div style="display:flex; gap: 8px; align-items: flex-end; transform-style: preserve-3d;">
+            <div class="sf-form-group" style="flex: 1;">
+              <label>班別</label>
+              <input type="text" class="sf-input-class styled-input" value="${sfEsc(cls)}" placeholder="無">
+            </div>
+            <div class="sf-toggles" style="flex: 1; padding-bottom: 6px; padding-left: 8px; gap: 8px;">
+              <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-foreign" ${isForeign ? 'checked' : ''}> 外籍</label>
+              <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-empty" ${isEmpty ? 'checked' : ''}> 空床</label>
+            </div>
+        </div>
+        <div class="sf-form-group" style="flex: 1; margin-top: 8px;">
+          <label>備註 (情況註記)</label>
+          <textarea class="sf-input-remarks styled-input" style="flex: 1; resize: none; font-size: 13px; line-height: 1.4; padding: 10px;" placeholder="住宿生備註欄">${sfEsc(remarks)}</textarea>
+        </div>
+        <button class="sf-save-action-btn" onclick="autoSaveStudentFile(this)" style="margin-top: 16px;"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg> 儲存修改</button>
+      </div>
+    `;
+}
+
+// 卡片被回收前，把使用者打到一半的內容存成草稿
+function sfSaveDraft(entry) {
+  const s = entry.student, el = entry.el;
+  if (!s || !el) return;
+  const q = (sel) => el.querySelector(sel);
+  const nameEl = q('.sf-input-name'); if (!nameEl) return;
+  const draft = {
+    name: nameEl.value, studentId: q('.sf-input-id').value, class: q('.sf-input-class').value,
+    remarks: q('.sf-input-remarks').value, isForeign: q('.sf-chk-foreign').checked, isEmpty: q('.sf-chk-empty').checked
+  };
+  const same = draft.name === (s.name || '') && draft.studentId === (s.studentId || '') && draft.class === (s.class || '') &&
+    draft.remarks === (s.remarks || '') && draft.isForeign === !!s.isForeign && draft.isEmpty === (s.isEmpty || !s.name);
+  if (same) _sfDrafts.delete(s.id); else _sfDrafts.set(s.id, draft);
+}
+
+function sfBindCard(entry, vIndex) {
+  const s = sfStudentAt(vIndex);
+  const el = entry.el;
+  entry.vIndex = vIndex;
+  entry.student = s;
+  el.dataset.index = vIndex;
+  el.className = 'sf-student-card-2d';
+  el.dataset.was3d = 'false';
+  el.dataset.wasAway = 'false';
+  el.style.transform = '';
+  el.style.transition = 'none';
+  el.style.opacity = '';
+  el.style.zIndex = '';
+  el.style.visibility = '';
+  el.style.left = `calc(50% - 150px + ${vIndex * _cardWidth}px)`;
+  if (vIndex === _sfActiveIndex) el.classList.add('active');
+  if (s) {
+    el.innerHTML = sfCardHTML(s, _sfDrafts.get(s.id));
+    _sfRenderMap.set(el, s);
+  } else {
+    el.innerHTML = '';
+  }
+}
+
+function sfEnsurePool(track) {
+  if (_sfPool.length === SF_POOL_SIZE && _sfPool[0].el.parentElement === track) return;
+  track.innerHTML = '';
+  _sfPool = [];
+  for (let i = 0; i < SF_POOL_SIZE; i++) {
+    const el = document.createElement('div');
+    el.className = 'sf-student-card-2d';
+    track.appendChild(el);
+    _sfPool.push({ el, vIndex: null, student: null });
+  }
+  _sfWindowStart = null;
+}
+
+// 依目前中心位置，決定哪 13 個虛擬索引該存在，把離開的卡片換成新的
+function sfSyncWindow(centerFloat) {
+  if (!_sfPool.length || !_sfResults.length) return;
+  const start = Math.round(centerFloat) - SF_HALF;
+  if (start === _sfWindowStart) return;
+  _sfWindowStart = start;
+  const end = start + SF_POOL_SIZE - 1;
+  const present = new Set();
+  const free = [];
+  for (const entry of _sfPool) {
+    if (entry.vIndex !== null && entry.vIndex >= start && entry.vIndex <= end) present.add(entry.vIndex);
+    else free.push(entry);
+  }
+  for (let v = start; v <= end; v++) {
+    if (present.has(v)) continue;
+    const entry = free.pop();
+    if (!entry) break;
+    if (entry.vIndex !== null) sfSaveDraft(entry);
+    sfBindCard(entry, v);
+  }
+}
+
+function sfActiveEntry() {
+  return _sfPool.find(e => e.vIndex === _sfActiveIndex) || null;
+}
+
+function sfRebindAll() {
+  _sfWindowStart = null;
+  for (const entry of _sfPool) { if (entry.vIndex !== null) sfSaveDraft(entry); entry.vIndex = null; entry.student = null; }
 }
 
 function onStudentFileSearch(query) {
@@ -3762,7 +3931,6 @@ function onStudentFileSearch(query) {
   if (scene) scene.classList.add('is-searching');
 
   _sfSearchTimer = setTimeout(() => {
-    // 系統確認使用者打字完畢 (1 秒後)，準備顯示結果
     const q = query.trim().toLowerCase();
     _sfResults = state.students.filter(s => {
       const name = (s.name || '').toLowerCase();
@@ -3780,134 +3948,48 @@ function onStudentFileSearch(query) {
     if (scene) scene.classList.remove('is-searching');
 
     _sfRandomDefaults = [];
-    _sfActiveIndex = 0;
-    // 如果有結果產生，就觸發「切換為真實找尋」的高速滑入效果
     renderStudentFileCards(true);
 
-    // 追加一個過渡動畫：從「假找」切換成「找到了！」的 pop 動畫
     const area = document.getElementById('sf-card-area');
     if (area) {
       area.classList.remove('search-found-pop');
-      void area.offsetWidth; // 觸發重繪
+      void area.offsetWidth;
       area.classList.add('search-found-pop');
     }
-  }, 1000); // 打字防抖 1 秒
+  }, 1000);
 }
 
 function renderStudentFileCards(sweepIn = false) {
-  const cardArea = document.getElementById('sf-card-area');
   const track = document.getElementById('sf-card-track');
-
-  if (_sfObserver) {
-    _sfObserver.disconnect();
-    _sfObserver = null;
-  }
+  if (!track) return;
 
   if (_sfResults.length === 0) {
+    _sfPool = [];
+    _sfWindowStart = null;
     track.innerHTML = `<div class="sf-empty-hint">
       <div style="font-size:48px; margin-bottom:12px;"><svg class="ui-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
       <div style="color:var(--dim); font-size:14px;">找不到符合的住宿生或床位</div>
     </div>`;
+    track.style.transform = 'translateX(0px)';
     return;
   }
 
-  track.innerHTML = '';
-
-  // 為了承受超極速慣性滑動不穿幫，環狀緩衝長度從 50 提升至 60 跨度 (前後各 30 張緩衝)
-  const repeats = Math.max(5, Math.ceil(60 / _sfResults.length));
-  let renderList = [];
-  for (let i = 0; i < repeats; i++) {
-    renderList.push(..._sfResults);
-  }
-
-  renderList.forEach((s, i) => {
-    const card = document.createElement('div');
-    card.className = 'sf-student-card-2d';
-    card.dataset.index = i;
-
-    card.innerHTML = `
-      <div class="sf-card-title" style="display: flex; align-items: flex-start; position: relative;">
-        <span class="sf-title-text" style="flex:1;">${s.room || ''} ${s.bed || ''}</span>
-        <button class="sf-icon-btn sf-broom-btn" onclick="clearStudentData(this)" title="清空床位資料" style="margin-top: 2px; margin-right: 6px;"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
-        <div class="sf-card-badge-relative" style="margin-top: 4px; margin-right: 4px; transform-origin: center right;">${s.isForeign ? '外籍生' : (s.isEmpty || !s.name ? '空床' : (s.squad || '無班級'))}</div>
-      </div>
-      
-      <div class="sf-edit-form">
-        <div style="display:flex; gap: 8px; transform-style: preserve-3d;">
-            <div class="sf-form-group" style="flex: 1;">
-              <label>姓名</label>
-              <input type="text" class="sf-input-name styled-input" value="${s.name || ''}" placeholder="未登記">
-            </div>
-            <div class="sf-form-group" style="flex: 1;">
-              <label>學號</label>
-              <input type="text" class="sf-input-id styled-input" value="${s.studentId || ''}" placeholder="無">
-            </div>
-        </div>
-        <div style="display:flex; gap: 8px; align-items: flex-end; transform-style: preserve-3d;">
-            <div class="sf-form-group" style="flex: 1;">
-              <label>班別</label>
-              <input type="text" class="sf-input-class styled-input" value="${s.class || ''}" placeholder="無">
-            </div>
-            <div class="sf-toggles" style="flex: 1; padding-bottom: 6px; padding-left: 8px; gap: 8px;">
-              <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-foreign" ${s.isForeign ? 'checked' : ''}> 外籍</label>
-              <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-empty" ${s.isEmpty || !s.name ? 'checked' : ''}> 空床</label>
-            </div>
-        </div>
-        <div class="sf-form-group" style="flex: 1; margin-top: 8px;">
-          <label>備註 (情況註記)</label>
-          <textarea class="sf-input-remarks styled-input" style="flex: 1; resize: none; font-size: 13px; line-height: 1.4; padding: 10px;" placeholder="住宿生備註欄">${s.remarks || ''}</textarea>
-        </div>
-        <button class="sf-save-action-btn" onclick="autoSaveStudentFile(this)" style="margin-top: 16px;"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg> 儲存修改</button>
-      </div>
-    `;
-
-    track.appendChild(card);
-    _sfRenderMap.set(card, s); // mapping DOM to object
-  });
-
+  sfEnsurePool(track);
+  sfRebindAll();
   setup2DCarouselInteraction();
 
-  const middleIndex = Math.floor(repeats / 2) * _sfResults.length;
-  _sfActiveIndex = middleIndex;
-  _currentX = -(_sfActiveIndex * _cardWidth);
-  if (sweepIn && window._updateContinuousScale) {
-    // 模擬從假裝找的右側（或左邊）高速滑入，這裡我們讓它從右邊飛進來（+8張卡片）
-    let startX = -((_sfActiveIndex - 8) * _cardWidth);
-    track.style.transition = 'none';
-    track.style.transform = `translateX(${startX}px)`;
+  _sfActiveIndex = 0;
+  _currentX = 0;
+  track.style.transition = 'none';
 
-    void track.offsetWidth; // force reflow
-
-    // 刷刷刷飛向目標
-    track.style.transition = 'transform 0.9s cubic-bezier(0.1, 0.95, 0.2, 1)';
-    track.style.transform = `translateX(${_currentX}px)`;
-
-    const startTime = performance.now();
-    if (window._sfSearchAnimFrame) cancelAnimationFrame(window._sfSearchAnimFrame);
-    function step() {
-      const transformStr = window.getComputedStyle(track).transform;
-      if (transformStr !== 'none') {
-        const matrix = new DOMMatrix(transformStr);
-        window._updateContinuousScale(matrix.m41);
-      }
-      if (performance.now() - startTime < 1000) {
-        window._sfSearchAnimFrame = requestAnimationFrame(step);
-      } else {
-        window._updateContinuousScale(_currentX);
-      }
-    }
-    window._sfSearchAnimFrame = requestAnimationFrame(step);
+  if (sweepIn && window._sfSweepTo) {
+    // 從右側 8 張卡外高速滑入到目標
+    window._sfSweepTo(-((_sfActiveIndex - 8) * _cardWidth), _currentX);
   } else {
-    track.style.transition = 'none';
     track.style.transform = `translateX(${_currentX}px)`;
-    if (window._updateContinuousScale) {
-      window._updateContinuousScale(_currentX);
-    }
+    if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
   }
 
-  Array.from(track.children).forEach((c, i) => {
-    c.classList.toggle('active', i === _sfActiveIndex);
-  });
   if (window._restart3DTimer) window._restart3DTimer();
 }
 
@@ -3919,6 +4001,7 @@ function setup2DCarouselInteraction() {
   const area = document.getElementById('sf-card-area');
   const track = document.getElementById('sf-card-track');
   const scene = document.getElementById('sf-scene');
+  const page = document.getElementById('page-student-files');
 
   if (_carouselAttached || !scene || !track) return;
   _carouselAttached = true;
@@ -3927,30 +4010,40 @@ function setup2DCarouselInteraction() {
   let startY = 0;
   let trackStartX = 0;
   let isDragging = false;
-  let isHorizontalSwipe = null; // null = undecided, true = horizontal, false = vertical
+  let isHorizontalSwipe = null;
 
   let _3dTimer = null;
 
-  // ═══════ Instagram-like swipe physics constants ═══════
-  const DRAG_THRESHOLD = 8;          // px before we consider it a drag
-  const DECEL_RATE = 0.985;          // per-frame deceleration (exponential decay) — higher = smoother/longer glide
-  const MIN_VELOCITY = 0.08;         // px/ms — stop momentum below this
-  const SNAP_SPRING_TENSION = 0.03;  // Slower acceleration
-  const SNAP_SPRING_DAMPING = 0.88;  // More friction to slow down smoothly
-  const MAX_FLICK_CARDS = 6;         // max cards a single flick can travel
-  const VELOCITY_SAMPLES = 6;        // number of recent touch samples to average
-  const VELOCITY_WEIGHT_DECAY = 0.7; // exponential weight decay for older samples
+  const DRAG_THRESHOLD = 8;
+  const DECEL_RATE = 0.985;
+  const MIN_VELOCITY = 0.08;
+  const SNAP_SPRING_TENSION = 0.03;
+  const SNAP_SPRING_DAMPING = 0.88;
+  const VELOCITY_SAMPLES = 6;
+  const VELOCITY_WEIGHT_DECAY = 0.7;
+  const MAX_FLICK_CARDS = 6;
 
-  // Velocity tracking ring buffer — last N samples
   let _velocitySamples = [];
   let _momentumFrame = null;
-  let _isAnimating = false; // true while momentum/spring is running
+  let _animFrame = null;
+  let _sweepFrame = null;
+  let _isAnimating = false;
 
-  // Helper: cancel all running animations and clean up frame IDs
+  function setMoving(on) {
+    if (page) page.classList.toggle('sf-moving', !!on);
+  }
+
   function cancelAllAnimations() {
     if (_momentumFrame) { cancelAnimationFrame(_momentumFrame); _momentumFrame = null; }
     if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null; }
+    if (_sweepFrame) { cancelAnimationFrame(_sweepFrame); _sweepFrame = null; }
     _isAnimating = false;
+  }
+
+  function applyX() {
+    track.style.transition = 'none';
+    track.style.transform = `translateX(${_currentX}px)`;
+    updateContinuousScale(_currentX);
   }
 
   window._restart3DTimer = function () {
@@ -3959,652 +4052,628 @@ function setup2DCarouselInteraction() {
   };
 
   function enable3D() {
-    // Guard: don't enter 3D if user is dragging or animations still running
     if (isDragging || _isAnimating) return;
-
-    const activeCard = Array.from(track.children).find(c => c.classList.contains('active'));
-  if (activeCard) {
-    activeCard.classList.add('is-3d-active');
-    haptic('medium');
-    _3dCardIndex = _sfActiveIndex;
-    window._is3dMode = true;
-    if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
-  }
-}
-
-function disable3D() {
-  const was3dMode = window._is3dMode;
-  window._is3dMode = false;
-  if (_3dTimer) {
-    clearTimeout(_3dTimer);
-    _3dTimer = null;
-  }
-  let changed = false;
-  Array.from(track.children).forEach(c => {
-    if (c.classList.contains('is-3d-active')) {
-      c.classList.remove('is-3d-active');
-
-      c.dataset.was3d = 'true';
-      // Extended timeout: give the CSS transition enough time to fully complete (1s transition + buffer)
-      setTimeout(() => { c.dataset.was3d = 'false'; }, 1200);
-      changed = true;
-    } else if (was3dMode) {
-      // Only mark wasAway if we were actually in 3D mode (side cards were spread out)
-      c.dataset.wasAway = 'true';
-      setTimeout(() => { c.dataset.wasAway = 'false'; }, 1200);
-      changed = true;
-    }
-  });
-  if (changed && window._updateContinuousScale) window._updateContinuousScale(_currentX);
-}
-
-// ═══════ Weighted velocity calculation from recent samples ═══════
-function getWeightedVelocity() {
-  if (_velocitySamples.length === 0) return 0;
-
-  // Filter out stale samples (older than 100ms from last sample)
-  const now = performance.now();
-  const recent = _velocitySamples.filter(s => now - s.time < 100);
-  if (recent.length === 0) return 0;
-
-  let weightedSum = 0;
-  let weightTotal = 0;
-
-  for (let i = 0; i < recent.length; i++) {
-    // More recent samples get exponentially higher weight
-    const weight = Math.pow(VELOCITY_WEIGHT_DECAY, recent.length - 1 - i);
-    weightedSum += recent[i].velocity * weight;
-    weightTotal += weight;
-  }
-
-  return weightTotal > 0 ? weightedSum / weightTotal : 0;
-}
-// Track which card index is in 3D, for displacement calculation
-let _3dCardIndex = -1;
-
-// Softly stop the side-card spread without removing is-3d-active from active card
-function softDisable3DSpread() {
-  window._is3dMode = false;
-  if (_3dTimer) { clearTimeout(_3dTimer); _3dTimer = null; }
-  // Mark side cards for smooth return transition
-  Array.from(track.children).forEach(c => {
-    if (!c.classList.contains('is-3d-active')) {
-      c.dataset.wasAway = 'true';
-      setTimeout(() => { c.dataset.wasAway = 'false'; }, 1200);
-    }
-  });
-}
-
-function teleportToCenterIfNeeded() {
-  const total = track.children.length;
-  const baseN = _sfResults.length;
-  if (baseN > 0 && total >= baseN * 3) {
-    if (_sfActiveIndex < total * 0.2 || _sfActiveIndex > total * 0.8) {
-      const targetCenterBase = Math.floor((total / 2) / baseN) * baseN;
-      const localOffset = _sfActiveIndex % baseN;
-      _sfActiveIndex = targetCenterBase + localOffset;
-      _currentX = -(_sfActiveIndex * _cardWidth);
-      track.style.transition = 'none';
-      track.style.transform = `translateX(${_currentX}px)`;
-      if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
-    }
-  }
-}
-
-function onDown(e) {
-  if (scene.classList.contains('is-searching')) return;
-
-  // Stop any ongoing momentum animation immediately (like IG — touching stops glide)
-  cancelAllAnimations();
-
-  const targetCard = e.target.closest('.sf-student-card-2d');
-  const isClickOnActive = targetCard && targetCard.classList.contains('active');
-
-  // If clicking on non-active card, fully disable 3D
-  if (!isClickOnActive) {
-    disable3D();
-  }
-
-  teleportToCenterIfNeeded();
-
-  isDragging = true;
-  isHorizontalSwipe = null;
-  const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-  const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-  startX = clientX;
-  startY = clientY;
-  trackStartX = _currentX;
-
-  _velocitySamples = [{ x: clientX, time: performance.now(), velocity: 0 }];
-
-  track.style.transition = 'none';
-}
-
-function onMove(e) {
-  if (!isDragging) return;
-  const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-  const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-  const deltaX = clientX - startX;
-  const deltaY = clientY - startY;
-
-  // Determine swipe direction on first meaningful movement
-  if (isHorizontalSwipe === null && (Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD)) {
-    isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
-    if (!isHorizontalSwipe) {
-      isDragging = false;
-      return;
-    }
-    // First confirmed horizontal swipe — softly retract side cards but keep active card's 3D
-    if (window._is3dMode) {
-      softDisable3DSpread();
+    const entry = sfActiveEntry();
+    if (entry) {
+      entry.el.classList.add('is-3d-active');
+      haptic('medium');
+      _3dCardIndex = _sfActiveIndex;
+      window._is3dMode = true;
+      updateContinuousScale(_currentX);
     }
   }
 
-  if (isHorizontalSwipe !== true && Math.abs(deltaX) < DRAG_THRESHOLD) return;
-  if (e.cancelable) e.preventDefault();
-
-  // Record velocity sample
-  const now = performance.now();
-  const lastSample = _velocitySamples[_velocitySamples.length - 1];
-  const dt = now - lastSample.time;
-  if (dt > 0) {
-    const v = (clientX - lastSample.x) / dt;
-    _velocitySamples.push({ x: clientX, time: now, velocity: v });
-    if (_velocitySamples.length > VELOCITY_SAMPLES) {
-      _velocitySamples.shift();
-    }
-  }
-
-  _currentX = trackStartX + deltaX;
-
-  // 即時無縫瞬間傳送校正
-  const total = track.children.length;
-  const baseN = _sfResults.length;
-  if (baseN > 0 && total >= baseN * 3) {
-    let thresholdLeft = -_cardWidth * (total * 0.3);
-    let thresholdRight = -_cardWidth * (total * 0.7);
-    if (_currentX > thresholdLeft || _currentX < thresholdRight) {
-      const centerPos = -Math.floor(total / 2) * _cardWidth;
-      const diff = centerPos - _currentX;
-      const shiftMultiples = Math.round(diff / (baseN * _cardWidth));
-      const shiftDist = shiftMultiples * baseN * _cardWidth;
-
-      _currentX += shiftDist;
-      trackStartX += shiftDist;
-    }
-  }
-
-  track.style.transform = `translateX(${_currentX}px)`;
-  if (window._updateContinuousScale) window._updateContinuousScale();
-}
-
-let _currentTransitionTime = 0.5;
-let _animFrame = null;
-
-let _lastHapticIdx = -1;
-function updateContinuousScale(trackXStr) {
-  let currentTrackX = trackXStr !== undefined ? parseFloat(trackXStr) : _currentX;
-  const centerIdxFloat = -currentTrackX / _cardWidth;
-
-  // 震動反饋：當經過卡片中心點時觸發
-  const currentIdx = Math.round(centerIdxFloat);
-  if (currentIdx !== _lastHapticIdx) {
-    if (_lastHapticIdx !== -1) haptic('light');
-    _lastHapticIdx = currentIdx;
-  }
-
-  for (let i = 0; i < track.children.length; i++) {
-    const c = track.children[i];
-    if (!c) continue;
-    const rawDiff = i - centerIdxFloat;
-    const absDiff = Math.abs(rawDiff);
-
-    // 虛擬化渲染優化
-    if (absDiff > 4) {
-      c.style.visibility = 'hidden';
-      continue;
-    } else {
-      c.style.visibility = 'visible';
-    }
-
-    let t = Math.max(0, 1 - absDiff * 0.45);
-    let scale = 0.85 + 0.15 * (t * t);
-    let alpha = 0.8 + 0.2 * t;
-
-    c.style.zIndex = Math.round(100 - absDiff * 10);
-    c.style.opacity = alpha;
-    c.style.filter = 'none';
-
-    if (c.classList.contains('is-3d-active')) {
-      // ═══════ Progressive 3D rotation based on displacement ═══════
-      // Calculate how far this card has moved from its snap position
-      const snapIdx = _3dCardIndex >= 0 ? _3dCardIndex : _sfActiveIndex;
-      const displacement = Math.abs(i - centerIdxFloat); // how far from center
-
-      // Interpolate rotation: full 15deg at center, 0deg at 0.6 cards away
-      const rotProgress = Math.max(0, Math.min(1, 1 - displacement / 0.6));
-      const rotAngle = 15 * rotProgress;
-      const scaleBoost = 0.05 * rotProgress;
-
-      // If too far from home, fully flatten and remove 3D
-      if (displacement > 0.65 && isDragging) {
+  function disable3D() {
+    const was3dMode = window._is3dMode;
+    window._is3dMode = false;
+    if (_3dTimer) { clearTimeout(_3dTimer); _3dTimer = null; }
+    let changed = false;
+    for (const entry of _sfPool) {
+      const c = entry.el;
+      if (c.classList.contains('is-3d-active')) {
         c.classList.remove('is-3d-active');
         c.dataset.was3d = 'true';
-        _3dCardIndex = -1;
         setTimeout(() => { c.dataset.was3d = 'false'; }, 1200);
-        // Apply flat transform immediately
-        c.style.transition = 'transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s';
-        c.style.transform = `translateX(0px) scale(${scale})`;
-      } else {
-        // Smooth responsive transition during drag
-        c.style.transition = isDragging
-          ? 'transform 0.15s ease-out'
-          : 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
-        c.style.transform = `perspective(1000px) rotate3d(0.5, 1, 0, ${rotAngle}deg) scale(${scale + scaleBoost})`;
-        c.style.opacity = '1';
+        changed = true;
+      } else if (was3dMode) {
+        c.dataset.wasAway = 'true';
+        setTimeout(() => { c.dataset.wasAway = 'false'; }, 1200);
+        changed = true;
       }
-    } else {
-      // ═══════ 2D card transitions ═══════
-      if (isDragging) {
-        if (c.dataset.was3d === 'true') {
-          c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
-        } else if (c.dataset.wasAway === 'true') {
-          c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
-        } else {
-          c.style.transition = 'none';
-        }
-      } else {
-        if (c.dataset.was3d === 'true' || c.dataset.wasAway === 'true') {
-          c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
-        } else {
-          // Slowed down normal slide from 0.5s to 0.8s for better visibility
-          c.style.transition = 'transform 0.8s cubic-bezier(0.25, 1, 0.5, 1)';
-        }
-      }
+    }
+    if (changed) updateContinuousScale(_currentX);
+  }
+  window._sfDisable3D = disable3D;
 
-      if (window._is3dMode && !isDragging) {
-        let spread = rawDiff < 0 ? -1500 : 1500;
-        c.style.transform = `translateX(${spread}px) scale(${scale})`;
-      } else {
-        c.style.transform = `translateX(0px) scale(${scale})`;
+  function getWeightedVelocity() {
+    if (_velocitySamples.length === 0) return 0;
+    const now = performance.now();
+    const recent = _velocitySamples.filter(s => now - s.time < 100);
+    if (recent.length === 0) return 0;
+    let weightedSum = 0, weightTotal = 0;
+    for (let i = 0; i < recent.length; i++) {
+      const weight = Math.pow(VELOCITY_WEIGHT_DECAY, recent.length - 1 - i);
+      weightedSum += recent[i].velocity * weight;
+      weightTotal += weight;
+    }
+    return weightTotal > 0 ? weightedSum / weightTotal : 0;
+  }
+
+  let _3dCardIndex = -1;
+
+  function softDisable3DSpread() {
+    window._is3dMode = false;
+    if (_3dTimer) { clearTimeout(_3dTimer); _3dTimer = null; }
+    for (const entry of _sfPool) {
+      const c = entry.el;
+      if (!c.classList.contains('is-3d-active')) {
+        c.dataset.wasAway = 'true';
+        setTimeout(() => { c.dataset.wasAway = 'false'; }, 1200);
       }
     }
   }
-}
-window._updateContinuousScale = updateContinuousScale;
 
-// ═══════ Spring-based snap to nearest card ═══════
-function springSnapTo(targetIndex) {
-  const maxIdx = track.children.length - 1;
-  if (targetIndex < 0) targetIndex = 0;
-  if (targetIndex > maxIdx) targetIndex = maxIdx;
+  function onDown(e) {
+    if (scene.classList.contains('is-searching')) return;
+    if (!_sfPool.length) return;
+    if (e.type === 'mousedown' && e.button !== 0) return;
 
-  _sfActiveIndex = targetIndex;
-  const targetX = -(_sfActiveIndex * _cardWidth);
+    cancelAllAnimations();
 
-  Array.from(track.children).forEach((c, i) => {
-    c.classList.toggle('active', i === _sfActiveIndex);
-  });
+    const targetCard = e.target.closest('.sf-student-card-2d');
+    const isClickOnActive = targetCard && targetCard.classList.contains('active');
+    if (!isClickOnActive) disable3D();
 
-  cancelAllAnimations();
-  _isAnimating = true;
-
-  let springVel = 0;
-  let springPos = _currentX;
-  const startTime = performance.now();
-
-  function springStep() {
-    const displacement = springPos - targetX;
-    const springForce = -SNAP_SPRING_TENSION * displacement;
-    springVel = (springVel + springForce) * SNAP_SPRING_DAMPING;
-    springPos += springVel;
-
-    _currentX = springPos;
+    isDragging = true;
+    isHorizontalSwipe = null;
+    const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+    startX = clientX;
+    startY = clientY;
+    trackStartX = _currentX;
+    _velocitySamples = [{ x: clientX, time: performance.now(), velocity: 0 }];
     track.style.transition = 'none';
-    track.style.transform = `translateX(${_currentX}px)`;
-    updateContinuousScale(_currentX);
+  }
 
-    if (Math.abs(displacement) < 0.5 && Math.abs(springVel) < 0.1) {
-      _currentX = targetX;
-      track.style.transform = `translateX(${_currentX}px)`;
-      updateContinuousScale(_currentX);
-      _animFrame = null;
-      _isAnimating = false;
-      teleportToCenterIfNeeded();
-      if (window._restart3DTimer) window._restart3DTimer();
-      return;
+  function onMove(e) {
+    if (!isDragging) return;
+    const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+    const deltaX = clientX - startX;
+    const deltaY = clientY - startY;
+
+    if (isHorizontalSwipe === null && (Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD)) {
+      isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
+      if (!isHorizontalSwipe) { isDragging = false; return; }
+      setMoving(true);
+      if (window._is3dMode) softDisable3DSpread();
     }
 
-    if (performance.now() - startTime > 2500) {
-      _currentX = targetX;
-      track.style.transform = `translateX(${_currentX}px)`;
-      updateContinuousScale(_currentX);
-      _animFrame = null;
-      _isAnimating = false;
-      teleportToCenterIfNeeded();
-      if (window._restart3DTimer) window._restart3DTimer();
-      return;
+    if (isHorizontalSwipe !== true && Math.abs(deltaX) < DRAG_THRESHOLD) return;
+    if (e.cancelable) e.preventDefault();
+
+    const now = performance.now();
+    const lastSample = _velocitySamples[_velocitySamples.length - 1];
+    const dt = now - lastSample.time;
+    if (dt > 0) {
+      const v = (clientX - lastSample.x) / dt;
+      _velocitySamples.push({ x: clientX, time: now, velocity: v });
+      if (_velocitySamples.length > VELOCITY_SAMPLES) _velocitySamples.shift();
     }
 
+    _currentX = trackStartX + deltaX;
+    applyX();
+  }
+
+  let _lastHapticIdx = null;
+  function updateContinuousScale(trackXStr) {
+    const currentTrackX = trackXStr !== undefined ? parseFloat(trackXStr) : _currentX;
+    const centerIdxFloat = -currentTrackX / _cardWidth;
+
+    sfSyncWindow(centerIdxFloat);
+
+    const currentIdx = Math.round(centerIdxFloat);
+    if (currentIdx !== _lastHapticIdx) {
+      if (_lastHapticIdx !== null) haptic('light');
+      _lastHapticIdx = currentIdx;
+    }
+
+    for (const entry of _sfPool) {
+      const c = entry.el;
+      if (entry.vIndex === null) continue;
+      const rawDiff = entry.vIndex - centerIdxFloat;
+      const absDiff = Math.abs(rawDiff);
+
+      // 離中心 4 張以上的卡片：完全不畫 (visibility + content-visibility)
+      if (absDiff > 4) { c.classList.add('sf-far'); continue; }
+      c.classList.remove('sf-far');
+
+      const t = Math.max(0, 1 - absDiff * 0.45);
+      const scale = 0.85 + 0.15 * (t * t);
+      const alpha = 0.8 + 0.2 * t;
+
+      c.style.zIndex = Math.round(100 - absDiff * 10);
+      c.style.opacity = alpha;
+
+      if (c.classList.contains('is-3d-active')) {
+        const displacement = absDiff;
+        const rotProgress = Math.max(0, Math.min(1, 1 - displacement / 0.6));
+        const rotAngle = 15 * rotProgress;
+        const scaleBoost = 0.05 * rotProgress;
+
+        if (displacement > 0.65 && isDragging) {
+          c.classList.remove('is-3d-active');
+          c.dataset.was3d = 'true';
+          _3dCardIndex = -1;
+          setTimeout(() => { c.dataset.was3d = 'false'; }, 1200);
+          c.style.transition = 'transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s';
+          c.style.transform = `translateX(0px) scale(${scale})`;
+        } else {
+          c.style.transition = isDragging
+            ? 'transform 0.15s ease-out'
+            : 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
+          c.style.transform = `perspective(1000px) rotate3d(0.5, 1, 0, ${rotAngle}deg) scale(${scale + scaleBoost})`;
+          c.style.opacity = '1';
+        }
+      } else {
+        if (isDragging) {
+          if (c.dataset.was3d === 'true' || c.dataset.wasAway === 'true') {
+            c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
+          } else {
+            c.style.transition = 'none';
+          }
+        } else {
+          if (c.dataset.was3d === 'true' || c.dataset.wasAway === 'true') {
+            c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
+          } else {
+            c.style.transition = 'transform 0.8s cubic-bezier(0.25, 1, 0.5, 1)';
+          }
+        }
+
+        if (window._is3dMode && !isDragging) {
+          const spread = rawDiff < 0 ? -1500 : 1500;
+          c.style.transform = `translateX(${spread}px) scale(${scale})`;
+        } else {
+          c.style.transform = `translateX(0px) scale(${scale})`;
+        }
+      }
+    }
+  }
+  window._updateContinuousScale = updateContinuousScale;
+
+  function setActive(index) {
+    _sfActiveIndex = index;
+    for (const entry of _sfPool) entry.el.classList.toggle('active', entry.vIndex === _sfActiveIndex);
+  }
+
+  function springSnapTo(targetIndex) {
+    setActive(targetIndex);
+    const targetX = -(_sfActiveIndex * _cardWidth);
+
+    cancelAllAnimations();
+    _isAnimating = true;
+    setMoving(true);
+
+    let springVel = 0;
+    let springPos = _currentX;
+    const startTime = performance.now();
+
+    function finish() {
+      _currentX = targetX;
+      applyX();
+      _animFrame = null;
+      _isAnimating = false;
+      setMoving(false);
+      if (window._restart3DTimer) window._restart3DTimer();
+    }
+
+    function springStep() {
+      const displacement = springPos - targetX;
+      const springForce = -SNAP_SPRING_TENSION * displacement;
+      springVel = (springVel + springForce) * SNAP_SPRING_DAMPING;
+      springPos += springVel;
+
+      _currentX = springPos;
+      applyX();
+
+      if ((Math.abs(displacement) < 0.5 && Math.abs(springVel) < 0.1) || performance.now() - startTime > 2500) {
+        finish();
+        return;
+      }
+      _animFrame = requestAnimationFrame(springStep);
+    }
     _animFrame = requestAnimationFrame(springStep);
   }
 
-  _animFrame = requestAnimationFrame(springStep);
-}
+  function onUp(e) {
+    if (!isDragging) return;
+    isDragging = false;
 
-function onUp(e) {
-  if (!isDragging) return;
-  isDragging = false;
+    const clientX = e.type.includes('touch')
+      ? (e.changedTouches ? e.changedTouches[0].clientX : startX)
+      : e.clientX;
 
-  const clientX = e.type.includes('touch')
-    ? (e.changedTouches ? e.changedTouches[0].clientX : startX)
-    : e.clientX;
+    const totalDeltaX = Math.abs(clientX - startX);
+    if (totalDeltaX < DRAG_THRESHOLD) { setMoving(false); return; }
 
-  // 點擊不觸發 snapping
-  const totalDeltaX = Math.abs(clientX - startX);
-  if (totalDeltaX < DRAG_THRESHOLD) {
-    return;
-  }
-
-  // Teleport check
-  const total = track.children.length;
-  const baseN = _sfResults.length;
-  if (baseN > 0 && total >= baseN * 3) {
-    const centerPos = -Math.floor(total / 2) * _cardWidth;
-    const diff = centerPos - _currentX;
-    const shiftMultiples = Math.round(diff / (baseN * _cardWidth));
-    const shiftDist = shiftMultiples * baseN * _cardWidth;
-    if (shiftDist !== 0) {
-      _currentX += shiftDist;
-      track.style.transition = 'none';
-      track.style.transform = `translateX(${_currentX}px)`;
-      void track.offsetWidth;
-    }
-  }
-
-  // ═══════ Pure velocity-driven momentum ═══════
-  const flickVelocity = getWeightedVelocity(); // px/ms
-
-  if (Math.abs(flickVelocity) < MIN_VELOCITY) {
-    springSnapTo(Math.round(-_currentX / _cardWidth));
-    return;
-  }
-
-  cancelAllAnimations();
-  _isAnimating = true;
-
-  const frameTime = 16.67;
-  let vel = flickVelocity * frameTime; // px/frame
-
-  // Clamp maximum initial velocity to prevent explosion on fast flicks
-  const maxVel = _cardWidth * 0.4; // max ~0.4 card widths per frame
-  if (vel > maxVel) vel = maxVel;
-  if (vel < -maxVel) vel = -maxVel;
-
-  function momentumStep() {
-    vel *= DECEL_RATE;
-    _currentX += vel;
-
-    track.style.transition = 'none';
-    track.style.transform = `translateX(${_currentX}px)`;
-    updateContinuousScale(_currentX);
-
-    // Teleport during momentum if needed
-    const total2 = track.children.length;
-    const baseN2 = _sfResults.length;
-    if (baseN2 > 0 && total2 >= baseN2 * 3) {
-      let thresholdLeft = -_cardWidth * (total2 * 0.3);
-      let thresholdRight = -_cardWidth * (total2 * 0.7);
-      if (_currentX > thresholdLeft || _currentX < thresholdRight) {
-        const centerPos = -Math.floor(total2 / 2) * _cardWidth;
-        const diff = centerPos - _currentX;
-        const shiftMultiples = Math.round(diff / (baseN2 * _cardWidth));
-        const shiftDist = shiftMultiples * baseN2 * _cardWidth;
-        _currentX += shiftDist;
-      }
-    }
-
-    // When velocity drops low, spring-snap to whatever card is nearest NOW
-    if (Math.abs(vel) < 0.5) {
-      _momentumFrame = null;
-      const nearestIdx = Math.round(-_currentX / _cardWidth);
-      springSnapTo(nearestIdx);
+    const flickVelocity = getWeightedVelocity();
+    if (Math.abs(flickVelocity) < MIN_VELOCITY) {
+      springSnapTo(Math.round(-_currentX / _cardWidth));
       return;
     }
 
+    cancelAllAnimations();
+    _isAnimating = true;
+
+    const frameTime = 16.67;
+    let vel = flickVelocity * frameTime;
+    const maxVel = _cardWidth * 0.4;
+    if (vel > maxVel) vel = maxVel;
+    if (vel < -maxVel) vel = -maxVel;
+    // 一次甩最多滑 6 張卡 (以前不設限，用力一甩會滑 20 幾張、飄好幾秒)
+    const projected = Math.abs(vel) / (1 - DECEL_RATE);
+    const maxDist = MAX_FLICK_CARDS * _cardWidth;
+    if (projected > maxDist) vel *= maxDist / projected;
+
+    function momentumStep() {
+      vel *= DECEL_RATE;
+      _currentX += vel;
+      applyX();
+      if (Math.abs(vel) < 0.5) {
+        _momentumFrame = null;
+        springSnapTo(Math.round(-_currentX / _cardWidth));
+        return;
+      }
+      _momentumFrame = requestAnimationFrame(momentumStep);
+    }
     _momentumFrame = requestAnimationFrame(momentumStep);
   }
 
-  _momentumFrame = requestAnimationFrame(momentumStep);
-}
+  // 搜尋完成的「刷」一聲滑入
+  window._sfSweepTo = function (fromX, toX) {
+    cancelAllAnimations();
+    _isAnimating = true;
+    setMoving(true);
+    setActive(Math.round(-toX / _cardWidth));
+    const dur = 900;
+    const t0 = performance.now();
+    _currentX = fromX;
+    applyX();
+    function step(now) {
+      const p = Math.min(1, (now - t0) / dur);
+      const ease = 1 - Math.pow(1 - p, 4);
+      _currentX = fromX + (toX - fromX) * ease;
+      applyX();
+      if (p < 1) { _sweepFrame = requestAnimationFrame(step); return; }
+      _sweepFrame = null;
+      _isAnimating = false;
+      setMoving(false);
+      if (window._restart3DTimer) window._restart3DTimer();
+    }
+    _sweepFrame = requestAnimationFrame(step);
+  };
 
-area.addEventListener('mousedown', onDown);
-window.addEventListener('mousemove', onMove, { passive: false });
-window.addEventListener('mouseup', onUp);
+  area.addEventListener('mousedown', onDown);
+  window.addEventListener('mousemove', onMove, { passive: false });
+  window.addEventListener('mouseup', onUp);
 
-area.addEventListener('touchstart', onDown, { passive: true });
-area.addEventListener('touchmove', onMove, { passive: false });
-window.addEventListener('touchend', onUp);
+  area.addEventListener('touchstart', onDown, { passive: true });
+  area.addEventListener('touchmove', onMove, { passive: false });
+  window.addEventListener('touchend', onUp);
+  window.addEventListener('touchcancel', onUp);
 }
 
 window.initStudentFiles = function () {
   _sfRandomDefaults = [];
   document.getElementById('sf-search-input').value = '';
   onStudentFileSearch('');
+  // 先把「把卡片拍成貼圖」的工具偷偷載好，按垃圾桶時才不用等
+  if (typeof sfPrefetchHtml2Canvas === 'function') sfPrefetchHtml2Canvas();
 };
 
-function spawnCanvasBlackHole(container, size) {
-    const S = size || 500;
-    const dpr = Math.min(window.devicePixelRatio, 2);
-    const canvas = document.createElement('canvas');
-    canvas.width = S * dpr;
-    canvas.height = S * dpr;
-    canvas.style.width = S + 'px';
-    canvas.style.height = S + 'px';
-    container.appendChild(canvas);
-    const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
 
-    const CX = S / 2, CY = S / 2;
-    const EH_RADIUS = S * 0.08;          // event horizon
-    const PHOTON_RADIUS = EH_RADIUS * 1.6; // photon sphere
-    const DISC_INNER = EH_RADIUS * 2.2;
-    const DISC_OUTER = S * 0.42;
-
-    // ── Accretion disk particles ──
-    const NUM_DISC = 260;
-    const discP = [];
-    for (let i = 0; i < NUM_DISC; i++) {
-        const r = DISC_INNER + Math.random() * (DISC_OUTER - DISC_INNER);
-        const a = Math.random() * Math.PI * 2;
-        const speed = (0.4 + 0.8 * Math.random()) / (r * 0.012);
-        const hue = 15 + Math.random() * 35; // orange to gold
-        const lum = 50 + Math.random() * 40;
-        const sz = 1.2 + Math.random() * 3;
-        discP.push({ r, a, speed, hue, lum, sz, phase: Math.random() * Math.PI * 2 });
-    }
-
-    // ── Vortex streamer particles ──
-    const NUM_VORTEX = 120;
-    const vortex = [];
-    for (let i = 0; i < NUM_VORTEX; i++) {
-        const r = EH_RADIUS * 1.1 + Math.random() * (DISC_OUTER * 1.3);
-        const a = Math.random() * Math.PI * 2;
-        const speed = (1.2 + Math.random() * 2) / (r * 0.008);
-        const hue = Math.random() < 0.3 ? (200 + Math.random() * 60) : (10 + Math.random() * 40); // blue & orange
-        vortex.push({ r, a, speed, hue, life: Math.random(), sz: 0.5 + Math.random() * 1.5 });
-    }
-
-    // ── Jet particles ──
-    const NUM_JET = 40;
-    const jets = [];
-    for (let i = 0; i < NUM_JET; i++) {
-        jets.push({
-            y: Math.random(),
-            x: (Math.random() - 0.5) * 0.3,
-            speed: 0.3 + Math.random() * 0.6,
-            hue: 200 + Math.random() * 50,
-            sz: 0.8 + Math.random() * 1.5,
-            dir: Math.random() < 0.5 ? -1 : 1
-        });
-    }
-
-    let t = 0;
-    let animId;
-
-    function draw() {
-        animId = requestAnimationFrame(draw);
-        t += 0.016;
-        ctx.clearRect(0, 0, S, S);
-
-        // ── 1. Volumetric space warp glow ──
-        const outerGlow = ctx.createRadialGradient(CX, CY, EH_RADIUS * 0.5, CX, CY, S * 0.48);
-        outerGlow.addColorStop(0, 'rgba(120, 60, 200, 0.0)');
-        outerGlow.addColorStop(0.2, 'rgba(100, 40, 180, 0.04)');
-        outerGlow.addColorStop(0.5, 'rgba(80, 30, 160, 0.02)');
-        outerGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        ctx.fillStyle = outerGlow;
-        ctx.fillRect(0, 0, S, S);
-
-        // ── 2. Accretion disk (back half — behind black hole) ──
-        drawAccretionHalf(ctx, CX, CY, discP, t, true);
-
-        // ── 3. Vortex streamers ──
-        ctx.globalCompositeOperation = 'lighter';
-        for (const p of vortex) {
-            p.a += p.speed * 0.016;
-            // Slowly spiral inward
-            p.r -= 0.08;
-            if (p.r < EH_RADIUS * 0.8) {
-                p.r = DISC_OUTER * (0.8 + Math.random() * 0.5);
-                p.a = Math.random() * Math.PI * 2;
-            }
-            const x = CX + Math.cos(p.a) * p.r;
-            const y = CY + Math.sin(p.a) * p.r * 0.35; // oblique view
-            const alpha = Math.max(0, Math.min(0.6, (p.r - EH_RADIUS) / (DISC_OUTER * 0.5)));
-            ctx.beginPath();
-            ctx.arc(x, y, p.sz, 0, Math.PI * 2);
-            ctx.fillStyle = `hsla(${p.hue}, 100%, 70%, ${alpha})`;
-            ctx.fill();
-        }
-        ctx.globalCompositeOperation = 'source-over';
-
-        // ── 4. Photon sphere ring ──
-        const photonPulse = 1 + Math.sin(t * 3) * 0.15;
-        const photonGrad = ctx.createRadialGradient(CX, CY, PHOTON_RADIUS * 0.85, CX, CY, PHOTON_RADIUS * 1.3 * photonPulse);
-        photonGrad.addColorStop(0, 'rgba(255, 200, 100, 0)');
-        photonGrad.addColorStop(0.4, `rgba(255, 180, 60, ${0.15 + Math.sin(t * 5) * 0.05})`);
-        photonGrad.addColorStop(0.6, `rgba(255, 120, 20, ${0.25 + Math.sin(t * 4) * 0.08})`);
-        photonGrad.addColorStop(0.8, 'rgba(255, 80, 0, 0.08)');
-        photonGrad.addColorStop(1, 'rgba(255, 50, 0, 0)');
-        ctx.fillStyle = photonGrad;
-        ctx.beginPath();
-        ctx.arc(CX, CY, PHOTON_RADIUS * 1.3 * photonPulse, 0, Math.PI * 2);
-        ctx.fill();
-
-        // ── 5. Gravitational lensing ring (Einstein ring) ──
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        const lensR = PHOTON_RADIUS * 1.15;
-        for (let i = 0; i < 3; i++) {
-            const ringR = lensR + i * 2;
-            const alpha = 0.12 - i * 0.03;
-            ctx.beginPath();
-            ctx.arc(CX, CY, ringR, 0, Math.PI * 2);
-            ctx.strokeStyle = `rgba(200, 160, 255, ${alpha + Math.sin(t * 2 + i) * 0.02})`;
-            ctx.lineWidth = 1.5 - i * 0.3;
-            ctx.stroke();
-        }
-        ctx.restore();
-
-        // ── 6. Event horizon (the void) ──
-        const ehPulse = EH_RADIUS * (1 + Math.sin(t * 2) * 0.03);
-        const voidGrad = ctx.createRadialGradient(CX, CY, 0, CX, CY, ehPulse * 1.4);
-        voidGrad.addColorStop(0, 'rgba(0, 0, 0, 1)');
-        voidGrad.addColorStop(0.7, 'rgba(0, 0, 0, 0.98)');
-        voidGrad.addColorStop(0.85, 'rgba(5, 0, 15, 0.8)');
-        voidGrad.addColorStop(1, 'rgba(20, 5, 40, 0)');
-        ctx.fillStyle = voidGrad;
-        ctx.beginPath();
-        ctx.arc(CX, CY, ehPulse * 1.4, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Inner absolute black
-        ctx.fillStyle = '#000';
-        ctx.beginPath();
-        ctx.arc(CX, CY, ehPulse, 0, Math.PI * 2);
-        ctx.fill();
-
-        // ── 7. Accretion disk (front half — over black hole) ──
-        drawAccretionHalf(ctx, CX, CY, discP, t, false);
-
-        // ── 8. Relativistic jets (subtle) ──
-        ctx.globalCompositeOperation = 'lighter';
-        for (const j of jets) {
-            j.y += j.speed * 0.008;
-            if (j.y > 1) { j.y = 0; j.x = (Math.random() - 0.5) * 0.3; }
-            const jx = CX + j.x * EH_RADIUS * 2 * (1 + j.y * 0.5);
-            const jy = CY + j.dir * (EH_RADIUS * 0.5 + j.y * S * 0.35);
-            const alpha = Math.max(0, 0.4 * (1 - j.y));
-            ctx.beginPath();
-            ctx.arc(jx, jy, j.sz, 0, Math.PI * 2);
-            ctx.fillStyle = `hsla(${j.hue}, 80%, 70%, ${alpha})`;
-            ctx.fill();
-        }
-        ctx.globalCompositeOperation = 'source-over';
-
-        // ── 9. Inner glow pulse ──
-        const innerGlow = ctx.createRadialGradient(CX, CY, EH_RADIUS * 0.9, CX, CY, EH_RADIUS * 2.5);
-        innerGlow.addColorStop(0, 'rgba(180, 100, 255, 0)');
-        innerGlow.addColorStop(0.5, `rgba(160, 80, 255, ${0.03 + Math.sin(t * 6) * 0.02})`);
-        innerGlow.addColorStop(1, 'rgba(120, 40, 200, 0)');
-        ctx.fillStyle = innerGlow;
-        ctx.beginPath();
-        ctx.arc(CX, CY, EH_RADIUS * 2.5, 0, Math.PI * 2);
-        ctx.fill();
-    }
-
-    function drawAccretionHalf(ctx, cx, cy, particles, time, isBack) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        for (const p of particles) {
-            p.a += p.speed * 0.016;
-            const x = cx + Math.cos(p.a) * p.r;
-            const y = cy + Math.sin(p.a) * p.r * 0.3; // oblique elliptical view
-            const isBehind = Math.sin(p.a) < 0;
-            if (isBack !== isBehind) continue;
-
-            // Brightness modulation
-            const flicker = 0.7 + 0.3 * Math.sin(time * 8 + p.phase);
-            const distFade = 1 - Math.max(0, (p.r - DISC_INNER) / (DISC_OUTER - DISC_INNER));
-            const alpha = Math.min(0.85, flicker * (0.3 + distFade * 0.5));
-
-            // Draw with glow
-            const grad = ctx.createRadialGradient(x, y, 0, x, y, p.sz * 3);
-            grad.addColorStop(0, `hsla(${p.hue}, 100%, ${p.lum}%, ${alpha})`);
-            grad.addColorStop(0.5, `hsla(${p.hue + 10}, 90%, ${p.lum - 15}%, ${alpha * 0.4})`);
-            grad.addColorStop(1, `hsla(${p.hue + 20}, 80%, ${p.lum - 30}%, 0)`);
-            ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.arc(x, y, p.sz * 3, 0, Math.PI * 2);
-            ctx.fill();
-        }
-        ctx.restore();
-    }
-
-    draw();
-
-    return {
-        canvas,
-        stop: () => cancelAnimationFrame(animId),
-        setIntensity: (v) => {
-            // Dynamically scale — used during card pull
-            for (const p of discP) p.speed *= (1 + v * 0.01);
-        }
-    };
+// ═════════════════════════════════════════════════════════════════════════════
+// 黑洞吞噬動畫 (three.js + 光線追蹤 shader)
+// 做法：先把住宿生卡片「拍成一張貼圖」，然後整個畫面交給 GPU：
+//   每個像素射出一道光，光經過黑洞會被重力彎曲 (真正的重力透鏡)，彎曲後打到卡片就顯示卡片的顏色、
+//   穿過吸積盤就疊上發光的盤面、掉進事件視界就是純黑。卡片同時被拉向黑洞、拉長、旋轉、扭曲。
+// ═════════════════════════════════════════════════════════════════════════════
+function sfPrefetchHtml2Canvas() {
+  if (window.html2canvas || window._h2cLoading) return;
+  window._h2cLoading = true;
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+  s.async = true;
+  s.onerror = () => { window._h2cLoading = false; };
+  document.head.appendChild(s);
 }
 
-window.clearStudentData = function (btn) {
+// 備援：沒有 html2canvas (離線/被擋) 時，自己用 2D canvas 把卡片畫出來
+function sfDrawCardFallback(card) {
+  const cr = card.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const cv = document.createElement('canvas');
+  cv.width = Math.max(2, Math.round(cr.width * dpr));
+  cv.height = Math.max(2, Math.round(cr.height * dpr));
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = cr.width, H = cr.height, R = 32;
+  const isLight = document.body.classList.contains('light-mode');
+  const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); };
+  rr(0, 0, W, H, R);
+  ctx.fillStyle = isLight ? 'rgba(255,255,255,0.96)' : 'rgba(38,38,44,0.97)';
+  ctx.fill();
+  ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)';
+  ctx.stroke();
+  ctx.save(); rr(0, 0, W, H, R); ctx.clip();
+  const g = ctx.createLinearGradient(0, 0, W, 0);
+  g.addColorStop(0, '#6366f1'); g.addColorStop(0.5, '#d946ef'); g.addColorStop(1, '#8b5cf6');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, 4);
+  ctx.restore();
+  const textCol = isLight ? '#1a1a2e' : '#eeeef2';
+  const dimCol = isLight ? '#666' : '#8a8a96';
+  const inputBg = isLight ? 'rgba(0,0,0,0.05)' : 'rgba(0,0,0,0.3)';
+  const font = '-apple-system, BlinkMacSystemFont, "Noto Sans TC", sans-serif';
+  card.querySelectorAll('.sf-title-text, .sf-card-badge-relative, label, input[type="text"], textarea, .sf-save-action-btn').forEach(el => {
+    const r = el.getBoundingClientRect();
+    const x = r.left - cr.left, y = r.top - cr.top, w = r.width, h = r.height;
+    if (el.matches('input, textarea')) {
+      rr(x, y, w, h, 12); ctx.fillStyle = inputBg; ctx.fill();
+      ctx.fillStyle = textCol; ctx.font = `600 15px ${font}`; ctx.textBaseline = 'top';
+      ctx.fillText((el.value || '').slice(0, 24), x + 12, y + 10);
+    } else if (el.matches('.sf-save-action-btn, .sf-card-badge-relative')) {
+      rr(x, y, w, h, 12); ctx.fillStyle = el.matches('.sf-save-action-btn') ? inputBg : 'rgba(99,102,241,0.18)'; ctx.fill();
+      ctx.fillStyle = el.matches('.sf-save-action-btn') ? dimCol : '#818cf8'; ctx.font = `700 ${el.matches('.sf-save-action-btn') ? 14 : 11}px ${font}`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(el.textContent.trim(), x + w / 2, y + h / 2); ctx.textAlign = 'left';
+    } else if (el.matches('.sf-title-text')) {
+      ctx.fillStyle = textCol; ctx.font = `800 20px ${font}`; ctx.textBaseline = 'top';
+      ctx.fillText(el.textContent.trim(), x, y);
+    } else {
+      ctx.fillStyle = dimCol; ctx.font = `600 11px ${font}`; ctx.textBaseline = 'top';
+      ctx.fillText(el.textContent.trim(), x, y);
+    }
+  });
+  return cv;
+}
+
+async function sfCaptureCard(card) {
+  if (window.html2canvas) {
+    try {
+      const cv = await Promise.race([
+        window.html2canvas(card, {
+          backgroundColor: null,
+          scale: Math.min(window.devicePixelRatio || 1, 2),
+          useCORS: true,
+          logging: false,
+          removeContainer: true
+        }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('capture timeout')), 1800))
+      ]);
+      if (cv && cv.width > 2 && cv.height > 2) return cv;
+    } catch (e) { console.warn('[BlackHole] html2canvas 失敗，改用備援繪製', e.message); }
+  }
+  return sfDrawCardFallback(card);
+}
+
+const BH_VERT = `
+void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }
+`;
+
+const BH_FRAG = `
+uniform vec2  uRes;       // CSS px
+uniform float uDpr;
+uniform float uTime;
+uniform float uProg;      // 0..1 整體進度
+uniform float uHole;      // 黑洞出現比例 0..1 (視界半徑縮放)
+uniform float uRs;        // 黑洞陰影半徑 (CSS px)，已含 uHole
+uniform vec2  uBH;        // 黑洞位置 (CSS px, 左上原點)
+uniform sampler2D uCardTex;
+uniform vec4  uCard;      // 卡片原始位置 x,y,w,h (CSS px)
+uniform float uPull;      // 0..1 被拉走的比例
+uniform float uStretch;   // 沿拉力方向拉長
+uniform float uSqueeze;   // 垂直方向壓扁
+uniform float uScaleC;    // 整體縮小
+uniform float uSpin;      // 旋轉 (弧度)
+uniform float uCardAlpha; // 卡片可見度
+uniform float uShake;     // 抖動幅度 (px)
+uniform float uSeed;
+uniform float uDiskGain;
+
+#define SHADOW_U 5.196   // 3*sqrt(3)：M=1 時黑洞陰影的角半徑 (單位)
+#define CARD_Z  -6.0
+#define START_Z 18.0
+
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+float noise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
+  float a=hash(i),b=hash(i+vec2(1,0)),c=hash(i+vec2(0,1)),d=hash(i+vec2(1,1));
+  return mix(mix(a,b,f.x),mix(c,d,f.x),f.y); }
+float fbm(vec2 p){ float v=0., a=.5; for(int i=0;i<3;i++){ v+=a*noise(p); p=p*2.03+vec2(1.7,9.2); a*=.5;} return v; }
+
+// 吸積盤：q 是盤面座標 (單位)，r 是離黑洞距離
+vec4 disk(vec2 q, float r){
+  float inner = 3.4, outer = 13.0;
+  float rn = clamp((r - inner)/(outer - inner), 0.0, 1.0);
+  float ang = atan(q.y, q.x);
+  float rot = uTime * (2.4 / (0.25 + pow(rn + 0.1, 1.6)));
+  float n  = fbm(vec2(ang*2.5 + rot, rn*7.0 + uSeed));
+  float n2 = fbm(vec2(ang*6.0 - rot*1.6, rn*18.0 + uSeed*2.0));
+  float streak = smoothstep(0.3, 0.85, n)*0.8 + smoothstep(0.45, 0.95, n2)*0.55;
+  float edgeIn  = smoothstep(inner*0.92, inner*1.25, r);
+  float edgeOut = 1.0 - smoothstep(outer*0.72, outer, r);
+  float radial  = pow(1.0 - rn, 1.5);
+  float I = (0.3 + streak) * radial * edgeIn * edgeOut;
+  float dop = 1.0 + 0.85 * (q.x / max(r, 0.001));   // 都卜勒增亮：朝我們轉過來那側特別亮
+  I *= dop;
+  vec3 hot  = vec3(1.0, 0.97, 0.88);
+  vec3 mid  = vec3(1.0, 0.64, 0.24);
+  vec3 cool = vec3(0.78, 0.2, 0.06);
+  vec3 col = mix(hot, mid, smoothstep(0.0, 0.32, rn));
+  col = mix(col, cool, smoothstep(0.32, 1.0, rn));
+  col = mix(col, vec3(0.86, 0.9, 1.0), clamp((dop - 1.0)*0.4, 0.0, 0.45));
+  return vec4(col * I * 1.9 * uDiskGain, clamp(I * 1.5 * uDiskGain, 0.0, 1.0));
+}
+
+// 把螢幕上的一個點，反推回「卡片貼圖」上的 uv (含拉扯、拉長、旋轉)
+vec4 sampleCard(vec2 s, vec2 chroma){
+  vec2 c0 = uCard.xy + uCard.zw*0.5;
+  vec2 c  = mix(c0, uBH, uPull);
+  vec2 axis = normalize(uBH - c0 + vec2(0.0001));
+  vec2 perp = vec2(-axis.y, axis.x);
+  vec2 l = s - c;
+  float cs = cos(-uSpin), sn = sin(-uSpin);
+  l = vec2(l.x*cs - l.y*sn, l.x*sn + l.y*cs);
+  float along = dot(l, axis) / (uStretch * uScaleC);
+  float pv    = dot(l, perp) / (uSqueeze * uScaleC);
+  // 潮汐：靠近黑洞那一端被拉得更長 (沿拉力方向非線性)
+  along = along / (1.0 + 0.35*uPull*clamp(along/ (uCard.w*0.5), -1.0, 1.0));
+  vec2 local = along*axis + pv*perp;
+  vec2 uv = (local + uCard.zw*0.5) / uCard.zw;
+  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return vec4(0.0);
+  vec2 fuv = vec2(uv.x, 1.0 - uv.y);
+  vec4 t = texture2D(uCardTex, fuv);
+  if (length(chroma) > 0.0001) {
+    float rr = texture2D(uCardTex, fuv + chroma).r;
+    float bb = texture2D(uCardTex, fuv - chroma).b;
+    t.r = mix(t.r, rr, 0.8); t.b = mix(t.b, bb, 0.8);
+  }
+  return t;
+}
+
+void main(){
+  vec2 p = vec2(gl_FragCoord.x, uRes.y*uDpr - gl_FragCoord.y) / uDpr;
+  float unit = uRs / SHADOW_U;            // 1 單位 = 幾個 CSS px
+  vec2 pu = (p - uBH) / unit;             // 以黑洞為中心的單位座標
+  float b = length(pu);
+
+  vec3 col = vec3(0.0);
+  float alpha = 0.0;
+  vec2 src = p;
+  bool captured = false;
+  bool hitCard = false;
+  float bendAmt = 0.0;
+
+  if (uHole < 0.02) {
+    hitCard = true;
+  } else if (b > 40.0) {
+    // 遠處：只做微小的偏折，省效能
+    float defl = (4.0 / b) * (START_Z - CARD_Z) * 0.35;
+    src = p - normalize(pu) * defl * unit;
+    hitCard = true;
+    bendAmt = defl;
+  } else {
+    // 近處：真的追光線。光從觀察者射向黑洞，被重力彎曲
+    vec3 pos = vec3(pu, START_Z);
+    vec3 vel = vec3(0.0, 0.0, -1.0);
+    vec3 hvec = cross(pos, vel);
+    float h2 = dot(hvec, hvec);
+    // 吸積盤傾斜 (看起來像從盤面稍微上方看下去)
+    float inc = 0.24;
+    vec3 n  = vec3(0.0, cos(inc), sin(inc));
+    vec3 u1 = vec3(1.0, 0.0, 0.0);
+    vec3 u2 = cross(n, u1);
+    int crossings = 0;
+    for (int i = 0; i < 72; i++) {
+      float r2 = dot(pos, pos);
+      float r = sqrt(r2);
+      if (r < 2.02) { captured = true; break; }
+      float dt = clamp(r * 0.11, 0.05, 1.1);
+      vec3 acc = -1.5 * h2 * pos / (r2 * r2 * r);
+      vec3 prev = pos;
+      vel += acc * dt;
+      pos += vel * dt;
+      // 穿過吸積盤平面？
+      float y0 = dot(prev, n), y1 = dot(pos, n);
+      if (y0 * y1 < 0.0 && crossings < 2) {
+        float k = y0 / (y0 - y1);
+        vec3 hit = mix(prev, pos, k);
+        float rd = length(hit);
+        if (rd > 3.0 && rd < 13.5) {
+          vec4 dc = disk(vec2(dot(hit, u1), dot(hit, u2)), rd);
+          col += dc.rgb * (1.0 - alpha);
+          alpha += dc.a * (1.0 - alpha);
+          crossings++;
+        }
+      }
+      // 打到卡片所在的平面？
+      if (prev.z > CARD_Z && pos.z <= CARD_Z) {
+        float k = (prev.z - CARD_Z) / (prev.z - pos.z);
+        vec3 hit = mix(prev, pos, k);
+        src = uBH + hit.xy * unit;
+        hitCard = true;
+        bendAmt = length(hit.xy - pu);
+        break;
+      }
+      if (r > 60.0) break;
+    }
+  }
+
+  // 卡片 (經過重力透鏡後的影像)
+  if (hitCard && !captured && uCardAlpha > 0.001) {
+    vec2 chroma = vec2(0.0);
+    if (b < 40.0) chroma = normalize(pu + vec2(0.0001)) * (0.012 * clamp(bendAmt / 4.0, 0.0, 1.0));
+    vec2 shake = vec2(hash(vec2(uTime*7.0, 1.0)) - 0.5, hash(vec2(3.0, uTime*9.0)) - 0.5) * uShake;
+    vec4 cc = sampleCard(src + shake, chroma);
+    float heat = uPull * uPull;
+    cc.rgb = mix(cc.rgb, cc.rgb * vec3(1.35, 1.05, 0.8) + vec3(0.25, 0.08, 0.0), heat * 0.8);
+    float ca = cc.a * uCardAlpha;
+    col += cc.rgb * ca * (1.0 - alpha);
+    alpha += ca * (1.0 - alpha);
+  }
+
+  // 事件視界：純黑 (前面疊的吸積盤保留)
+  if (captured) {
+    alpha = 1.0;
+  }
+
+  // 光子環：視界邊緣一圈極亮的光，加上外圍柔光暈
+  float ring = exp(-abs(b - SHADOW_U) * 1.35) * 1.6 * uHole;
+  float halo = exp(-max(0.0, b - SHADOW_U) * 0.22) * 0.22 * uHole;
+  vec3 glowCol = vec3(1.0, 0.86, 0.6) * ring + vec3(1.0, 0.55, 0.2) * halo;
+  float glowA = clamp(ring * 0.9 + halo, 0.0, 1.0);
+  col += glowCol * (1.0 - alpha * 0.6);
+  alpha = clamp(alpha + glowA * (1.0 - alpha), 0.0, 1.0);
+
+  gl_FragColor = vec4(col, alpha);
+}
+`;
+
+let _bhRenderer = null;
+function sfGetBHRenderer() {
+  if (_bhRenderer) return _bhRenderer;
+  if (!window.THREE) return null;
+  try {
+    const r = new THREE.WebGLRenderer({ alpha: true, antialias: false, premultipliedAlpha: true, powerPreference: 'high-performance' });
+    r.setClearColor(0x000000, 0);
+    _bhRenderer = r;
+    return r;
+  } catch (e) { console.warn('[BlackHole] WebGL 無法啟動', e); return null; }
+}
+
+function sfSafeTop() {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;top:env(safe-area-inset-top,0px);left:0;width:0;height:0;pointer-events:none;';
+  document.body.appendChild(probe);
+  const t = probe.getBoundingClientRect().top;
+  probe.remove();
+  return t || 0;
+}
+
+// 沒有 WebGL / three.js 時的簡易備援：卡片縮小飛向角落
+function sfSimpleSuck(activeCard, sX, sY, cr, done) {
+  const dx = sX - (cr.left + cr.width / 2), dy = sY - (cr.top + cr.height / 2);
+  activeCard.style.transition = 'transform 1.4s cubic-bezier(0.5, 0, 1, 0.3), opacity 1.2s ease-in, filter 1.2s';
+  activeCard.style.transform = `translate(${dx}px, ${dy}px) rotate(540deg) scale(0.02)`;
+  activeCard.style.opacity = '0';
+  activeCard.style.filter = 'brightness(2.5) blur(4px)';
+  setTimeout(() => {
+    activeCard.style.transition = 'none';
+    activeCard.style.filter = '';
+    done();
+  }, 1450);
+}
+
+window.clearStudentData = async function (btn) {
   const cardArea = document.getElementById('sf-card-area');
   const sceneEl = document.getElementById('sf-scene');
   let activeCard;
@@ -4613,231 +4682,183 @@ window.clearStudentData = function (btn) {
     const cards = cardArea ? cardArea.querySelectorAll('.sf-student-card-2d') : [];
     activeCard = Array.from(cards).find(c => c.classList.contains('active')) || cards[0];
   }
-  if (!activeCard) return;
+  if (!activeCard || activeCard.dataset.bhBusy === '1') return;
+  activeCard.dataset.bhBusy = '1';
   if (sceneEl) sceneEl.style.pointerEvents = 'none';
+
+  // 先把 3D 收掉、卡片攤平，拍照才不會歪
+  if (window._sfDisable3D) window._sfDisable3D();
+  activeCard.style.transition = 'none';
+  activeCard.style.transform = 'translateX(0px) scale(1)';
+  activeCard.style.opacity = '1';
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
   const cr = activeCard.getBoundingClientRect();
   const vw = window.innerWidth;
-  const sX = vw - 80, sY = 80;
+  const sX = vw - Math.max(110, Math.min(240, vw * 0.3)), sY = sfSafeTop() + 96;
 
-  // ═══ Capture current 3D state before anything changes ═══
-  const liveTransform = window.getComputedStyle(activeCard).transform || 'none';
-  const was3D = activeCard.classList.contains('is-3d-active');
-
-  // ═══ Atmosphere — cinematic vignette centered on singularity ═══
-  const atmo = document.createElement('div');
-  atmo.style.cssText = `position:fixed;inset:0;z-index:9996;background:radial-gradient(circle at ${sX}px ${sY}px,transparent 5%,rgba(0,0,0,0.35) 30%,rgba(0,0,0,0.75) 100%);pointer-events:none;opacity:0;transition:opacity 1s;`;
-  document.body.appendChild(atmo);
-  requestAnimationFrame(() => { atmo.style.opacity = '1'; });
-
-  // ═══ Canvas2D Black Hole at top-right ═══
-  const BH_SIZE = 420;
-  const bhEl = document.createElement('div');
-  bhEl.className = 'webgl-blackhole-canvas';
-  bhEl.style.cssText = `position:fixed;top:${sY - BH_SIZE/2}px;left:${sX - BH_SIZE/2}px;width:${BH_SIZE}px;height:${BH_SIZE}px;pointer-events:none;z-index:9999;opacity:0;transform:scale(0.1);transition:opacity 0.8s,transform 1.2s cubic-bezier(0.175,0.885,0.32,1.275);`;
-  document.body.appendChild(bhEl);
-  let bhApp;
-  setTimeout(() => {
-    bhApp = spawnCanvasBlackHole(bhEl, BH_SIZE);
-    requestAnimationFrame(() => { bhEl.style.opacity = '1'; bhEl.style.transform = 'scale(1)'; });
-  }, 10);
-
-  const pC = ['#ff4500','#00bfff','#8a2be2','#ff006e','#fff','#ffaa00'];
   if (window.haptic) { window.haptic('heavy'); setTimeout(() => window.haptic('heavy'), 250); }
 
-  // ═══ SVG Displacement Filter — pixel-level gravitational warping ═══
-  const fId = 'bh-warp-' + Date.now();
-  const svgNS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(svgNS, 'svg');
-  svg.style.cssText = 'position:absolute;width:0;height:0;pointer-events:none;';
-  const defs = document.createElementNS(svgNS, 'defs');
-  const filt = document.createElementNS(svgNS, 'filter');
-  filt.setAttribute('id', fId);
-  // Huge filter region so warped pixels aren't clipped
-  filt.setAttribute('x', '-100%'); filt.setAttribute('y', '-100%');
-  filt.setAttribute('width', '400%'); filt.setAttribute('height', '400%');
+  // 氛圍：整個畫面往黑洞方向暗下來
+  const atmo = document.createElement('div');
+  atmo.className = 'bh-atmo';
+  atmo.style.background = `radial-gradient(circle at ${sX}px ${sY}px, transparent 4%, rgba(0,0,0,0.35) 28%, rgba(0,0,0,0.78) 100%)`;
+  document.body.appendChild(atmo);
+  requestAnimationFrame(() => atmo.classList.add('on'));
 
-  const turb = document.createElementNS(svgNS, 'feTurbulence');
-  turb.setAttribute('type', 'turbulence');
-  turb.setAttribute('baseFrequency', '0.008 0.006');
-  turb.setAttribute('numOctaves', '5');
-  turb.setAttribute('seed', String(Math.floor(Math.random()*100)));
-  turb.setAttribute('result', 'warpNoise');
-
-  const disp = document.createElementNS(svgNS, 'feDisplacementMap');
-  disp.setAttribute('in', 'SourceGraphic');
-  disp.setAttribute('in2', 'warpNoise');
-  disp.setAttribute('scale', '0');
-  disp.setAttribute('xChannelSelector', 'R');
-  disp.setAttribute('yChannelSelector', 'G');
-
-  filt.appendChild(turb); filt.appendChild(disp);
-  defs.appendChild(filt); svg.appendChild(defs);
-  document.body.appendChild(svg);
-
-  // ═══ Ghost clone — preserves 3D state ═══
-  const ghost = activeCard.cloneNode(true);
-  ghost.classList.remove('anim-suck-into-blackhole','anim-spit-new-card');
-  // Keep is-3d-active class if it was active!
-  const cardCX = cr.left + cr.width / 2, cardCY = cr.top + cr.height / 2;
-  ghost.style.cssText = `position:fixed;top:${cr.top}px;left:${cr.left}px;width:${cr.width}px;height:${cr.height}px;z-index:9998;pointer-events:none;margin:0;padding:0;will-change:transform,filter;backface-visibility:hidden;transform-origin:center center;`;
-  // Apply the EXACT current transform so there's zero visual pop
-  ghost.style.transform = liveTransform;
-  document.body.appendChild(ghost);
-  activeCard.style.visibility = 'hidden';
-
-  // Debris particles — spiral toward singularity
-  function debris(x, y, count) {
-    for (let k = 0; k < (count || 4); k++) {
-      const d = document.createElement('div');
-      const col = pC[Math.floor(Math.random()*pC.length)];
-      const sz = 2 + Math.random() * 5;
-      d.style.cssText = `position:fixed;left:${x}px;top:${y}px;width:${sz}px;height:${sz}px;background:${col};border-radius:50%;pointer-events:none;z-index:10001;box-shadow:0 0 ${sz*3}px ${sz}px ${col};`;
-      document.body.appendChild(d);
-      const dist = 40 + Math.random() * 80;
-      const a = Math.atan2(sY-y, sX-x) + (Math.random()-0.5)*1.2;
-      const dur = 400 + Math.random() * 400;
-      const start = performance.now();
-      (function animDebris() {
-        const p = Math.min((performance.now() - start) / dur, 1);
-        const ep = 1 - (1-p)*(1-p);
-        d.style.transform = `translate(${Math.cos(a)*dist*ep}px,${Math.sin(a)*dist*ep}px) scale(${1-ep})`;
-        d.style.opacity = String(1 - ep);
-        if (p < 1) requestAnimationFrame(animDebris);
-        else d.remove();
-      })();
-    }
-  }
-
-  // ═══ Angle from card center to black hole ═══
-  const angleToSingularity = Math.atan2(sY - cardCY, sX - cardCX);
-
-  // ═══ Animation — 4 cinematic phases ═══
-  const DUR = 3500;
-  const tStart = performance.now();
-  let dT = 0, hT = 0;
-
-  // Screen shake helper
-  function screenShake(intensity) {
-    const dx = (Math.random()-0.5) * intensity;
-    const dy = (Math.random()-0.5) * intensity;
-    document.body.style.transform = `translate(${dx}px,${dy}px)`;
-  }
-
-  function animate(now) {
-    const t = now - tStart;
-    const p = Math.min(t / DUR, 1);
-
-    // ── Phase 1: Gravitational awareness — tremble + subtle pull (0-15%) ──
-    if (p < 0.15) {
-      const tp = p / 0.15;
-      const shk = tp * tp * 10;
-      const dx = (Math.random()-0.5)*shk, dy = (Math.random()-0.5)*shk;
-      disp.setAttribute('scale', String(tp * 15));
-      ghost.style.filter = `url(#${fId}) brightness(${1+tp*0.15})`;
-      ghost.style.transform = `${liveTransform} translate(${dx}px,${dy}px)`;
-      screenShake(tp * 2);
-      requestAnimationFrame(animate);
-      return;
-    }
-
-    // ── Phase 2: Tidal stretching + pull (15-100%) ──
-    const wp = (p - 0.15) / 0.85;
-    const eased = wp * wp;
-    const eCubic = wp * wp * wp;
-    const eQuart = wp * wp * wp * wp;
-
-    // SVG displacement — space-time distortion
-    const warpScale = 15 + eased * 400;
-    disp.setAttribute('scale', String(warpScale));
-    const freq = 0.008 + eCubic * 0.04;
-    turb.setAttribute('baseFrequency', `${freq} ${freq * 0.7}`);
-
-    // Pull toward singularity — accelerating
-    const pullPow = Math.pow(wp, 1.8);
-    const tx = (sX - cardCX) * pullPow * 0.92;
-    const ty = (sY - cardCY) * pullPow * 0.92;
-
-    // Spaghettification — elongate along pull axis
-    const cosA = Math.cos(angleToSingularity);
-    const sinA = Math.sin(angleToSingularity);
-    const stretch = 1 + eCubic * 2.5;   // stretch along pull direction
-    const squeeze = Math.max(0.05, 1 - eCubic * 0.85); // squeeze perpendicular
-    const scaleDown = Math.max(0.01, 1 - eQuart * 0.98);
-
-    // 3D tilt toward black hole
-    const tiltStrength = eased * 45;
-    const rotY = cosA * tiltStrength;
-    const rotX = -sinA * tiltStrength;
-
-    // Spiral rotation accelerating near event horizon
-    const spiral = eCubic * 180 + eQuart * 90;
-
-    // Matrix-compose spaghettification: rotate to pull axis, stretch, rotate back
-    const skewMatrix = `rotate(${Math.atan2(sinA, cosA) * 180 / Math.PI}deg) scaleX(${stretch * scaleDown}) scaleY(${squeeze * scaleDown}) rotate(${-Math.atan2(sinA, cosA) * 180 / Math.PI}deg)`;
-
-    ghost.style.transform = `perspective(600px) translate(${tx}px,${ty}px) rotateX(${rotX}deg) rotateY(${rotY}deg) rotate(${spiral}deg) ${skewMatrix}`;
-
-    // Visual FX — heat glow intensifying
-    const bright = 1 + eased * 3;
-    const hue = eased * 60;
-    const sat = 100 + eased * 200;
-    ghost.style.filter = `url(#${fId}) brightness(${bright}) hue-rotate(${hue}deg) saturate(${sat}%)`;
-    ghost.style.opacity = String(Math.max(0, 1 - Math.pow(wp, 1.5) * 1.15));
-
-    // Screen shake — increases with pull
-    screenShake(eased * 6);
-
-    // Debris emission — more frequent as card approaches
-    const debrisInterval = Math.max(20, 80 - eased * 70);
-    if (wp > 0.08 && wp < 0.9 && now - dT > debrisInterval) {
-      const cx = cardCX + tx + (Math.random()-0.5)*cr.width*(1-eased)*0.5;
-      const cy = cardCY + ty + (Math.random()-0.5)*cr.height*(1-eased)*0.4;
-      debris(cx, cy, Math.ceil(2 + eased * 4));
-      dT = now;
-    }
-
-    // Haptic crescendo
-    const hapInterval = Math.max(60, 200 - eased * 160);
-    if (now - hT > hapInterval && p < 0.95) {
-      if (window.haptic) window.haptic(eased > 0.5 ? 'medium' : 'light');
-      hT = now;
-    }
-
-    if (p < 1) { requestAnimationFrame(animate); return; }
-
-    // ═══ Phase 4: Cleanup — implosion flash ═══
-    document.body.style.transform = '';
-    // Flash
-    const flash = document.createElement('div');
-    flash.style.cssText = `position:fixed;inset:0;z-index:10002;background:radial-gradient(circle at ${sX}px ${sY}px,rgba(255,200,100,0.6),transparent 50%);pointer-events:none;opacity:1;transition:opacity 0.5s;`;
-    document.body.appendChild(flash);
-    if (window.haptic) window.haptic('heavy');
-    requestAnimationFrame(() => { flash.style.opacity = '0'; });
-    setTimeout(() => flash.remove(), 600);
-
-    ghost.remove(); svg.remove();
-    atmo.style.opacity = '0'; setTimeout(() => atmo.remove(), 1000);
-
+  const resetCardFields = () => {
     const ni = activeCard.querySelector('.sf-input-name'); if (ni) ni.value = '';
     const ii = activeCard.querySelector('.sf-input-id'); if (ii) ii.value = '';
     const ci = activeCard.querySelector('.sf-input-class'); if (ci) ci.value = '';
     const ri = activeCard.querySelector('.sf-input-remarks'); if (ri) ri.value = '';
     const cf = activeCard.querySelector('.sf-chk-foreign'); if (cf) cf.checked = false;
     const ce = activeCard.querySelector('.sf-chk-empty'); if (ce) ce.checked = true;
+  };
 
+  const finish = () => {
+    document.body.style.transform = '';
+    const flash = document.createElement('div');
+    flash.style.cssText = `position:fixed;inset:0;z-index:10002;background:radial-gradient(circle at ${sX}px ${sY}px,rgba(255,210,120,0.75),rgba(255,120,40,0.25) 25%,transparent 55%);pointer-events:none;opacity:1;transition:opacity 0.55s;`;
+    document.body.appendChild(flash);
+    if (window.haptic) window.haptic('heavy');
+    requestAnimationFrame(() => { flash.style.opacity = '0'; });
+    setTimeout(() => flash.remove(), 650);
+
+    atmo.classList.remove('on'); setTimeout(() => atmo.remove(), 950);
+
+    resetCardFields();
     activeCard.style.visibility = 'visible';
+    activeCard.style.opacity = '1';
+    activeCard.style.transform = 'translateX(0px) scale(1)';
     activeCard.classList.add('anim-spit-new-card');
     if (window.haptic) window.haptic('light');
-    bhEl.style.opacity = '0'; bhEl.style.transform = 'scale(0.1)';
     setTimeout(() => {
       activeCard.classList.remove('anim-spit-new-card');
-      if (bhApp) bhApp.stop(); bhEl.remove();
       activeCard.style.transition = 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
+      delete activeCard.dataset.bhBusy;
       if (sceneEl) sceneEl.style.pointerEvents = 'auto';
+      if (window._restart3DTimer) window._restart3DTimer();
     }, 1200);
+  };
+
+  const renderer = sfGetBHRenderer();
+  if (!renderer) {
+    sfSimpleSuck(activeCard, sX, sY, cr, finish);
+    return;
+  }
+
+  // 1. 把卡片拍成貼圖
+  const texCanvas = await sfCaptureCard(activeCard);
+
+  // 2. 建立全螢幕 WebGL 圖層
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  renderer.setPixelRatio(dpr);
+  renderer.setSize(window.innerWidth, window.innerHeight, false);
+  const canvas = renderer.domElement;
+  canvas.className = 'bh-webgl-layer';
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
+  document.body.appendChild(canvas);
+
+  const tex = new THREE.CanvasTexture(texCanvas);
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+
+  const RS_BASE = Math.max(34, Math.min(60, vw * 0.12));
+  const uniforms = {
+    uRes: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+    uDpr: { value: dpr },
+    uTime: { value: 0 },
+    uProg: { value: 0 },
+    uHole: { value: 0 },
+    uRs: { value: 0.01 },
+    uBH: { value: new THREE.Vector2(sX, sY) },
+    uCardTex: { value: tex },
+    uCard: { value: new THREE.Vector4(cr.left, cr.top, cr.width, cr.height) },
+    uPull: { value: 0 },
+    uStretch: { value: 1 },
+    uSqueeze: { value: 1 },
+    uScaleC: { value: 1 },
+    uSpin: { value: 0 },
+    uCardAlpha: { value: 1 },
+    uShake: { value: 0 },
+    uSeed: { value: Math.random() * 10 },
+    uDiskGain: { value: 0 },
+  };
+  const mat = new THREE.ShaderMaterial({ vertexShader: BH_VERT, fragmentShader: BH_FRAG, uniforms, transparent: true, depthTest: false, depthWrite: false,
+    blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor });
+  const scene = new THREE.Scene();
+  scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat));
+  const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+  // 第一幀：卡片原封不動疊在原位，畫好後才把真卡片藏起來，中間不會閃
+  renderer.render(scene, cam);
+  activeCard.style.visibility = 'hidden';
+  requestAnimationFrame(() => canvas.classList.add('on'));
+
+  const DUR = 3600;
+  const tStart = performance.now();
+  let hT = 0;
+  const easeOutBack = (t) => { const c = 1.70158; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); };
+
+  function animate(now) {
+    const t = (now - tStart) / 1000;
+    const p = Math.min((now - tStart) / DUR, 1);
+    uniforms.uTime.value = t;
+    uniforms.uProg.value = p;
+
+    // 黑洞誕生 (0~18%)：從一個點膨脹出來，吸積盤點亮
+    const born = Math.min(1, p / 0.18);
+    const hole = easeOutBack(born);
+    // 結尾 (92%~100%)：黑洞塌縮
+    const collapse = p > 0.92 ? Math.min(1, (p - 0.92) / 0.08) : 0;
+    const holeNow = Math.max(0.0001, hole * (1 - collapse * collapse));
+    uniforms.uHole.value = holeNow;
+    uniforms.uRs.value = Math.max(0.5, RS_BASE * holeNow);
+    uniforms.uDiskGain.value = Math.min(1, born * 1.2) * (1 - collapse);
+
+    // 卡片：先顫抖 (0~20%)，再被拉走 (20%~90%)
+    const wp = Math.max(0, Math.min(1, (p - 0.2) / 0.7));
+    const pull = Math.pow(wp, 1.4);
+    const e2 = wp * wp, e3 = e2 * wp, e4 = e3 * wp;
+    uniforms.uPull.value = pull;
+    uniforms.uStretch.value = 1 + e2 * 3.2;
+    uniforms.uSqueeze.value = Math.max(0.12, 1 - e3 * 0.9);
+    uniforms.uScaleC.value = Math.max(0.03, 1 - e3 * 0.95);
+    uniforms.uSpin.value = (e3 * 2.4 + e4 * 1.4) * Math.PI;
+    // 卡片一路保持可見，最後 10% 才淡出：真正的「消失」是被視界吞掉，不是淡掉
+    const fadeT = Math.max(0, Math.min(1, (wp - 0.9) / 0.1));
+    uniforms.uCardAlpha.value = 1 - fadeT * fadeT * (3 - 2 * fadeT);
+    const tremble = p < 0.2 ? (p / 0.2) * 5 : 5 + e2 * 6;
+    uniforms.uShake.value = wp > 0.92 ? 0 : tremble;
+
+    // 螢幕微震
+    const shakeAmt = p < 0.2 ? (p / 0.2) * 1.5 : 1.5 + e2 * 4.5 * (1 - collapse);
+    document.body.style.transform = `translate(${(Math.random() - 0.5) * shakeAmt}px, ${(Math.random() - 0.5) * shakeAmt}px)`;
+
+    // 震動節奏越來越急
+    const hapInterval = Math.max(60, 220 - e2 * 170);
+    if (now - hT > hapInterval && p < 0.9) {
+      if (window.haptic) window.haptic(e2 > 0.5 ? 'medium' : 'light');
+      hT = now;
+    }
+
+    renderer.render(scene, cam);
+
+    if (p < 1) { requestAnimationFrame(animate); return; }
+
+    // 收尾
+    canvas.classList.remove('on');
+    setTimeout(() => {
+      canvas.remove();
+      tex.dispose(); mat.dispose();
+    }, 400);
+    finish();
   }
   requestAnimationFrame(animate);
 };
+
 
 window.debouncedAutoSave = function (elem) {
   if (elem.dataset.timeout) clearTimeout(elem.dataset.timeout);
@@ -4896,6 +4917,7 @@ window.autoSaveStudentFile = async function (elem) {
     studentObj.remarks = newRemarks;
     studentObj.isForeign = isForeign;
     studentObj.isEmpty = isEmpty;
+    if (typeof _sfDrafts !== 'undefined') _sfDrafts.delete(studentObj.id);
 
     // 同步更新畫面上所有複製人的顯示內容
     const cards = document.querySelectorAll('.sf-student-card-2d');

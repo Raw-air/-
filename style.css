@@ -521,6 +521,16 @@ body {
   transform: scale(1.05);
   opacity: 0;
 }
+/* 效能：離開首頁後光球看不見了，就把 45 條光線的動畫全部暫停，不要在背景偷偷跑 */
+.home-anim-bg.hidden-bg .anim-line::after,
+.home-anim-bg.hidden-bg .ball-sphere,
+.home-anim-bg.hidden-bg::before {
+  animation-play-state: paused !important;
+}
+.home-anim-bg.hidden-bg {
+  visibility: hidden;
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s ease, visibility 0s linear 0.6s;
+}
 
 .home-anim-bg::before {
   content: '';
@@ -3548,12 +3558,7 @@ label.switch:has(#setting-white-mode) {
   will-change: clip-path;
 }
 
-html.transition-dark::view-transition-old(root) {
-  z-index: 2; /* 闂滈枆鐧藉簳鏅傦紝璁撶櫧鐣潰钃嬪湪涓婇潰涓﹀線鍏у湏褰㈢府灏?*/
-}
-html.transition-dark::view-transition-new(root) {
-  z-index: 1; /* 榛戝簳鏀惧湪涓嬮潰琚悆鎺?*/
-}
+/* 兩個方向都由「新畫面」從按鈕位置擴散出來，新畫面本來就疊在舊畫面上面，不需要調 z-index */
 
 /* 鈿?鏁堣兘鏍稿綀锛氭毇鏅傞棞闁?backdrop-filter 渚嗗姞閫?View Transition 鎴湒 */
 /* backdrop-filter: blur() 鏄?VT 鎴湒鏈€閲嶇殑鐡堕牳 鈥斺€?姣忓€嬪厓绱犻兘瑕佺崹绔嬪仛楂樻柉妯＄硦 */
@@ -3581,11 +3586,15 @@ body.panzi-mode .sqd-meta { display: none !important; }
 .sqd-card, .big-stat, .sm-stat, .rc-stat, .student-row,
 .empty-bed-action, .fab-empty-bed {
   background: var(--card);
-  backdrop-filter: blur(24px) saturate(140%);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
   border: 1px solid var(--border);
   box-shadow: var(--neu-out);
   transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* 效能：只有「真的疊在動態背景上」的元素才需要毛玻璃 (首頁卡片、浮動按鈕)。
+   其他頁面背景是純色，blur 看不出差別卻讓 iPhone 每一列都要重算，所以拿掉。 */
+.sq-card, .fab-empty-bed {
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
 }
 
 /* Modals should be extremely soft 鈥?NO neumorphic glow */
@@ -3642,7 +3651,6 @@ body.panzi-mode .sqd-meta { display: none !important; }
 /* Beautiful Clean Inset Trenches for Inputs */
 .styled-input, .styled-select, .dev-input, .stepper-input, .repair-textarea {
   background: rgba(0,0,0,0.25); /* Deep inset feel for dark mode */
-  backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: var(--neu-in);
   color: var(--text);
@@ -4040,20 +4048,33 @@ body.light-mode .focus-indicator { background: #6366f1; }
 
 .sf-card-area-2d {
   position: relative;
-  width: 100%;
+  /* 滿版出血：讓兩側卡片可以一路露到螢幕邊緣，同時用 overflow:hidden 把繪圖範圍鎖在螢幕內 */
+  width: 100vw;
+  margin: -200px calc(50% - 50vw);
   height: calc(100% + 400px);
-  margin: -200px 0;
-  overflow: visible; /* Prevent shadows from being clipped vertically */
+  overflow: hidden;
   display: flex;
   align-items: center;
-  touch-action: manipulation;
+  touch-action: pan-y;
+  contain: layout paint;
 }
 .sf-card-track {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-left: calc(50% - 150px);
+  position: relative;
+  width: 100%;
+  height: 100%;
   will-change: transform;
+}
+/* 虛擬化卡片：只有畫面附近 13 張真的存在於 DOM，其餘靠 JS 回收重用 */
+.sf-card-track > .sf-student-card-2d {
+  position: absolute;
+  top: calc(50% - 235px);
+  left: calc(50% - 150px);
+  width: 300px;
+  margin: 0;
+}
+.sf-card-track > .sf-student-card-2d.sf-far {
+  visibility: hidden;
+  content-visibility: hidden;
 }
 .sf-card-area-2d::-webkit-scrollbar { display: none; }
 
@@ -4066,8 +4087,13 @@ body.light-mode .focus-indicator { background: #6366f1; }
 
 .sf-fake-train {
   position: absolute; top:0; left:0; width:100%; height:100%; overflow:hidden;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.3s ease, visibility 0s linear 0.3s;
   z-index: 10;
+  visibility: hidden; /* 沒在搜尋時完全不畫，也不佔 GPU */
+}
+.sf-scene-2d.is-searching .sf-fake-train {
+  visibility: visible;
+  transition: opacity 0.3s ease;
 }
 .sf-fake-track {
   display: flex;
@@ -4076,8 +4102,16 @@ body.light-mode .focus-indicator { background: #6366f1; }
   height: 100%;
   padding-left: calc(50% - 150px);
   animation: magic-fake-scan 2.8s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+  animation-play-state: paused; /* 只有搜尋中才跑，平常不要在背景動 */
   filter: blur(4px) brightness(0.8) opacity(0.8);
   pointer-events: none;
+}
+.sf-scene-2d.is-searching .sf-fake-track {
+  animation-play-state: running;
+}
+/* 滑動卡片時，先把搜尋框的黏液動畫暫停（SVG 濾鏡每幀重算最吃效能），放手就恢復 */
+#page-student-files.sf-moving .blob {
+  animation-play-state: paused;
 }
 @keyframes magic-fake-scan {
   0% { transform: translateX(0px); }
@@ -4132,11 +4166,10 @@ body.light-mode .focus-indicator { background: #6366f1; }
   top: 0; left: 0; right: 0; bottom: 0;
   border-radius: 32px;
   background: linear-gradient(90deg, #6366f1, #d946ef, #8b5cf6) top/100% 4px no-repeat, var(--card);
-  backdrop-filter: blur(30px) saturate(160%); -webkit-backdrop-filter: blur(30px) saturate(160%);
   border: 1px solid var(--border);
   box-shadow: var(--neu-out);
   z-index: -1;
-  transform: translateZ(0); 
+  transform: translateZ(0);
   transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.5s ease;
 }
 
@@ -4295,7 +4328,12 @@ body.light-mode .focus-indicator { background: #6366f1; }
 /* 3D Popping Interactions 鈥?smooth two-way transition for both entering AND leaving 3D */
 .sf-student-card-2d * {
   transition: transform 1s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s, text-shadow 0.8s, border-radius 0.8s;
-  transform: translateZ(0px); /* Hardware layer init for smooth transition */
+  /* 注意：這裡「不要」預設 translateZ(0)。那會讓每張卡片的每個小元素都變成獨立圖層，
+     幾十張卡就是上千層，iPhone 滑動會卡。進 3D 時 transition 會自動從 none 平滑過渡。 */
+}
+/* 只有正在 3D 的那一張，才把子元素升成硬體圖層 */
+.sf-student-card-2d.is-3d-active * {
+  will-change: transform;
 }
 
 .sf-student-card-2d.is-3d-active .sf-card-title {
@@ -4869,6 +4907,23 @@ body.light-mode .anim-line::after {
   pointer-events: none;
   z-index: 9999;
 }
+/* three.js 全螢幕黑洞畫布：透明疊在頁面上，卡片被吸進去的畫面全部由 shader 畫 */
+.bh-webgl-layer {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9998;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.bh-webgl-layer.on { opacity: 1; }
+.bh-atmo {
+  position: fixed; inset: 0; z-index: 9996; pointer-events: none;
+  opacity: 0; transition: opacity 0.9s ease;
+}
+.bh-atmo.on { opacity: 1; }
 
 /* Advanced Spaghettification — driven by JS requestAnimationFrame */
 .anim-suck-into-blackhole {

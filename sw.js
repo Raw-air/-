@@ -1,4 +1,7 @@
-// 碧苑宿舍點名系統 - Service Worker（PWA 離線支援�?const CACHE_NAME = 'biyuan-v49'; // �?每次更新 JS/CSS 必須遞增此版�?const ASSETS = [
+// 碧苑宿舍點名系統 - Service Worker（PWA 離線支援）
+// 注意：舊版這個檔案的第一行編碼壞掉，導致整支 Service Worker 無法安裝 (離線快取失效)，此版已修復。
+const CACHE_NAME = 'biyuan-v50'; // ← 每次更新 JS/CSS 必須遞增此版號
+const ASSETS = [
   './',
   './index.html',
   './style.css',
@@ -9,9 +12,10 @@
   './export.js',
 ];
 
-// 安裝時快取靜態資�?self.addEventListener('install', (event) => {
+// 安裝時快取靜態資源
+self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)).catch(() => {})
   );
   self.skipWaiting();
 });
@@ -26,14 +30,19 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// 網路優先，失敗時用快�?self.addEventListener('fetch', (event) => {
-  // API 請求不快�?  if (event.request.url.includes('/api/')) return;
+// 網路優先，失敗時用快取
+self.addEventListener('fetch', (event) => {
+  // API 請求不快取
+  if (event.request.url.includes('/api/')) return;
+  if (event.request.method !== 'GET') return;
 
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        if (response && response.ok && event.request.url.startsWith(self.location.origin)) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone)).catch(() => {});
+        }
         return response;
       })
       .catch(() => caches.match(event.request))
