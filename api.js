@@ -16,12 +16,19 @@ class ApiClient {
     // 重試邏輯（最多 2 次）
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const res = await fetch(`${this.baseUrl}${path}`, opts);
-        const data = await res.json();
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15000);
+        let res, data;
+        try {
+          res = await fetch(`${this.baseUrl}${path}`, { ...opts, signal: controller.signal });
+          data = await res.json();
+        } finally { clearTimeout(timer); }
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
         if (data.error) throw new Error(data.error);
         return data;
       } catch (err) {
-        if (attempt === 1) throw err;
+        // A timed-out swap/creation may already have succeeded. Never replay writes.
+        if (attempt === 1 || method !== 'GET') throw err;
         await new Promise(r => setTimeout(r, 1000));
       }
     }
@@ -72,12 +79,15 @@ class ApiClient {
 
   // ⚡ 即時輪詢（KV 信號層，回應 < 10ms，不走重試邏輯）
   async poll() {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
     try {
-      const res = await fetch(`${this.baseUrl}/api/poll`);
+      const res = await fetch(`${this.baseUrl}/api/poll`, {signal: controller.signal});
+      if (!res.ok) return null;
       return await res.json();
     } catch (e) {
       return null; // 輪詢失敗靜默跳過
-    }
+    } finally { clearTimeout(timer); }
   }
 }
 

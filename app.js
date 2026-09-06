@@ -36,74 +36,16 @@ function initAudioCtx() {
  * @param {string} waveType - 波形類型 ('sine', 'square', 'sawtooth')
  * @param {number} frequency - 震動基頻 (Hz)
  */
-function playHapticCurve(curve, durationMs, waveType = 'sine', frequency = 120) {
+function playHapticCurve(curve, durationMs) {
+  // Audio oscillators cannot drive the iPhone Taptic Engine.
   if (localStorage.getItem('mute_haptic') === 'true') return;
-
-  if (navigator.vibrate && /Android/i.test(navigator.userAgent)) {
-    // Android 原生震動降級方案
-    navigator.vibrate(durationMs);
-    return;
-  }
-
-  try {
-    initAudioCtx();
-    const t = audioCtx.currentTime;
-    const duration = durationMs / 1000;
-
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-
-    osc.type = waveType;
-    osc.frequency.setValueAtTime(frequency, t);
-
-    gain.gain.setValueAtTime(0, t);
-    if (curve && curve.length > 0) {
-      const step = duration / curve.length;
-      for (let i = 0; i < curve.length; i++) {
-        const val = Math.max(0.0001, curve[i]);
-        gain.gain.exponentialRampToValueAtTime(val, t + (i + 1) * step);
-      }
-    }
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
-
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-
-    osc.start(t);
-    osc.stop(t + duration + 0.05);
-  } catch (e) {
-    console.error('Haptic curve error:', e);
-  }
+  try { navigator.vibrate?.(durationMs); } catch (_) {}
 }
 
 function haptic(type = 'light') {
   if (localStorage.getItem('mute_haptic') === 'true') return;
-
-  if (navigator.vibrate && /Android/i.test(navigator.userAgent)) {
-    switch (type) {
-      case 'light': navigator.vibrate(8); break;
-      case 'medium': navigator.vibrate(20); break;
-      case 'heavy': navigator.vibrate([15, 20, 25]); break;
-      case 'error': navigator.vibrate([30, 40, 30, 40, 50]); break;
-    }
-    return;
-  }
-
-  // iOS 預設高精度波形
-  switch (type) {
-    case 'light':
-      playHapticCurve([0.03, 0.01, 0.001], 30, 'sine', 150);
-      break;
-    case 'medium':
-      playHapticCurve([0.08, 0.04, 0.001], 45, 'sine', 100);
-      break;
-    case 'heavy':
-      playHapticCurve([0.2, 0.05, 0.001], 60, 'square', 80);
-      break;
-    case 'error':
-      playHapticCurve([0.2, 0.01, 0.2, 0.01, 0.3], 250, 'sawtooth', 60);
-      break;
-  }
+  const patterns = { light: 8, medium: 20, heavy: [15, 20, 25], error: [30, 40, 30, 40, 50] };
+  try { navigator.vibrate?.(patterns[type] || 8); } catch (_) {}
 }
 
 // ─── 自訂確認對話框 (替代原生 confirm) ─────────────────────────────────────
@@ -397,9 +339,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // 初始狀態：震動反饋
-    if (localStorage.getItem('mute_haptic') === 'true') {
-      const hapticToggle = document.getElementById('setting-haptic');
-      if (hapticToggle) hapticToggle.checked = true;
+    const hapticToggle = document.getElementById('setting-haptic');
+    if (hapticToggle) hapticToggle.checked = localStorage.getItem('mute_haptic') !== 'true';
+    const hapticHelp = document.getElementById('haptic-help');
+    if (hapticHelp && typeof navigator.vibrate !== 'function') {
+      hapticHelp.textContent = '此瀏覽器不支援網頁震動（包含 iPhone Safari）；音效可另外設定';
     }
 
     // 初始狀態：潘仔模式
@@ -429,6 +373,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let _lastPollTs = 0;      // 上次收到的 confirm 時間戳
     let _lastAttTs = 0;       // 上次收到的出席變動時間戳
     let _pollPaused = false;
+    let _pollBusy = false;
 
     function getPollInterval() {
       if (currentPage === 'summary') return 3000;   // 總表頁：3 秒
@@ -437,7 +382,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     async function doPoll() {
-      if (_pollPaused) return;
+      if (_pollPaused || _pollBusy) return;
+      _pollBusy = true;
       try {
         const data = await window._api.poll();
         if (!data) return;
@@ -477,7 +423,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else if (_lastAttTs === 0) {
           _lastAttTs = data.att_ts || 0; // 首次初始化
         }
-      } catch (e) { /* 輪詢失敗靜默跳過 */ }
+      } catch (e) { /* 輪詢失敗靜默跳過 */ } finally { _pollBusy = false; }
     }
 
     function startPoll() {
@@ -521,8 +467,11 @@ function toggleMute(el) {
 }
 
 function toggleHaptic(el) {
-  localStorage.setItem('mute_haptic', el.checked);
-  if (!el.checked) triggerHapticFeedback('confirm');
+  localStorage.setItem('mute_haptic', !el.checked);
+  if (el.checked) {
+    triggerHapticFeedback('confirm');
+    if (typeof navigator.vibrate !== 'function') showToast('此瀏覽器不支援網頁震動', 'info');
+  } else { try { navigator.vibrate?.(0); } catch (_) {} }
 }
 
 function togglePanzi(el) {
@@ -548,127 +497,66 @@ function performAppearanceChange(isLight) {
 // ─── 主題切換：一律「從按鈕位置往外擴散」(深色/淺色都一樣) ───────────────────
 // 舊版深色模式是把舊畫面往按鈕「縮進去」，看起來像從四周包過來，不是從按鈕展開。
 // 現在兩個方向都用「新畫面從按鈕位置畫圓擴散」，並補上舊 iPhone (沒有 View Transition) 的替代動畫。
-const THEME_VT_DURATION = 420;
+const THEME_VT_DURATION = 480;
+let _themeTransition = null;
+let _themeGeneration = 0;
 let _themeFallbackOverlay = null;
+let _themeFallbackTimer = null;
 
-function _themeTapPoint() {
-  let x = lastTapX, y = lastTapY;
-  // 保險：若拿不到點擊座標，就用開關本身的位置
-  const sw = document.getElementById('setting-white-mode');
-  const label = sw ? sw.closest('label.switch') : null;
-  if ((!x && !y) && label) {
-    const r = label.getBoundingClientRect();
-    x = r.left + r.width / 2; y = r.top + r.height / 2;
-  }
-  return { x, y };
+function _themeTapPoint(el) {
+  const r = (el?.closest('label') || el || document.getElementById('setting-white-mode')).getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
 }
-
 function _themeEndRadius(x, y) {
-  return Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y)) + 8;
+  return Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y)) + 8;
 }
-
-function _themeHaptic() {
-  if (localStorage.getItem('mute_haptic') === 'true') return;
-  if (navigator.vibrate && /Android/i.test(navigator.userAgent)) {
-    navigator.vibrate([8, 60, 20, 60, 40, 60, 80]);
-  } else {
-    const rippleCurve = [0.02, 0.01, 0.05, 0.02, 0.15, 0.25, 0.001];
-    playHapticCurve(rippleCurve, THEME_VT_DURATION, 'sine', 120);
-  }
-}
-
-// 沒有 View Transition API 的瀏覽器 (iOS 17 以下 Safari)：用一層「新主題底色」的圓形擴散蓋過去，
-// 蓋滿的瞬間切換主題，再把那層淡出，視覺上就是從按鈕擴散開的效果。
 function _themeFallbackTransition(isLight, x, y) {
-  const endR = _themeEndRadius(x, y);
-  const targetBg = isLight ? '#ebecf0' : '#151518';
-  if (_themeFallbackOverlay) _themeFallbackOverlay.remove();
+  // Older Safari: retain the original page while a target-colour ripple expands.
   const ov = document.createElement('div');
   _themeFallbackOverlay = ov;
-  ov.style.cssText = `position:fixed;inset:0;z-index:20000;pointer-events:none;background:${targetBg};` +
-    `clip-path:circle(0px at ${x}px ${y}px);-webkit-clip-path:circle(0px at ${x}px ${y}px);` +
-    `transition:clip-path ${THEME_VT_DURATION}ms ease-out,-webkit-clip-path ${THEME_VT_DURATION}ms ease-out,opacity 220ms ease;`;
+  ov.style.cssText = 'position:fixed;inset:0;z-index:20000;pointer-events:none;background:' + (isLight ? '#ebecf0' : '#151518');
   document.body.appendChild(ov);
-  void ov.offsetWidth;
-  ov.style.clipPath = `circle(${endR}px at ${x}px ${y}px)`;
-  ov.style.webkitClipPath = `circle(${endR}px at ${x}px ${y}px)`;
-  setTimeout(() => {
+  const animation = ov.animate({clipPath: ['circle(0px at '+x+'px '+y+'px)', 'circle('+_themeEndRadius(x,y)+'px at '+x+'px '+y+'px)']}, {duration: THEME_VT_DURATION, easing:'ease-out',fill:'forwards'});
+  const generation = _themeGeneration;
+  _themeFallbackTimer = setTimeout(() => {
+    if (generation !== _themeGeneration) return;
     performAppearanceChange(isLight);
-    ov.style.opacity = '0';
-    setTimeout(() => { ov.remove(); if (_themeFallbackOverlay === ov) _themeFallbackOverlay = null; }, 260);
+    ov.animate({opacity:[1,0]}, {duration:180,fill:'forwards'}).finished.then(() => { ov.remove(); if (_themeFallbackOverlay === ov) _themeFallbackOverlay = null; });
   }, THEME_VT_DURATION);
+  animation.finished.catch(() => {});
 }
-
-function toggleWhiteMode(el, event) {
+function toggleWhiteMode(el) {
   const isLight = el.checked;
   localStorage.setItem('white_mode', isLight);
-
-  const { x, y } = _themeTapPoint();
-  const endRadius = _themeEndRadius(x, y);
-
-  _themeHaptic();
-
-  if (typeof document.startViewTransition !== 'function') {
-    _themeFallbackTransition(isLight, x, y);
-    return;
-  }
-
-  // 截圖前先暫時關掉毛玻璃與陰影，讓快照成本大幅下降 (Android 中低階機才不會掉幀)
+  const generation = ++_themeGeneration;
+  clearTimeout(_themeFallbackTimer);
+  _themeFallbackOverlay?.remove();
+  _themeFallbackOverlay = null;
+  _themeTransition?.skipTransition();
+  document.documentElement.classList.remove('vt-active');
+  const {x,y} = _themeTapPoint(el);
+  haptic('medium');
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { performAppearanceChange(isLight); return; }
+  if (!document.startViewTransition) { _themeFallbackTransition(isLight,x,y); return; }
   document.documentElement.classList.add('vt-active');
-  void document.documentElement.offsetHeight;
-
-  let transition;
-  try {
-    transition = document.startViewTransition(() => performAppearanceChange(isLight));
-  } catch (_) {
-    document.documentElement.classList.remove('vt-active');
-    _themeFallbackTransition(isLight, x, y);
-    return;
-  }
-
-  // 保險絲：某些瀏覽器 (分頁被凍結、畫面暫停繪製) 可能讓轉場卡住，1.5 秒沒完成就直接套用主題
-  const cleanup = () => {
-    document.documentElement.classList.remove('vt-active');
-    const styleEl = document.getElementById('vt-fallback');
-    if (styleEl) styleEl.remove();
-  };
-  const safety = setTimeout(() => { performAppearanceChange(isLight); cleanup(); }, 1500);
-
-  transition.ready.then(() => {
-    const clipPathStart = `circle(0px at ${x}px ${y}px)`;
-    const clipPathEnd = `circle(${endRadius}px at ${x}px ${y}px)`;
-    // 新畫面永遠從按鈕「長出來」，舊畫面留在底下
-    try {
-      document.documentElement.animate(
-        { clipPath: [clipPathStart, clipPathEnd] },
-        { duration: THEME_VT_DURATION, easing: 'ease-out', fill: 'forwards', pseudoElement: '::view-transition-new(root)' }
-      );
-    } catch (_) {
-      let fallbackStyle = document.getElementById('vt-fallback');
-      if (!fallbackStyle) {
-        fallbackStyle = document.createElement('style');
-        fallbackStyle.id = 'vt-fallback';
-        document.head.appendChild(fallbackStyle);
-      }
-      const animName = 'vt-circle-anim-' + Date.now();
-      fallbackStyle.textContent = `
-        @keyframes ${animName} {
-          from { clip-path: ${clipPathStart}; }
-          to   { clip-path: ${clipPathEnd}; }
-        }
-        ::view-transition-new(root) {
-          animation: ${animName} ${THEME_VT_DURATION}ms ease-out forwards !important;
-        }
-      `;
-    }
-  }).catch(() => { });
-
-  transition.finished.finally(() => {
-    clearTimeout(safety);
-    cleanup();
+  const transition = document.startViewTransition(() => {
+    if (generation === _themeGeneration) performAppearanceChange(isLight);
   });
+  _themeTransition = transition;
+  transition.ready.then(() => {
+    if (generation !== _themeGeneration) return;
+    return document.documentElement.animate(
+      {clipPath:['circle(0px at '+x+'px '+y+'px)', 'circle('+_themeEndRadius(x,y)+'px at '+x+'px '+y+'px)']},
+      {duration:THEME_VT_DURATION,easing:'cubic-bezier(.2,.7,.2,1)',fill:'forwards',pseudoElement:'::view-transition-new(root)'}
+    ).finished;
+  }).catch(() => { if (generation === _themeGeneration) performAppearanceChange(isLight); });
+  const cleanup = () => {
+    if (generation !== _themeGeneration) return;
+    document.documentElement.classList.remove('vt-active');
+    _themeTransition = null;
+  };
+  transition.finished.then(cleanup, cleanup);
 }
-
 
 function getIconSrc(baseName) {
   const isLight = document.body.classList.contains('light-mode');
@@ -1248,6 +1136,8 @@ function navigateTo(page) {
 
   const fromPage = currentPage;
   currentPage = page;
+  window.dispatchEvent(new Event('app:navigate'));
+  if (page !== 'student-files') window._sfStopMotion?.();
 
   // 判斷導航方向
   const navOrder = ['home', 'rollcall', 'summary', 'history', 'settings'];
@@ -2255,7 +2145,8 @@ function renderSettings() {
   if (el) el.textContent = `${sc} 位學生 · ${dc} 個日期欄位`;
 
   // 宿舍參數
-  const totalBeds = parseInt(state.config['total_beds']) || visibleStudents.length;
+  const parsedBeds = Number.parseInt(state.config['total_beds'], 10);
+  const totalBeds = Number.isFinite(parsedBeds) ? parsedBeds : visibleStudents.length;
   const bedOffset = parseInt(state.config['bed_offset']) || 0;
   const foreignOffset = parseInt(state.config['foreign_offset']) || 0;
   document.getElementById('cfg-total-beds').value = totalBeds;
@@ -2289,6 +2180,9 @@ async function saveDormSettings() {
   const totalBeds = parseInt(document.getElementById('cfg-total-beds').value) || 0;
   const bedOffset = parseInt(document.getElementById('cfg-bed-offset').value) || 0;
   const foreignOffset = parseInt(document.getElementById('cfg-foreign-offset')?.value) || 0;
+  if (![totalBeds, bedOffset, foreignOffset].every(Number.isSafeInteger) || totalBeds < 0 || ['cfg-total-beds','cfg-bed-offset','cfg-foreign-offset'].some(id => !/^-?\d+$/.test(document.getElementById(id).value.trim()))) {
+    showToast('請輸入有效整數，總床數不可小於 0', 'error'); return;
+  }
   try {
     await window._api.setConfig({
       total_beds: String(totalBeds),
@@ -2328,10 +2222,11 @@ async function saveRoleAppearance(roleId) {
   const label = labelEl ? labelEl.value.trim() : '';
   if (!icon && !label) { showToast('請輸入 EMOJI 或名稱', 'error'); return; }
   const updates = {};
-  if (icon) { updates[`role_icon_${roleId}`] = icon; state.config[`role_icon_${roleId}`] = icon; }
-  if (label) { updates[`role_label_${roleId}`] = label; state.config[`role_label_${roleId}`] = label; }
+  if (icon) updates[`role_icon_${roleId}`] = icon;
+  if (label) updates[`role_label_${roleId}`] = label;
   try {
     await window._api.setConfig(updates);
+    Object.assign(state.config, updates);
     showToast('外觀已儲存並即時生效 <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>', 'success');
     if (iconEl) iconEl.value = '';
     if (labelEl) labelEl.value = '';
@@ -2366,6 +2261,7 @@ async function saveGlobalPinAuth() {
     state.config['global_pin_auth'] = val;
     showToast('已更新全域密碼設定，將套用於所有裝置', 'success');
   } catch (err) {
+    document.getElementById('dev-global-pin-auth').checked = state.config['global_pin_auth'] !== 'false';
     showToast('設定失敗：' + err.message, 'error');
   } finally {
     showLoading(false);
@@ -2439,6 +2335,10 @@ function applyLocalStateToRoster(rosterStudents) {
 function animateNumber(el, newValue, skipAnimation = false, customContainer = null) {
   if (!el) return;
 
+  const previous = el._numberAnimation;
+  if (previous) previous.cancel();
+  const run = {cancel: () => {}};
+  el._numberAnimation = run;
   const isInput = (el.tagName === 'INPUT');
   const getVal = () => isInput ? el.value : el.textContent;
   const setVal = (v) => { if (isInput) el.value = v; else el.textContent = v; };
@@ -2448,16 +2348,17 @@ function animateNumber(el, newValue, skipAnimation = false, customContainer = nu
   const container = customContainer || el.parentElement;
 
   // 1. 快速跳過檢查
-  if (skipAnimation || (oldVal === newValue && container?.querySelector(`.stepper-anim-box[data-target-id="${el.id}"]`))) {
+  if (skipAnimation || matchMedia('(prefers-reduced-motion: reduce)').matches || (oldVal === newValue && container?.querySelector(`.stepper-anim-box[data-target-id="${el.id}"]`))) {
     setVal(newValue);
     el.style.transition = '';
     el.classList.remove('number-anim-hiding');
     if (container) {
       container.querySelectorAll(`.stepper-anim-box[data-target-id="${el.id}"]`).forEach(b => b.remove());
     }
+    delete el._numberAnimation;
     return;
   }
-  if (oldVal === newValue && getVal() !== '') return;
+  if (oldVal === newValue && getVal() !== '') { delete el._numberAnimation; return; }
 
   const delta = newValue - oldVal;
   const style = window.getComputedStyle(el);
@@ -2468,7 +2369,7 @@ function animateNumber(el, newValue, skipAnimation = false, customContainer = nu
 
   // 3. 準備測量器 (提前建立避免在中途插入 DOM 導致多次重排)
   const measurer = document.createElement('span');
-  measurer.style.cssText = `position:absolute;visibility:hidden;white-space:pre;pointer-events:none;font-family:${style.fontFamily};font-size:${style.fontSize};font-weight:${style.fontWeight};`;
+  measurer.style.cssText = `position:absolute;visibility:hidden;white-space:pre;pointer-events:none;font-family:${style.fontFamily};font-size:${style.fontSize};font-weight:${style.fontWeight};font-variant-numeric:${style.fontVariantNumeric};letter-spacing:${style.letterSpacing};`;
   document.body.appendChild(measurer);
 
   const getW = (ch) => {
@@ -2504,13 +2405,13 @@ function animateNumber(el, newValue, skipAnimation = false, customContainer = nu
   // 這樣才能確保動畫框出現的第一幀與舊數字完全重疊，即使容器因為寬度改變而位移了。
   const oldCenter = oldRect.left + oldRect.width / 2;
   const newCenter = newRect.left + newRect.width / 2;
-  const startLeft = oldCenter - cRect.left - (maxW / 2);
-  const endLeft = newCenter - cRect.left - (maxW / 2);
-  const top = newRect.top - cRect.top;
+  const startLeft = oldCenter - cRect.left - container.clientLeft + container.scrollLeft - (maxW / 2);
+  const endLeft = newCenter - cRect.left - container.clientLeft + container.scrollLeft - (maxW / 2);
+  const top = newRect.top - cRect.top - container.clientTop + container.scrollTop;
   const dir = delta >= 0 ? -1 : 1;
 
   // 6. 清理舊動畫並建立新動畫盒
-  let isInterrupt = false;
+  let isInterrupt = !!previous;
   container.querySelectorAll(`.stepper-anim-box[data-target-id="${el.id}"]`).forEach(b => {
     isInterrupt = true;
     b.remove();
@@ -2551,7 +2452,7 @@ function animateNumber(el, newValue, skipAnimation = false, customContainer = nu
     const oldD = oldDigits[i], newD = newDigits[i], cw = slotWidths[i];
     const digitContainer = document.createElement('div');
     digitContainer.style.cssText = `position:relative;height:${h}px;overflow:hidden;display:inline-block;width:${cw}px;`;
-    const dStyle = `display:flex;align-items:center;justify-content:center;width:${cw}px;height:100%;position:absolute;left:0;top:0;font-family:${style.fontFamily};font-size:${style.fontSize};font-weight:${style.fontWeight};color:${color};`;
+    const dStyle = `display:flex;align-items:center;justify-content:center;width:${cw}px;height:100%;position:absolute;left:0;top:0;font-family:${style.fontFamily};font-size:${style.fontSize};font-weight:${style.fontWeight};font-variant-numeric:${style.fontVariantNumeric};letter-spacing:${style.letterSpacing};color:${color};`;
 
     if (oldD === newD) {
       const s = document.createElement('span'); s.textContent = oldD; s.style.cssText = dStyle; digitContainer.appendChild(s);
@@ -2561,6 +2462,7 @@ function animateNumber(el, newValue, skipAnimation = false, customContainer = nu
       digitContainer.appendChild(oS); digitContainer.appendChild(nS);
       const delay = changedIndices.indexOf(i) * stagger;
       setTimeout(() => {
+        if (el._numberAnimation !== run || !box.isConnected) return;
         if (oldD !== ' ') oS.animate([{ transform: 'translateY(0)' }, { transform: `translateY(${dir * h}px)` }], { duration: baseDur, easing: ease, fill: 'both' });
         if (newD !== ' ') nS.animate([{ transform: `translateY(${-dir * h}px)` }, { transform: 'translateY(0)' }], { duration: baseDur, easing: ease, fill: 'both' });
       }, delay);
@@ -2574,31 +2476,48 @@ function animateNumber(el, newValue, skipAnimation = false, customContainer = nu
 
   // 7. 啟動水平移動動畫 (確保在下一幀，讓 DOM 有機會渲染初始位置)
   requestAnimationFrame(() => {
+    if (el._numberAnimation !== run) return;
     box.style.transition = `left ${baseDur}ms ${ease}`;
     box.style.left = endLeft + 'px';
   });
 
   // 8. 動畫結束後清理：移除覆蓋層，還原真實元素顯示
   const totalDur = baseDur + (changedIndices.length * stagger) + 50;
-  setTimeout(() => {
+  const cleanupTimer = setTimeout(() => {
+    if (el._numberAnimation !== run) return;
     // 只清理自己的 box（防止快速連點時清到新動畫）
     if (box.parentElement) box.remove();
     el.classList.remove('number-anim-hiding');
     el.style.transition = '';
+    delete el._numberAnimation;
   }, totalDur);
+  run.cancel = () => {
+    clearTimeout(cleanupTimer);
+    box.remove();
+    el.classList.remove('number-anim-hiding');
+    el.style.transition = '';
+  };
 
 }
 
 // ─── 自動備份 ───────────────────────────────────────────────────────────────
-setInterval(async () => {
-  if (state.changes.length > 0) {
-    try {
-      for (let i = 0; i < state.changes.length; i += 45) await window._api.updateAttendance(state.changes.slice(i, i + 45));
-      showToast(`自動備份 ${state.changes.length} 筆`, 'info');
-      state.changes = [];
-    } catch (e) { console.error('自動備份失敗', e); }
-  }
-}, CONFIG.AUTO_SAVE_INTERVAL);
+let _backupBusy = false;
+async function backupPendingChanges() {
+  if (_backupBusy || !state.changes.length) return;
+  _backupBusy = true;
+  const batch = state.changes.map(c => ({...c}));
+  try {
+    for (let i = 0; i < batch.length; i += 45) {
+      const sent = batch.slice(i, i + 45);
+      await window._api.updateAttendance(sent);
+      state.changes = state.changes.filter(c => !sent.some(v => v.pageId === c.pageId && v.date === c.date && v.value === c.value));
+      sent.forEach(c => { state.recentSyncs[c.pageId + '_' + c.date] = {value:c.value,ts:Date.now()}; });
+    }
+    showToast('自動備份 ' + batch.length + ' 筆', 'info');
+  } catch (e) { console.error('自動備份失敗', e); }
+  finally { _backupBusy = false; }
+}
+setInterval(backupPendingChanges, CONFIG.AUTO_SAVE_INTERVAL);
 
 // ─── UI 工具 ────────────────────────────────────────────────────────────────
 function showLoading(show) {
@@ -3794,7 +3713,7 @@ function sfCardHTML(s, draft) {
       <div class="sf-card-title" style="display: flex; align-items: flex-start; position: relative;">
         <span class="sf-title-text" style="flex:1;">${sfEsc(s.room)} ${sfEsc(s.bed)}</span>
         <button class="sf-icon-btn sf-broom-btn" onclick="clearStudentData(this)" title="清空床位資料" style="margin-top: 2px; margin-right: 6px;"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
-        <div class="sf-card-badge-relative" style="margin-top: 4px; margin-right: 4px; transform-origin: center right;">${badge}</div>
+        <div class="sf-card-badge-relative" style="margin-top: 4px; margin-right: 4px; transform-origin: center right;">${sfEsc(badge)}</div>
       </div>
 
       <div class="sf-edit-form">
@@ -4026,6 +3945,7 @@ function setup2DCarouselInteraction() {
   let _velocitySamples = [];
   let _momentumFrame = null;
   let _animFrame = null;
+  let _dragFrame = null;
   let _sweepFrame = null;
   let _isAnimating = false;
 
@@ -4034,6 +3954,8 @@ function setup2DCarouselInteraction() {
   }
 
   function cancelAllAnimations() {
+    if (_dragFrame) { cancelAnimationFrame(_dragFrame); _dragFrame = null; }
+    setMoving(false);
     if (_momentumFrame) { cancelAnimationFrame(_momentumFrame); _momentumFrame = null; }
     if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null; }
     if (_sweepFrame) { cancelAnimationFrame(_sweepFrame); _sweepFrame = null; }
@@ -4052,7 +3974,7 @@ function setup2DCarouselInteraction() {
   };
 
   function enable3D() {
-    if (isDragging || _isAnimating) return;
+    if (isDragging || _isAnimating || window._sfBHBusy || document.hidden || currentPage !== 'student-files') return;
     const entry = sfActiveEntry();
     if (entry) {
       entry.el.classList.add('is-3d-active');
@@ -4084,6 +4006,7 @@ function setup2DCarouselInteraction() {
     if (changed) updateContinuousScale(_currentX);
   }
   window._sfDisable3D = disable3D;
+  window._sfStopMotion = () => { cancelAllAnimations(); isDragging = false; disable3D(); };
 
   function getWeightedVelocity() {
     if (_velocitySamples.length === 0) return 0;
@@ -4114,7 +4037,8 @@ function setup2DCarouselInteraction() {
   }
 
   function onDown(e) {
-    if (scene.classList.contains('is-searching')) return;
+    if (window._sfBHBusy || scene.classList.contains('is-searching')) return;
+    if (e.target.closest('input, textarea, button, label, select')) return;
     if (!_sfPool.length) return;
     if (e.type === 'mousedown' && e.button !== 0) return;
 
@@ -4162,7 +4086,7 @@ function setup2DCarouselInteraction() {
     }
 
     _currentX = trackStartX + deltaX;
-    applyX();
+    if (!_dragFrame) _dragFrame = requestAnimationFrame(() => { _dragFrame = null; applyX(); });
   }
 
   let _lastHapticIdx = null;
@@ -4379,13 +4303,19 @@ window.initStudentFiles = function () {
 //   穿過吸積盤就疊上發光的盤面、掉進事件視界就是純黑。卡片同時被拉向黑洞、拉長、旋轉、扭曲。
 // ═════════════════════════════════════════════════════════════════════════════
 function sfPrefetchHtml2Canvas() {
-  if (window.html2canvas || window._h2cLoading) return;
-  window._h2cLoading = true;
-  const s = document.createElement('script');
-  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-  s.async = true;
-  s.onerror = () => { window._h2cLoading = false; };
-  document.head.appendChild(s);
+  if (window.html2canvas) return Promise.resolve();
+  if (window._h2cLoading) return window._h2cLoading;
+  window._h2cLoading = new Promise(resolve => {
+    const s = document.createElement('script');
+    const finish = () => { clearTimeout(timer); resolve(); };
+    const timer = setTimeout(finish, 2000);
+    s.src = './vendor/html2canvas.1.4.1.min.js';
+    s.async = true;
+    s.onload = finish;
+    s.onerror = () => { window._h2cLoading = null; finish(); };
+    document.head.appendChild(s);
+  });
+  return window._h2cLoading;
 }
 
 // 備援：沒有 html2canvas (離線/被擋) 時，自己用 2D canvas 把卡片畫出來
@@ -4456,409 +4386,7 @@ async function sfCaptureCard(card) {
   return sfDrawCardFallback(card);
 }
 
-const BH_VERT = `
-void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }
-`;
-
-const BH_FRAG = `
-uniform vec2  uRes;       // CSS px
-uniform float uDpr;
-uniform float uTime;
-uniform float uProg;      // 0..1 整體進度
-uniform float uHole;      // 黑洞出現比例 0..1 (視界半徑縮放)
-uniform float uRs;        // 黑洞陰影半徑 (CSS px)，已含 uHole
-uniform vec2  uBH;        // 黑洞位置 (CSS px, 左上原點)
-uniform sampler2D uCardTex;
-uniform vec4  uCard;      // 卡片原始位置 x,y,w,h (CSS px)
-uniform float uPull;      // 0..1 被拉走的比例
-uniform float uStretch;   // 沿拉力方向拉長
-uniform float uSqueeze;   // 垂直方向壓扁
-uniform float uScaleC;    // 整體縮小
-uniform float uSpin;      // 旋轉 (弧度)
-uniform float uCardAlpha; // 卡片可見度
-uniform float uShake;     // 抖動幅度 (px)
-uniform float uSeed;
-uniform float uDiskGain;
-
-#define SHADOW_U 5.196   // 3*sqrt(3)：M=1 時黑洞陰影的角半徑 (單位)
-#define CARD_Z  -6.0
-#define START_Z 18.0
-
-float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
-float noise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
-  float a=hash(i),b=hash(i+vec2(1,0)),c=hash(i+vec2(0,1)),d=hash(i+vec2(1,1));
-  return mix(mix(a,b,f.x),mix(c,d,f.x),f.y); }
-float fbm(vec2 p){ float v=0., a=.5; for(int i=0;i<3;i++){ v+=a*noise(p); p=p*2.03+vec2(1.7,9.2); a*=.5;} return v; }
-
-// 吸積盤：q 是盤面座標 (單位)，r 是離黑洞距離
-vec4 disk(vec2 q, float r){
-  float inner = 3.4, outer = 13.0;
-  float rn = clamp((r - inner)/(outer - inner), 0.0, 1.0);
-  float ang = atan(q.y, q.x);
-  float rot = uTime * (2.4 / (0.25 + pow(rn + 0.1, 1.6)));
-  float n  = fbm(vec2(ang*2.5 + rot, rn*7.0 + uSeed));
-  float n2 = fbm(vec2(ang*6.0 - rot*1.6, rn*18.0 + uSeed*2.0));
-  float streak = smoothstep(0.3, 0.85, n)*0.8 + smoothstep(0.45, 0.95, n2)*0.55;
-  float edgeIn  = smoothstep(inner*0.92, inner*1.25, r);
-  float edgeOut = 1.0 - smoothstep(outer*0.72, outer, r);
-  float radial  = pow(1.0 - rn, 1.5);
-  float I = (0.3 + streak) * radial * edgeIn * edgeOut;
-  float dop = 1.0 + 0.85 * (q.x / max(r, 0.001));   // 都卜勒增亮：朝我們轉過來那側特別亮
-  I *= dop;
-  vec3 hot  = vec3(1.0, 0.97, 0.88);
-  vec3 mid  = vec3(1.0, 0.64, 0.24);
-  vec3 cool = vec3(0.78, 0.2, 0.06);
-  vec3 col = mix(hot, mid, smoothstep(0.0, 0.32, rn));
-  col = mix(col, cool, smoothstep(0.32, 1.0, rn));
-  col = mix(col, vec3(0.86, 0.9, 1.0), clamp((dop - 1.0)*0.4, 0.0, 0.45));
-  return vec4(col * I * 1.9 * uDiskGain, clamp(I * 1.5 * uDiskGain, 0.0, 1.0));
-}
-
-// 把螢幕上的一個點，反推回「卡片貼圖」上的 uv (含拉扯、拉長、旋轉)
-vec4 sampleCard(vec2 s, vec2 chroma){
-  vec2 c0 = uCard.xy + uCard.zw*0.5;
-  vec2 c  = mix(c0, uBH, uPull);
-  vec2 axis = normalize(uBH - c0 + vec2(0.0001));
-  vec2 perp = vec2(-axis.y, axis.x);
-  vec2 l = s - c;
-  float cs = cos(-uSpin), sn = sin(-uSpin);
-  l = vec2(l.x*cs - l.y*sn, l.x*sn + l.y*cs);
-  float along = dot(l, axis) / (uStretch * uScaleC);
-  float pv    = dot(l, perp) / (uSqueeze * uScaleC);
-  // 潮汐：靠近黑洞那一端被拉得更長 (沿拉力方向非線性)
-  along = along / (1.0 + 0.35*uPull*clamp(along/ (uCard.w*0.5), -1.0, 1.0));
-  vec2 local = along*axis + pv*perp;
-  vec2 uv = (local + uCard.zw*0.5) / uCard.zw;
-  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return vec4(0.0);
-  vec2 fuv = vec2(uv.x, 1.0 - uv.y);
-  vec4 t = texture2D(uCardTex, fuv);
-  if (length(chroma) > 0.0001) {
-    float rr = texture2D(uCardTex, fuv + chroma).r;
-    float bb = texture2D(uCardTex, fuv - chroma).b;
-    t.r = mix(t.r, rr, 0.8); t.b = mix(t.b, bb, 0.8);
-  }
-  return t;
-}
-
-void main(){
-  vec2 p = vec2(gl_FragCoord.x, uRes.y*uDpr - gl_FragCoord.y) / uDpr;
-  float unit = uRs / SHADOW_U;            // 1 單位 = 幾個 CSS px
-  vec2 pu = (p - uBH) / unit;             // 以黑洞為中心的單位座標
-  float b = length(pu);
-
-  vec3 col = vec3(0.0);
-  float alpha = 0.0;
-  vec2 src = p;
-  bool captured = false;
-  bool hitCard = false;
-  float bendAmt = 0.0;
-
-  if (uHole < 0.02) {
-    hitCard = true;
-  } else if (b > 40.0) {
-    // 遠處：只做微小的偏折，省效能
-    float defl = (4.0 / b) * (START_Z - CARD_Z) * 0.35;
-    src = p - normalize(pu) * defl * unit;
-    hitCard = true;
-    bendAmt = defl;
-  } else {
-    // 近處：真的追光線。光從觀察者射向黑洞，被重力彎曲
-    vec3 pos = vec3(pu, START_Z);
-    vec3 vel = vec3(0.0, 0.0, -1.0);
-    vec3 hvec = cross(pos, vel);
-    float h2 = dot(hvec, hvec);
-    // 吸積盤傾斜 (看起來像從盤面稍微上方看下去)
-    float inc = 0.24;
-    vec3 n  = vec3(0.0, cos(inc), sin(inc));
-    vec3 u1 = vec3(1.0, 0.0, 0.0);
-    vec3 u2 = cross(n, u1);
-    int crossings = 0;
-    for (int i = 0; i < 72; i++) {
-      float r2 = dot(pos, pos);
-      float r = sqrt(r2);
-      if (r < 2.02) { captured = true; break; }
-      float dt = clamp(r * 0.11, 0.05, 1.1);
-      vec3 acc = -1.5 * h2 * pos / (r2 * r2 * r);
-      vec3 prev = pos;
-      vel += acc * dt;
-      pos += vel * dt;
-      // 穿過吸積盤平面？
-      float y0 = dot(prev, n), y1 = dot(pos, n);
-      if (y0 * y1 < 0.0 && crossings < 2) {
-        float k = y0 / (y0 - y1);
-        vec3 hit = mix(prev, pos, k);
-        float rd = length(hit);
-        if (rd > 3.0 && rd < 13.5) {
-          vec4 dc = disk(vec2(dot(hit, u1), dot(hit, u2)), rd);
-          col += dc.rgb * (1.0 - alpha);
-          alpha += dc.a * (1.0 - alpha);
-          crossings++;
-        }
-      }
-      // 打到卡片所在的平面？
-      if (prev.z > CARD_Z && pos.z <= CARD_Z) {
-        float k = (prev.z - CARD_Z) / (prev.z - pos.z);
-        vec3 hit = mix(prev, pos, k);
-        src = uBH + hit.xy * unit;
-        hitCard = true;
-        bendAmt = length(hit.xy - pu);
-        break;
-      }
-      if (r > 60.0) break;
-    }
-  }
-
-  // 卡片 (經過重力透鏡後的影像)
-  if (hitCard && !captured && uCardAlpha > 0.001) {
-    vec2 chroma = vec2(0.0);
-    if (b < 40.0) chroma = normalize(pu + vec2(0.0001)) * (0.012 * clamp(bendAmt / 4.0, 0.0, 1.0));
-    vec2 shake = vec2(hash(vec2(uTime*7.0, 1.0)) - 0.5, hash(vec2(3.0, uTime*9.0)) - 0.5) * uShake;
-    vec4 cc = sampleCard(src + shake, chroma);
-    float heat = uPull * uPull;
-    cc.rgb = mix(cc.rgb, cc.rgb * vec3(1.35, 1.05, 0.8) + vec3(0.25, 0.08, 0.0), heat * 0.8);
-    float ca = cc.a * uCardAlpha;
-    col += cc.rgb * ca * (1.0 - alpha);
-    alpha += ca * (1.0 - alpha);
-  }
-
-  // 事件視界：純黑 (前面疊的吸積盤保留)
-  if (captured) {
-    alpha = 1.0;
-  }
-
-  // 光子環：視界邊緣一圈極亮的光，加上外圍柔光暈
-  float ring = exp(-abs(b - SHADOW_U) * 1.35) * 1.6 * uHole;
-  float halo = exp(-max(0.0, b - SHADOW_U) * 0.22) * 0.22 * uHole;
-  vec3 glowCol = vec3(1.0, 0.86, 0.6) * ring + vec3(1.0, 0.55, 0.2) * halo;
-  float glowA = clamp(ring * 0.9 + halo, 0.0, 1.0);
-  col += glowCol * (1.0 - alpha * 0.6);
-  alpha = clamp(alpha + glowA * (1.0 - alpha), 0.0, 1.0);
-
-  gl_FragColor = vec4(col, alpha);
-}
-`;
-
-let _bhRenderer = null;
-function sfGetBHRenderer() {
-  if (_bhRenderer) return _bhRenderer;
-  if (!window.THREE) return null;
-  try {
-    const r = new THREE.WebGLRenderer({ alpha: true, antialias: false, premultipliedAlpha: true, powerPreference: 'high-performance' });
-    r.setClearColor(0x000000, 0);
-    _bhRenderer = r;
-    return r;
-  } catch (e) { console.warn('[BlackHole] WebGL 無法啟動', e); return null; }
-}
-
-function sfSafeTop() {
-  const probe = document.createElement('div');
-  probe.style.cssText = 'position:fixed;top:env(safe-area-inset-top,0px);left:0;width:0;height:0;pointer-events:none;';
-  document.body.appendChild(probe);
-  const t = probe.getBoundingClientRect().top;
-  probe.remove();
-  return t || 0;
-}
-
-// 沒有 WebGL / three.js 時的簡易備援：卡片縮小飛向角落
-function sfSimpleSuck(activeCard, sX, sY, cr, done) {
-  const dx = sX - (cr.left + cr.width / 2), dy = sY - (cr.top + cr.height / 2);
-  activeCard.style.transition = 'transform 1.4s cubic-bezier(0.5, 0, 1, 0.3), opacity 1.2s ease-in, filter 1.2s';
-  activeCard.style.transform = `translate(${dx}px, ${dy}px) rotate(540deg) scale(0.02)`;
-  activeCard.style.opacity = '0';
-  activeCard.style.filter = 'brightness(2.5) blur(4px)';
-  setTimeout(() => {
-    activeCard.style.transition = 'none';
-    activeCard.style.filter = '';
-    done();
-  }, 1450);
-}
-
-window.clearStudentData = async function (btn) {
-  const cardArea = document.getElementById('sf-card-area');
-  const sceneEl = document.getElementById('sf-scene');
-  let activeCard;
-  if (btn) { activeCard = btn.closest('.sf-student-card-2d'); }
-  else {
-    const cards = cardArea ? cardArea.querySelectorAll('.sf-student-card-2d') : [];
-    activeCard = Array.from(cards).find(c => c.classList.contains('active')) || cards[0];
-  }
-  if (!activeCard || activeCard.dataset.bhBusy === '1') return;
-  activeCard.dataset.bhBusy = '1';
-  if (sceneEl) sceneEl.style.pointerEvents = 'none';
-
-  // 先把 3D 收掉、卡片攤平，拍照才不會歪
-  if (window._sfDisable3D) window._sfDisable3D();
-  activeCard.style.transition = 'none';
-  activeCard.style.transform = 'translateX(0px) scale(1)';
-  activeCard.style.opacity = '1';
-  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-
-  const cr = activeCard.getBoundingClientRect();
-  const vw = window.innerWidth;
-  const sX = vw - Math.max(110, Math.min(240, vw * 0.3)), sY = sfSafeTop() + 96;
-
-  if (window.haptic) { window.haptic('heavy'); setTimeout(() => window.haptic('heavy'), 250); }
-
-  // 氛圍：整個畫面往黑洞方向暗下來
-  const atmo = document.createElement('div');
-  atmo.className = 'bh-atmo';
-  atmo.style.background = `radial-gradient(circle at ${sX}px ${sY}px, transparent 4%, rgba(0,0,0,0.35) 28%, rgba(0,0,0,0.78) 100%)`;
-  document.body.appendChild(atmo);
-  requestAnimationFrame(() => atmo.classList.add('on'));
-
-  const resetCardFields = () => {
-    const ni = activeCard.querySelector('.sf-input-name'); if (ni) ni.value = '';
-    const ii = activeCard.querySelector('.sf-input-id'); if (ii) ii.value = '';
-    const ci = activeCard.querySelector('.sf-input-class'); if (ci) ci.value = '';
-    const ri = activeCard.querySelector('.sf-input-remarks'); if (ri) ri.value = '';
-    const cf = activeCard.querySelector('.sf-chk-foreign'); if (cf) cf.checked = false;
-    const ce = activeCard.querySelector('.sf-chk-empty'); if (ce) ce.checked = true;
-  };
-
-  const finish = () => {
-    document.body.style.transform = '';
-    const flash = document.createElement('div');
-    flash.style.cssText = `position:fixed;inset:0;z-index:10002;background:radial-gradient(circle at ${sX}px ${sY}px,rgba(255,210,120,0.75),rgba(255,120,40,0.25) 25%,transparent 55%);pointer-events:none;opacity:1;transition:opacity 0.55s;`;
-    document.body.appendChild(flash);
-    if (window.haptic) window.haptic('heavy');
-    requestAnimationFrame(() => { flash.style.opacity = '0'; });
-    setTimeout(() => flash.remove(), 650);
-
-    atmo.classList.remove('on'); setTimeout(() => atmo.remove(), 950);
-
-    resetCardFields();
-    activeCard.style.visibility = 'visible';
-    activeCard.style.opacity = '1';
-    activeCard.style.transform = 'translateX(0px) scale(1)';
-    activeCard.classList.add('anim-spit-new-card');
-    if (window.haptic) window.haptic('light');
-    setTimeout(() => {
-      activeCard.classList.remove('anim-spit-new-card');
-      activeCard.style.transition = 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
-      delete activeCard.dataset.bhBusy;
-      if (sceneEl) sceneEl.style.pointerEvents = 'auto';
-      if (window._restart3DTimer) window._restart3DTimer();
-    }, 1200);
-  };
-
-  const renderer = sfGetBHRenderer();
-  if (!renderer) {
-    sfSimpleSuck(activeCard, sX, sY, cr, finish);
-    return;
-  }
-
-  // 1. 把卡片拍成貼圖
-  const texCanvas = await sfCaptureCard(activeCard);
-
-  // 2. 建立全螢幕 WebGL 圖層
-  const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-  renderer.setPixelRatio(dpr);
-  renderer.setSize(window.innerWidth, window.innerHeight, false);
-  const canvas = renderer.domElement;
-  canvas.className = 'bh-webgl-layer';
-  canvas.style.width = '100%';
-  canvas.style.height = '100%';
-  document.body.appendChild(canvas);
-
-  const tex = new THREE.CanvasTexture(texCanvas);
-  tex.minFilter = THREE.LinearFilter;
-  tex.magFilter = THREE.LinearFilter;
-  tex.generateMipmaps = false;
-
-  const RS_BASE = Math.max(34, Math.min(60, vw * 0.12));
-  const uniforms = {
-    uRes: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
-    uDpr: { value: dpr },
-    uTime: { value: 0 },
-    uProg: { value: 0 },
-    uHole: { value: 0 },
-    uRs: { value: 0.01 },
-    uBH: { value: new THREE.Vector2(sX, sY) },
-    uCardTex: { value: tex },
-    uCard: { value: new THREE.Vector4(cr.left, cr.top, cr.width, cr.height) },
-    uPull: { value: 0 },
-    uStretch: { value: 1 },
-    uSqueeze: { value: 1 },
-    uScaleC: { value: 1 },
-    uSpin: { value: 0 },
-    uCardAlpha: { value: 1 },
-    uShake: { value: 0 },
-    uSeed: { value: Math.random() * 10 },
-    uDiskGain: { value: 0 },
-  };
-  const mat = new THREE.ShaderMaterial({ vertexShader: BH_VERT, fragmentShader: BH_FRAG, uniforms, transparent: true, depthTest: false, depthWrite: false,
-    blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor });
-  const scene = new THREE.Scene();
-  scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat));
-  const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-
-  // 第一幀：卡片原封不動疊在原位，畫好後才把真卡片藏起來，中間不會閃
-  renderer.render(scene, cam);
-  activeCard.style.visibility = 'hidden';
-  requestAnimationFrame(() => canvas.classList.add('on'));
-
-  const DUR = 3600;
-  const tStart = performance.now();
-  let hT = 0;
-  const easeOutBack = (t) => { const c = 1.70158; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); };
-
-  function animate(now) {
-    const t = (now - tStart) / 1000;
-    const p = Math.min((now - tStart) / DUR, 1);
-    uniforms.uTime.value = t;
-    uniforms.uProg.value = p;
-
-    // 黑洞誕生 (0~18%)：從一個點膨脹出來，吸積盤點亮
-    const born = Math.min(1, p / 0.18);
-    const hole = easeOutBack(born);
-    // 結尾 (92%~100%)：黑洞塌縮
-    const collapse = p > 0.92 ? Math.min(1, (p - 0.92) / 0.08) : 0;
-    const holeNow = Math.max(0.0001, hole * (1 - collapse * collapse));
-    uniforms.uHole.value = holeNow;
-    uniforms.uRs.value = Math.max(0.5, RS_BASE * holeNow);
-    uniforms.uDiskGain.value = Math.min(1, born * 1.2) * (1 - collapse);
-
-    // 卡片：先顫抖 (0~20%)，再被拉走 (20%~90%)
-    const wp = Math.max(0, Math.min(1, (p - 0.2) / 0.7));
-    const pull = Math.pow(wp, 1.4);
-    const e2 = wp * wp, e3 = e2 * wp, e4 = e3 * wp;
-    uniforms.uPull.value = pull;
-    uniforms.uStretch.value = 1 + e2 * 3.2;
-    uniforms.uSqueeze.value = Math.max(0.12, 1 - e3 * 0.9);
-    uniforms.uScaleC.value = Math.max(0.03, 1 - e3 * 0.95);
-    uniforms.uSpin.value = (e3 * 2.4 + e4 * 1.4) * Math.PI;
-    // 卡片一路保持可見，最後 10% 才淡出：真正的「消失」是被視界吞掉，不是淡掉
-    const fadeT = Math.max(0, Math.min(1, (wp - 0.9) / 0.1));
-    uniforms.uCardAlpha.value = 1 - fadeT * fadeT * (3 - 2 * fadeT);
-    const tremble = p < 0.2 ? (p / 0.2) * 5 : 5 + e2 * 6;
-    uniforms.uShake.value = wp > 0.92 ? 0 : tremble;
-
-    // 螢幕微震
-    const shakeAmt = p < 0.2 ? (p / 0.2) * 1.5 : 1.5 + e2 * 4.5 * (1 - collapse);
-    document.body.style.transform = `translate(${(Math.random() - 0.5) * shakeAmt}px, ${(Math.random() - 0.5) * shakeAmt}px)`;
-
-    // 震動節奏越來越急
-    const hapInterval = Math.max(60, 220 - e2 * 170);
-    if (now - hT > hapInterval && p < 0.9) {
-      if (window.haptic) window.haptic(e2 > 0.5 ? 'medium' : 'light');
-      hT = now;
-    }
-
-    renderer.render(scene, cam);
-
-    if (p < 1) { requestAnimationFrame(animate); return; }
-
-    // 收尾
-    canvas.classList.remove('on');
-    setTimeout(() => {
-      canvas.remove();
-      tex.dispose(); mat.dispose();
-    }, 400);
-    finish();
-  }
-  requestAnimationFrame(animate);
-};
-
+// Black-hole renderer and deletion animation: black-hole.js
 
 window.debouncedAutoSave = function (elem) {
   if (elem.dataset.timeout) clearTimeout(elem.dataset.timeout);
@@ -4867,12 +4395,19 @@ window.debouncedAutoSave = function (elem) {
   }, 300);
 }
 
+const _sfSaving = new Set();
 window.autoSaveStudentFile = async function (elem) {
   const activeCard = elem.closest('.sf-student-card-2d');
   if (!activeCard) return;
 
   const studentObj = _sfRenderMap.get(activeCard);
   if (!studentObj) return;
+  if (_sfSaving.has(studentObj.id)) return;
+  _sfSaving.add(studentObj.id);
+  const fingerprint = c => JSON.stringify(Array.from(c.querySelectorAll('input,textarea'), e => e.type === 'checkbox' ? e.checked : e.value));
+  const beforeViews = new Map(Array.from(document.querySelectorAll('.sf-student-card-2d'))
+    .filter(c => _sfRenderMap.get(c)?.id === studentObj.id).map(c => [c, fingerprint(c)]));
+  const beforeDraft = JSON.stringify(_sfDrafts.get(studentObj.id));
 
   const newName = activeCard.querySelector('.sf-input-name').value.trim();
   const newId = activeCard.querySelector('.sf-input-id').value.trim();
@@ -4906,7 +4441,7 @@ window.autoSaveStudentFile = async function (elem) {
 
     await Promise.all([
       window._api.updateAttendance([updatePayload]),
-      window._api.updateRemark(studentObj.id, newRemarks).catch(() => { }) // 即使尚未初始化資料庫也不阻斷
+      window._api.updateRemark(studentObj.id, newRemarks)
     ]);
 
     // Update Local Cache Reference
@@ -4917,19 +4452,22 @@ window.autoSaveStudentFile = async function (elem) {
     studentObj.remarks = newRemarks;
     studentObj.isForeign = isForeign;
     studentObj.isEmpty = isEmpty;
-    if (typeof _sfDrafts !== 'undefined') _sfDrafts.delete(studentObj.id);
+    if (JSON.stringify(_sfDrafts.get(studentObj.id)) === beforeDraft) _sfDrafts.delete(studentObj.id);
 
     // 同步更新畫面上所有複製人的顯示內容
     const cards = document.querySelectorAll('.sf-student-card-2d');
     cards.forEach(c => {
       const obj = _sfRenderMap.get(c);
-      if (obj === studentObj) {
+      if (obj?.id === studentObj.id && beforeViews.get(c) === fingerprint(c)) {
         c.querySelector('.sf-input-name').value = studentObj.name;
         c.querySelector('.sf-input-id').value = studentObj.studentId;
         c.querySelector('.sf-input-class').value = studentObj.class;
         c.querySelector('.sf-input-remarks').value = studentObj.remarks;
         c.querySelector('.sf-chk-foreign').checked = studentObj.isForeign;
         c.querySelector('.sf-chk-empty').checked = studentObj.isEmpty;
+      } else if (obj?.id === studentObj.id) {
+        // Keep edits entered while the request was running (including recycled cards).
+        sfSaveDraft({el:c, student:studentObj});
       }
     });
 
@@ -4964,7 +4502,7 @@ window.autoSaveStudentFile = async function (elem) {
       }, 2000);
     }
     showToast('自動連動 Notion 失敗：' + err.message, 'error');
-  }
+  } finally { _sfSaving.delete(studentObj.id); }
 };
 
 window.onStudentFileSearch = onStudentFileSearch;

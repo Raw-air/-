@@ -1,50 +1,32 @@
-// 碧苑宿舍點名系統 - Service Worker（PWA 離線支援）
-// 注意：舊版這個檔案的第一行編碼壞掉，導致整支 Service Worker 無法安裝 (離線快取失效)，此版已修復。
-const CACHE_NAME = 'biyuan-v50'; // ← 每次更新 JS/CSS 必須遞增此版號
-const ASSETS = [
-  './',
-  './index.html',
-  './style.css',
-  './app.js',
-  './api.js',
-  './config.js',
-  './import.js',
-  './export.js',
-];
-
-// 安裝時快取靜態資源
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)).catch(() => {})
-  );
-  self.skipWaiting();
+// Atomic shell cache: HTML and JS must always come from the same release.
+const CACHE_NAME = 'biyuan-v51';
+const ASSETS = ['./', './index.html', './style.css?v=87', './app.js?v=87',
+  './api.js?v=87', './config.js?v=87', './black-hole.js?v=87',
+  './vendor/three.r128.min.js', './vendor/html2canvas.1.4.1.min.js'];
+self.addEventListener('install', event => {
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
-
-// 啟動時清理舊快取
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
+self.addEventListener('activate', event => {
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys
+    .filter(k => k.startsWith('biyuan-') && k !== CACHE_NAME).map(k => caches.delete(k))))
+    .then(() => self.clients.claim()));
 });
-
-// 網路優先，失敗時用快取
-self.addEventListener('fetch', (event) => {
-  // API 請求不快取
-  if (event.request.url.includes('/api/')) return;
-  if (event.request.method !== 'GET') return;
-
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        if (response && response.ok && event.request.url.startsWith(self.location.origin)) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone)).catch(() => {});
-        }
-        return response;
-      })
-      .catch(() => caches.match(event.request))
-  );
+self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+  if (event.request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.includes('/api/')) return;
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(event.request);
+    if (cached) return cached;
+    try {
+      const response = await fetch(event.request);
+      if (response.ok && /\.(svg|png|woff2?|mp3)$/.test(url.pathname)) {
+        event.waitUntil(cache.put(event.request, response.clone()).catch(() => {}));
+      }
+      return response;
+    } catch (error) {
+      if (event.request.mode === 'navigate') return (await cache.match('./index.html')) || Response.error();
+      return Response.error();
+    }
+  })());
 });

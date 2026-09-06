@@ -10,23 +10,18 @@
   <meta name="theme-color" content="#151518">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=86">
+  <link rel="stylesheet" href="style.css?v=87">
   <link rel="manifest" href="manifest.json?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=2">
-  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script defer src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script defer src="./vendor/three.r128.min.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').then(reg => {
-        reg.addEventListener('updatefound', () => {
-          const newWorker = reg.installing;
-          newWorker.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              window.location.reload(); // 當有新版本 SW 啟動時自動強制重整
-            }
-          });
-        });
+        // Do not reload a form while the user is editing; the next navigation/reload
+        // receives the complete new shell after the worker takes control.
+        reg.update().catch(() => {});
       }).catch(() => { });
     }
   </script>
@@ -795,7 +790,7 @@
           <span style="color:var(--dim); font-size:11px;">關閉系統的觸發音效</span>
         </div>
         <label class="switch">
-            <input id="setting-mute" type="checkbox" onchange="toggleMute(this)">
+            <input id="setting-mute" aria-label="音效靜音模式" type="checkbox" onchange="toggleMute(this)">
             <div class="slider">
                 <div class="circle">
                     <svg class="cross" xml:space="preserve" style="enable-background:new 0 0 512 512" viewBox="0 0 365.696 365.696" y="0" x="0" height="6" width="6" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xmlns="http://www.w3.org/2000/svg">
@@ -815,11 +810,11 @@
       
       <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 12px 0;">
         <div style="display:flex; flex-direction:column; gap:4px;">
-          <span>關閉震動</span>
-          <span style="color:var(--dim); font-size:11px;">關閉所有按鍵與互動震動回饋</span>
+          <span>震動回饋</span>
+          <span id="haptic-help" style="color:var(--dim); font-size:11px;">開啟按鍵與互動震動回饋（需裝置支援）</span>
         </div>
         <label class="switch">
-            <input id="setting-haptic" type="checkbox" onchange="toggleHaptic(this)" checked>
+            <input id="setting-haptic" aria-label="震動回饋" type="checkbox" onchange="toggleHaptic(this)" checked>
             <div class="slider">
                 <div class="circle">
                     <svg class="cross" xml:space="preserve" style="enable-background:new 0 0 512 512" viewBox="0 0 365.696 365.696" y="0" x="0" height="6" width="6" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xmlns="http://www.w3.org/2000/svg">
@@ -842,7 +837,7 @@
           <span style="color:var(--dim); font-size:11px;">切換為亮色外觀主題</span>
         </div>
         <label class="switch">
-            <input id="setting-white-mode" type="checkbox" onchange="toggleWhiteMode(this, event)">
+            <input id="setting-white-mode" aria-label="全白模式" type="checkbox" onchange="toggleWhiteMode(this, event)">
             <div class="slider">
                 <div class="circle">
                     <svg class="cross" xml:space="preserve" style="enable-background:new 0 0 512 512" viewBox="0 0 365.696 365.696" y="0" x="0" height="6" width="6" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xmlns="http://www.w3.org/2000/svg">
@@ -865,7 +860,7 @@
           <span style="color:var(--dim); font-size:11px;">僅隱藏外籍/空床標籤，保持色彩</span>
         </div>
         <label class="switch">
-            <input id="setting-panzi" type="checkbox" onchange="togglePanzi(this)">
+            <input id="setting-panzi" aria-label="簡潔視角" type="checkbox" onchange="togglePanzi(this)">
             <div class="slider">
                 <div class="circle">
                     <svg class="cross" xml:space="preserve" style="enable-background:new 0 0 512 512" viewBox="0 0 365.696 365.696" y="0" x="0" height="6" width="6" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xmlns="http://www.w3.org/2000/svg">
@@ -890,7 +885,7 @@
           <span style="color:var(--dim); font-size:11px;">去除所有浮雕、景深與 3D 特效</span>
         </div>
         <label class="switch">
-            <input id="setting-powerSave" type="checkbox" onchange="togglePowerSave(this)">
+            <input id="setting-powerSave" aria-label="省電模式" type="checkbox" onchange="togglePowerSave(this)">
             <div class="slider">
                 <div class="circle">
                     <svg class="cross" xml:space="preserve" style="enable-background:new 0 0 512 512" viewBox="0 0 365.696 365.696" y="0" x="0" height="6" width="6" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xmlns="http://www.w3.org/2000/svg">
@@ -923,10 +918,11 @@
         try {
           if ('serviceWorker' in navigator) {
             const registrations = await navigator.serviceWorker.getRegistrations();
-            await Promise.all(registrations.map(reg => reg.unregister()));
+            const scope = new URL('./', location.href).href;
+            await Promise.all(registrations.filter(reg => reg.scope === scope).map(reg => reg.unregister()));
           }
           const names = await caches.keys();
-          await Promise.all(names.map(name => caches.delete(name)));
+          await Promise.all(names.filter(name => name.startsWith('biyuan-')).map(name => caches.delete(name)));
         } catch (e) {
           console.error('Clear cache error:', e);
         }
@@ -1157,10 +1153,9 @@
     async function setupLeaveDB() {
       if (!confirm("這將會在 Notion 自動建立一個新的電話請假紀錄資料庫。確定要執行嗎？")) return;
       try {
-        const res = await fetch(window.CONFIG.WORKER_URL + '/api/setup-leave-db', { method: 'POST' });
-        const data = await res.json();
+        const data = await window._api._fetch('/api/setup-leave-db', 'POST');
         if (data.success) {
-          prompt('<svg class="ui-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/></svg> 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 LEAVE_DB_ID：', data.LEAVE_DB_ID);
+          prompt('建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 LEAVE_DB_ID：', data.LEAVE_DB_ID);
         } else {
           alert('建立失敗: ' + data.error);
         }
@@ -1172,10 +1167,9 @@
     async function setupChangelogDB() {
       if (!confirm("這將會在 Notion 自動建立一個新的公告資料庫。確定要執行嗎？")) return;
       try {
-        const res = await fetch(window.CONFIG.WORKER_URL + '/api/setup-changelog-db', { method: 'POST' });
-        const data = await res.json();
+        const data = await window._api._fetch('/api/setup-changelog-db', 'POST');
         if (data.success) {
-          prompt('<svg class="ui-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/></svg> 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 CHANGELOG_DB_ID：', data.CHANGELOG_DB_ID);
+          prompt('建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 CHANGELOG_DB_ID：', data.CHANGELOG_DB_ID);
         } else {
           alert('建立失敗: ' + data.error);
         }
@@ -1187,10 +1181,9 @@
     async function setupRepairDB() {
       if (!confirm("這將會在 Notion 自動建立一個新的報修紀錄資料庫。確定要執行嗎？")) return;
       try {
-        const res = await fetch(window.CONFIG.WORKER_URL + '/api/setup-repair-db', { method: 'POST' });
-        const data = await res.json();
+        const data = await window._api._fetch('/api/setup-repair-db', 'POST');
         if (data.success) {
-          prompt('<svg class="ui-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/></svg> 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 REPAIR_DB_ID：', data.REPAIR_DB_ID);
+          prompt('建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 REPAIR_DB_ID：', data.REPAIR_DB_ID);
         } else {
           alert('建立失敗: ' + data.error);
         }
@@ -1202,10 +1195,9 @@
     async function setupFeedbackDB() {
       if (!confirm("這將會在 Notion 自動建立一個新的意見回饋資料庫。確定要執行嗎？")) return;
       try {
-        const res = await fetch(window.CONFIG.WORKER_URL + '/api/setup-feedback-db', { method: 'POST' });
-        const data = await res.json();
+        const data = await window._api._fetch('/api/setup-feedback-db', 'POST');
         if (data.success) {
-          prompt('<svg class="ui-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/></svg> 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 FEEDBACK_DB_ID：', data.FEEDBACK_DB_ID);
+          prompt('建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 FEEDBACK_DB_ID：', data.FEEDBACK_DB_ID);
         } else {
           alert('建立失敗: ' + data.error);
         }
@@ -1217,10 +1209,9 @@
     async function setupRemarksDB() {
       if (!confirm("這將會在 Notion 自動建立一個新的備註專用資料庫。確定要執行嗎？")) return;
       try {
-        const res = await fetch(window.CONFIG.WORKER_URL + '/api/setup-remarks-db', { method: 'POST' });
-        const data = await res.json();
+        const data = await window._api._fetch('/api/setup-remarks-db', 'POST');
         if (data.success) {
-          prompt('<svg class="ui-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/></svg> 建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 REMARKS_DB_ID：', data.REMARKS_DB_ID);
+          prompt('建立成功！請將以下 ID 複製，前往 Cloudflare 新增環境變數 REMARKS_DB_ID：', data.REMARKS_DB_ID);
         } else {
           alert('建立失敗: ' + data.error);
         }
@@ -1268,9 +1259,10 @@
     <div class="nav-item" data-page="settings"><span class="nav-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-label">設定</span></div>
   </nav>
 
-  <script src="config.js?v=86"></script>
-  <script src="api.js?v=86"></script>
-  <script src="app.js?v=86"></script>
+  <script src="config.js?v=87"></script>
+  <script src="api.js?v=87"></script>
+  <script src="app.js?v=87"></script>
+  <script src="black-hole.js?v=87"></script>
 
   <!-- 幹部工作手冊 Modal -->
   <div id="duty-manual-modal" class="modal-overlay">

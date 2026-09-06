@@ -1,0 +1,6 @@
+{
+  "name": "biyuan-dorm-ui",
+  "private": true,
+  "scripts": { "test": "node tests/api.cjs && node tests/ui.cjs" },
+  "devDependencies": { "playwright": "1.62.1" }
+}

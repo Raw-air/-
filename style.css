@@ -3565,9 +3565,6 @@ label.switch:has(#setting-white-mode) {
 /* 鎴湒鏈熼枔闂滈枆瀹冨€戜笉褰遍熆瑕栬锛屽洜鐐哄揩鐓ф湰渚嗗氨鏄潨鎱嬮粸闄ｅ湒 */
 /* 浣跨敤钀敤瀛楀厓涓€娆℃€ц钃嬶紝涓︿笖鍔犲叆 box-shadow 涔熻兘閫蹭竴姝ラ檷浣?GPU 鍦?Android 涓婄殑娓叉煋鏅傞枔 */
 html.vt-active *:not(.bottom-nav):not(.bottom-nav-glow):not(.nav-item):not(.nav-icon):not(.nav-label) {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  box-shadow: none !important;
   transition-duration: 0s !important;
 }
 
@@ -4919,6 +4916,15 @@ body.light-mode .anim-line::after {
   transition: opacity 0.35s ease;
 }
 .bh-webgl-layer.on { opacity: 1; }
+.bh-final-star {
+  position: fixed;
+  width: 100px;
+  height: 100px;
+  z-index: 10002;
+  pointer-events: none;
+  filter: drop-shadow(0 0 8px #fff3c4) drop-shadow(0 0 20px #f9a84b);
+}
+.bh-final-star svg { width: 100%; height: 100%; }
 .bh-atmo {
   position: fixed; inset: 0; z-index: 9996; pointer-events: none;
   opacity: 0; transition: opacity 0.9s ease;
@@ -4940,3 +4946,9 @@ body.light-mode .anim-line::after {
   100% { transform: translateY(0) scale(1) rotate(0deg); opacity: 1; filter: brightness(1) blur(0px); }
 }
 
+
+/* Keep text metrics identical during the reel/native-text handoff. */
+.stepper-input, .rc-stat b { font-variant-numeric: tabular-nums; }
+.number-anim-hiding { -webkit-text-fill-color: transparent !important; text-shadow: none !important; }
+::view-transition-old(root) { z-index: 1; }
+::view-transition-new(root) { z-index: 2; }
