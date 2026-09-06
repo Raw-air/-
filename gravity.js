@@ -10,7 +10,8 @@ async function captureGravityScene(card) {
       .sf-student-card-2d *,.sf-student-card-2d::after{transform:none!important;}
       .sf-student-card-2d::before{display:none!important;}
       .sf-student-card-2d{isolation:isolate!important;}
-      .sf-student-card-2d::after{z-index:0!important;}
+      .sf-student-card-2d::after{z-index:0!important;clip-path:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background-color:${document.body.classList.contains('light-mode')?'#f4f5f9':'#1b1b21'}!important;background-image:none!important;filter:none!important;}
+      .sf-student-card-2d{filter:none!important;}
       .sf-student-card-2d>*{position:relative;z-index:1;}
       .sf-form-group input,.sf-form-group textarea{box-shadow:none!important;background:${document.body.classList.contains('light-mode')?'#e3e5e9':'#24252d'}!important;}`;
     doc.head.appendChild(style);
@@ -26,6 +27,7 @@ async function captureGravityScene(card) {
     if(cl.contains('bh-webgl-layer')||cl.contains('bh-seed')||cl.contains('bh-seed-dim')||cl.contains('bh-atmo')||cl.contains('bh-final-star'))return true;
     return false;
   };
+  document.body.classList.add('bh-capture');
   try {
     const rect=card.getBoundingClientRect();
     const dpr=devicePixelRatio||1;
@@ -48,7 +50,7 @@ async function captureGravityScene(card) {
       .sort((a,b)=>Math.abs(a.left+a.width/2-cx)-Math.abs(b.left+b.width/2-cx))
       .slice(0,4);
     return {cardImage,background,rect,neighbours};
-  } finally {delete card.dataset.gravityCapture;}
+  } finally {delete card.dataset.gravityCapture;document.body.classList.remove('bh-capture');}
 }
 
 // 吸積盤的基底（視空間 x 右、y 上、z 朝觀察者）：
@@ -114,13 +116,13 @@ function createGravityScene({cardImage,background,rect,neighbours},hx,hy,rs){
       void main(){
         vUv=uv;vBary=aBary;float delay=.05+(aCenter.y/uRect.w)*.20+aSeed*.14;
         float t=smoothstep(delay,1.,uPull);vHeat=t;
-        // 碎片在半途就化成粉塵，之後由 dust 接手
-        vAlpha=1.-smoothstep(.42,.80,t);
+        // 碎片只是「裂開的那一瞬間」，很快就化成粉塵，之後全部交給 dust
+        vAlpha=1.-smoothstep(.05,.28,t);
         vec2 center=uRect.xy+aCenter,offset=position.xy-aCenter;
         vec2 axis=normalize(uHole-center),side=vec2(-axis.y,axis.x);
-        float stretch=1.+sin(t*3.14159)*2.2;
+        float stretch=1.+sin(t*3.14159)*.22;   // 幾乎不拉長，才不會變成一根根薯條
         offset=axis*dot(offset,axis)*stretch+side*dot(offset,side)*(1.-t*.7);
-        offset=rot(t*(aSeed-.5)*7.)*offset*(1.-t*.9);
+        offset=rot(t*(aSeed-.5)*7.)*offset*(1.-t*.96);
         vec2 orbit=center-uHole;
         center=uHole+rot(t*t*(1.5+aSeed*2.4))*orbit*(1.-pow(t,1.35));
         vec2 p=center+offset;
@@ -137,7 +139,7 @@ function createGravityScene({cardImage,background,rect,neighbours},hx,hy,rs){
   const mesh=new THREE.Mesh(geom,mat);mesh.frustumCulled=false;mesh.renderOrder=1;scene.add(mesh);
 
   // ── 粉塵：每片碎片配數十顆，顏色照該碎片的 UV 從卡片貼圖取樣 ──────────────
-  const dustPer=mobile?10:18,dustCount=fragCenters.length/3*dustPer;
+  const dustPer=mobile?16:26,dustCount=fragCenters.length/3*dustPer;
   const dPos=new Float32Array(dustCount*3),dUv=new Float32Array(dustCount*2),dCenter=new Float32Array(dustCount*2),dSeed=new Float32Array(dustCount),dRand=new Float32Array(dustCount*3);
   for(let f=0,n=0;f<fragCenters.length/3;f++){
     const cxp=fragCenters[f*3],cyp=fragCenters[f*3+1],sd=fragCenters[f*3+2];
@@ -172,7 +174,7 @@ function createGravityScene({cardImage,background,rect,neighbours},hx,hy,rs){
         // Telegram 式：碎片先「噗」地散開成細粉塵，再沿盤面平面螺旋落入視界
         vec2 puff=normalize(frag-center+vec2(aRand.x-.5,aRand.y-.5)*.001);
         frag+=puff*(6.+aRand.z*26.)*sin(min(t,1.)*3.14159)*(.35+aSeed*.65);
-        float ts=.30+aRand.z*.20;
+        float ts=.02+aRand.z*.10;
         float k=smoothstep(ts,min(ts+.50,.995),t);
         vec2 d=frag-uHole;float dl=max(length(d),.001);
         float ang=diskAngle(d/dl);
@@ -187,7 +189,7 @@ function createGravityScene({cardImage,background,rect,neighbours},hx,hy,rs){
         float near=smoothstep(2.4,.42,rd);
         vAlpha=alive*uBirth*(1.-uCollapse)*(.55+aRand.x*.85)*smoothstep(.42,1.25,rd)*(1.-near*.45);
         vHot=clamp(k*1.1+(1.-smoothstep(1.2,4.,rd))*.5,0.,1.);
-        gl_PointSize=max(.6,(.85+aRand.y*2.0)*uDpr*(1.-k*.22)*(1.-near*.72));
+        gl_PointSize=max(.5,(.62+aRand.y*1.5)*uDpr*(1.-k*.2)*(1.-near*.74));
         gl_Position=vec4(p.x/uResolution.x*2.-1.,1.-p.y/uResolution.y*2.,0.,1.);
       }`,
     fragmentShader:`uniform sampler2D uTexture;varying vec2 vUv;varying float vAlpha,vHot;

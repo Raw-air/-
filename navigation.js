@@ -23,6 +23,19 @@ function setupNav(){
     row.appendChild(c);return c;
   });
   zoom.appendChild(row);shape.appendChild(zoom);
+  // 玻璃厚邊的色散：同一列圖示再各做一份青色與洋紅複本，往左右微偏，只在鏡片邊緣露出來
+  const fringe=document.createElement('span');fringe.className='lens-fringe';
+  for(const tint of ['c','m']){
+    const z=document.createElement('span');z.className='lens-zoom lens-zoom-'+tint;
+    const r=document.createElement('span');r.className='lens-row';
+    for(const item of items){
+      const c=document.createElement('span');c.className='lens-item';
+      c.innerHTML=`<span class="nav-icon">${_navOriginalIcons.get(item.dataset.page)}</span><span class="nav-label">${item.querySelector('.nav-label').textContent}</span>`;
+      r.appendChild(c);
+    }
+    z.appendChild(r);fringe.appendChild(z);
+  }
+  shape.appendChild(fringe);
   const rim=document.createElement('span');rim.className='lens-rim';shape.appendChild(rim);
   lens.appendChild(shape);nav.prepend(lens);
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');

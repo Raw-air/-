@@ -5324,3 +5324,113 @@ body.light-mode .anim-line::after {
 .number-anim-hiding { -webkit-text-fill-color: transparent !important; text-shadow: none !important; }
 ::view-transition-old(root) { z-index: 1; }
 ::view-transition-new(root) { z-index: 2; }
+
+/* ════════════════════════════════════════════════════════════
+   住宿生檔案 v30.4：資料夾造型 + 透明玻璃 (參考 liquid glass 檔案堆疊)
+   卡片固定 300×470，所以用 clip-path: path() 直接寫死資料夾輪廓：
+   左半邊高、右半邊低，中間一道斜切，像檔案夾的前後片。
+   注意 clip-path 會把外陰影一起切掉，所以陰影改用 filter: drop-shadow。
+   ════════════════════════════════════════════════════════════ */
+.sf-student-card-2d::after,
+.sf-student-card-2d::before {
+  clip-path: path("M0,22 A22,22 0 0 1 22,0 L152,0 A12,12 0 0 1 161,4 L180,22 L278,22 A22,22 0 0 1 300,44 L300,448 A22,22 0 0 1 278,470 L22,470 A22,22 0 0 1 0,448 Z");
+  border-radius: 0;
+}
+/* 玻璃面：半透明，後面那幾張會透出來疊成一層層毛玻璃 */
+.sf-student-card-2d::after {
+  border: 0;
+  background-color: rgba(84, 86, 104, 0.34);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -60px 60px -60px rgba(255, 255, 255, 0.1);
+}
+/* 目前這張要看得清楚，所以幾乎不透明，並用 drop-shadow 讓它浮在那疊之上 */
+.sf-card-track > .sf-student-card-2d.active {
+  filter: drop-shadow(0 22px 34px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 22px rgba(139, 92, 246, 0.28));
+}
+.sf-card-track > .sf-student-card-2d.active::after {
+  background-color: rgba(24, 24, 30, 0.94);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  box-shadow:
+    inset 0 0 0 1px rgba(191, 90, 242, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -90px 90px -90px rgba(139, 92, 246, 0.35);
+}
+.sf-student-card-2d::before { opacity: 0.28; }
+/* 側邊那幾張：只留玻璃面、幾條「文件」線，床號移到底部當標籤 */
+.sf-student-card-2d.sf-sheet::after {
+  background-image:
+    repeating-linear-gradient(180deg, rgba(255,255,255,0.14) 0 4px, rgba(255,255,255,0) 4px 21px),
+    linear-gradient(90deg, #6366f1, #d946ef, #8b5cf6),
+    linear-gradient(155deg, rgba(255,255,255,0.18), rgba(255,255,255,0.05) 34%, rgba(255,255,255,0) 64%);
+  background-size: 58% 146px, 100% 3px, auto;
+  background-repeat: no-repeat, no-repeat, repeat;
+  background-position: 20% 40%, top left, center;
+}
+.sf-student-card-2d.sf-sheet .sf-card-title {
+  position: absolute; left: 26px; right: 26px; bottom: 30px; margin: 0;
+  font-size: 17px; opacity: 0.9;
+}
+.sf-student-card-2d.sf-sheet .sf-broom-btn,
+.sf-student-card-2d.sf-sheet .sf-card-badge-relative { opacity: 0; visibility: hidden; }
+.sf-student-card-2d .sf-broom-btn,
+.sf-student-card-2d .sf-card-badge-relative { transition: opacity 0.2s ease; }
+/* 淺色模式：白玻璃 */
+body.light-mode .sf-student-card-2d::after {
+  background-color: rgba(255, 255, 255, 0.52);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.9),
+    inset 0 1px 0 #fff,
+    inset 0 -60px 60px -60px rgba(120, 130, 170, 0.18);
+}
+body.light-mode .sf-card-track > .sf-student-card-2d.active {
+  filter: drop-shadow(0 22px 30px rgba(90, 100, 140, 0.28)) drop-shadow(0 0 20px rgba(139, 92, 246, 0.18));
+}
+body.light-mode .sf-card-track > .sf-student-card-2d.active::after {
+  background-color: rgba(252, 252, 255, 0.96);
+  box-shadow:
+    inset 0 0 0 1px rgba(191, 90, 242, 0.35),
+    inset 0 1px 0 #fff,
+    inset 0 -90px 90px -90px rgba(139, 92, 246, 0.16);
+}
+body.light-mode .sf-student-card-2d.sf-sheet::after {
+  background-image:
+    repeating-linear-gradient(180deg, rgba(90,100,140,0.16) 0 4px, rgba(0,0,0,0) 4px 21px),
+    linear-gradient(90deg, #6366f1, #d946ef, #8b5cf6),
+    linear-gradient(155deg, rgba(255,255,255,0.95), rgba(255,255,255,0.5) 34%, rgba(255,255,255,0.15) 64%);
+}
+
+/* 黑洞截圖用：html2canvas 不支援多層 background-size，會把 3px 的漸層線整塊畫滿，
+   而且它在複製 DOM 時就凍結偽元素樣式，所以必須在真實頁面上先關掉這些裝飾。
+   這 0.6 秒畫面已被先遣暗幕蓋掉一半，看不出來。 */
+body.bh-capture .sf-student-card-2d::after {
+  /* html2canvas 會把 inset 陰影畫成整塊填滿，所以也要關掉 */
+  box-shadow: none !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  background-image: none !important;
+  background-color: #1b1b21 !important;
+  clip-path: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+body.bh-capture.light-mode .sf-student-card-2d::after { background-color: #f4f5f9 !important; }
+body.bh-capture .sf-student-card-2d::before { display: none !important; }
+body.bh-capture .sf-student-card-2d { filter: none !important; }
+/* html2canvas 會把卡片內每個子元素當成不透明方塊整片塗滿，所以子元素的底色一律清掉，
+   只留 ::after 當唯一的卡面；輸入框保留深色底才看得出欄位。 */
+body.bh-capture .sf-student-card-2d * {
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  text-shadow: none !important;
+}
+body.bh-capture .sf-form-group input,
+body.bh-capture .sf-form-group textarea {
+  background-color: #24252d !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+}
+body.bh-capture.light-mode .sf-form-group input,
+body.bh-capture.light-mode .sf-form-group textarea { background-color: #e3e5e9 !important; }

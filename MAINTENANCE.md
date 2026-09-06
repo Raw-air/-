@@ -1,6 +1,6 @@
 # 維護與驗證
 
-正式前端為 https://raw-air.github.io/-/，Pages 來源為 `Soft-UI` 分支根目錄。此版本為資源 v92、Service Worker v56。
+正式前端為 https://raw-air.github.io/-/，Pages 來源為 `Soft-UI` 分支根目錄。此版本為資源 v93、Service Worker v57。
 
 ## 本次修正
 
@@ -14,6 +14,9 @@
 - 卡片先撕成 216 片不規則三角形，碎片半途化為粉塵（每片配 5／10 顆，顏色依該碎片的 UV 從卡片貼圖取樣），粉塵沿盤面平面螺旋落入視界；另有 600／1300 顆從畫面外側沿盤面飛入的粒子流，亮度隨速度、點大小遞減。手機端粒子總數約 1,680 顆。黑洞登場時背景亮度降到 0.35 並加暗角，塌縮時回亮。擷取時記錄 activeCard 左右鄰卡的 rect（最多 4 個，未用的填 0），螢幕 shader 在矩形內加 ±2–4px 的高頻位移並微微往黑洞方向拉伸，看起來像鄰卡在抵抗引力。
 - 成形速度：html2canvas 一律複製整份文件，所以擷取時用 ignoreElements 砍掉用不到的子樹（卡片貼圖只留卡片本身，背景只留目前分頁、看得到的卡片），卡片 scale ≤ 1.5、手機背景 scale 1；擷取時間約降到原本的 1/4。按下垃圾桶後先用 CSS 先遣層（.bh-seed，位置／半徑／傾角與 WebGL 場景一致）讓黑洞在 0.3 秒內成形並把畫面壓暗，WebGL 場景備妥後直接接手；動畫時鐘從按下算起（最多補 0.5 秒），整段 3.4 秒。
 - 效能：DPR ≤ 1.5、render target ≤ 1.4M 畫素、每幀零配置（只寫 uniform 的 .value），引力震動與變暗係數改在 CPU 算好傳進去；雜訊 hash 不用 sin，鄰卡顫抖的方向與強度在建場景時先算好。前十幾幀量一次真正的畫面間隔，太慢就一次性把解析度降一階（只重配一次）。動畫結束或取消時釋放 texture、material、geometry、render target 與 WebGL context；先遣層在 finally 一併移除。
+- 黑洞截圖前會在 body 掛 bh-capture：html2canvas 在複製 DOM 的當下就凍結偽元素樣式 (onclone 才注入對 ::after 無效)，而且它不支援多層 background-size、會把 inset 陰影與子元素背景整片塗滿。所以要在「真實頁面」上把卡片壓成單純深色板 (含子元素背景全部清掉)，截完再拿掉；那 0.6 秒畫面已被先遣暗幕蓋住。
+- 住宿生卡片是資料夾造型：卡片固定 300×470，所以 ::after/::before 直接用 clip-path: path() 寫死輪廓 (改卡片尺寸就要重畫這條路徑)。clip-path 會把外陰影一起裁掉，所以卡片的投影改用 filter: drop-shadow，且只有中間那張有 (每張都加太貴)。側邊卡是半透明玻璃、中間那張接近不透明，否則後面整疊會透出來。
+- 導覽列鏡片的色散：lens-fringe 內放兩份圖示複本，各染青/洋紅並左右偏 2.5px，用 radial 遮罩只留邊緣、mix-blend-mode:screen；lens-rim::after 再疊一圈 conic-gradient 彩虹環。
 - import.js 是設定頁的「匯入 Excel 名單」精靈：用 CDN 的 SheetJS 讀 xlsx/xls/csv (csv 沒 UTF-8 BOM 又不是合法 UTF-8 時以 Big5/950 解碼)，標題模糊比對 (先完全相同再包含、同欄不重複、「區號」不當地址)，房號+床位對到 state.students (略過 hidden 的床)，沒姓名也沒學號視為空床。寫入走與 autoSaveStudentFile 相同的 updateAttendance payload、每批 15 筆循序送，備註只附加不覆蓋。window._importRows(rows,mapping,options) 讓測試不用真檔案。
 - 住宿生檔案名單是環狀的，名單少於 13 人時同一人會同時出現在多張卡：sfSaveDraft 在回收「沒改過」的卡時，若同一人的另一張卡已被改動就不清草稿；sfBindCard 綁新卡時會拿另一張卡的即時內容當初始值 (sfLiveDraft)。
 - 震動設定「開啟代表啟用」。Android 走 Vibration API；iPhone Safari 沒有該 API，改用兩條路：(1) 程式點擊隱藏的 <input type="checkbox" switch> label 觸發 Taptic (iOS 17.4~26.4 有效，26.5 起 Apple 已封鎖)；(2) 低頻喇叭波形 (Web Audio) 讓機身共振，即舊版使用者感受到的「震動」。按鍵音效附帶的回饋只敲 Taptic 不播波形。

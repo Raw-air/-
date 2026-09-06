@@ -90,6 +90,24 @@ body.light-mode .bottom-nav.liquid-nav {
 .liquid-lens.is-travelling .lens-shape {animation:liquid-squish .5s cubic-bezier(.32,.9,.3,1);}
 /* 放大層：跟真實那一列同樣排版的複本，以鏡片中心放大 */
 .lens-zoom {position:absolute;inset:0;transform:scale(1.12);}
+/* 色散層：青與洋紅各偏 2px，用遮罩只留邊緣 → 玻璃厚邊的彩虹折射 */
+.lens-fringe {
+  position:absolute;inset:0;z-index:1;pointer-events:none;mix-blend-mode:screen;opacity:.55;
+  -webkit-mask-image:radial-gradient(ellipse 50% 50% at 50% 50%,transparent 52%,#000 100%);
+  mask-image:radial-gradient(ellipse 50% 50% at 50% 50%,transparent 52%,#000 100%);
+}
+.lens-zoom-c {transform:scale(1.145) translateX(-2.5px);filter:grayscale(1) brightness(1.5) sepia(1) hue-rotate(140deg) saturate(7);}
+.lens-zoom-m {transform:scale(1.10) translateX(2.5px);filter:grayscale(1) brightness(1.5) sepia(1) hue-rotate(275deg) saturate(7);}
+/* 邊緣一圈彩虹：像玻璃厚邊把光拆開 */
+.lens-rim::after {
+  content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:conic-gradient(from 205deg,rgba(255,120,220,.6),rgba(120,200,255,.55) 22%,rgba(150,255,225,.5) 42%,rgba(255,225,150,.55) 62%,rgba(255,140,230,.6) 84%,rgba(255,120,220,.6));
+  -webkit-mask-image:radial-gradient(ellipse 50% 50% at 50% 50%,transparent 60%,#000 94%);
+  mask-image:radial-gradient(ellipse 50% 50% at 50% 50%,transparent 60%,#000 94%);
+  mix-blend-mode:screen;opacity:.5;
+}
+body.light-mode .lens-rim::after {opacity:.62;}
+@media (prefers-reduced-motion:reduce) {.lens-fringe {display:none;}}
 .lens-row {
   position:absolute;top:calc((var(--lens-h) - 64px) / 2);left:calc(8px - var(--lens-x));
   width:calc(var(--nav-w) - 16px);height:64px;display:flex;
