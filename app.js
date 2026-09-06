@@ -17,7 +17,7 @@ const state = {
   recentSyncs: {}, // 用於保護剛同步成功的狀態，避免 eventual consistency 導致閃爍
 };
 
-// ─── 觸覺回饋 (進階波形引擎 Web Audio API) ─────────────────────────────
+// ─── 觸覺回饋 (iOS Taptic 開關 + 進階波形引擎 Web Audio API) ─────────────────
 let audioCtx = null;
 
 function initAudioCtx() {
@@ -29,23 +29,95 @@ function initAudioCtx() {
   }
 }
 
+// iPhone / iPad (含桌面模式的 iPadOS) 沒有 Vibration API，要走另外兩條路
+const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function hasVibrate() { return typeof navigator.vibrate === 'function' && !IS_IOS; }
+function hapticMuted() { return localStorage.getItem('mute_haptic') === 'true'; }
+
+// iOS 17.4 ~ 26.4：用程式點擊 <input type="checkbox" switch> 的 label，Safari 會真的敲一下 Taptic Engine
+let _hapticSwitchLabel = null;
+function iosSwitchHaptic(count = 1, gap = 70) {
+  if (!IS_IOS) return false;
+  try {
+    if (!_hapticSwitchLabel) {
+      const label = document.createElement('label');
+      label.id = 'haptic-switch-label';
+      label.setAttribute('aria-hidden', 'true');
+      label.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none;';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.setAttribute('switch', '');
+      input.tabIndex = -1;
+      label.appendChild(input);
+      document.body.appendChild(label);
+      _hapticSwitchLabel = label;
+    }
+    for (let i = 0; i < count; i++) setTimeout(() => _hapticSwitchLabel.click(), i * gap);
+  } catch (_) {}
+  return true;
+}
+
 /**
  * 播放自訂觸覺波形 (支援 ADSR 包絡線)
+ * Android 走原生震動；iPhone 用低頻喇叭波形讓機身共振，這就是使用者感受到的「震動」
  * @param {Array} curve - 強度起伏陣列 (0.0 ~ 1.0)
  * @param {number} durationMs - 總時長 (毫秒)
  * @param {string} waveType - 波形類型 ('sine', 'square', 'sawtooth')
  * @param {number} frequency - 震動基頻 (Hz)
  */
-function playHapticCurve(curve, durationMs) {
-  // Audio oscillators cannot drive the iPhone Taptic Engine.
-  if (localStorage.getItem('mute_haptic') === 'true') return;
-  try { navigator.vibrate?.(durationMs); } catch (_) {}
+function playHapticCurve(curve, durationMs, waveType = 'sine', frequency = 120) {
+  if (hapticMuted()) return;
+  if (hasVibrate()) { try { navigator.vibrate(durationMs); } catch (_) {} return; }
+  if (!IS_IOS) return; // 桌面 Safari/Firefox 沒震動也不該聽到嗡嗡聲
+  try {
+    initAudioCtx();
+    const t = audioCtx.currentTime;
+    const duration = durationMs / 1000;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = waveType;
+    osc.frequency.setValueAtTime(frequency, t);
+    gain.gain.setValueAtTime(0.0001, t);
+    if (curve && curve.length > 0) {
+      const step = duration / curve.length;
+      for (let i = 0; i < curve.length; i++) {
+        gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, curve[i]), t + (i + 1) * step);
+      }
+    }
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + duration + 0.05);
+  } catch (e) {
+    console.warn('Haptic curve error:', e);
+  }
 }
 
+const HAPTIC_PATTERNS = { light: 8, medium: 20, heavy: [15, 20, 25], error: [30, 40, 30, 40, 50] };
+const HAPTIC_CURVES = {
+  light:  { curve: [0.03, 0.01, 0.001], ms: 30, wave: 'sine', hz: 150, taps: 1 },
+  medium: { curve: [0.08, 0.04, 0.001], ms: 45, wave: 'sine', hz: 100, taps: 1 },
+  heavy:  { curve: [0.2, 0.05, 0.001], ms: 60, wave: 'square', hz: 80, taps: 2 },
+  error:  { curve: [0.2, 0.01, 0.2, 0.01, 0.3], ms: 250, wave: 'sawtooth', hz: 60, taps: 3 },
+};
+
 function haptic(type = 'light') {
-  if (localStorage.getItem('mute_haptic') === 'true') return;
-  const patterns = { light: 8, medium: 20, heavy: [15, 20, 25], error: [30, 40, 30, 40, 50] };
-  try { navigator.vibrate?.(patterns[type] || 8); } catch (_) {}
+  if (hapticMuted()) return;
+  if (hasVibrate()) { try { navigator.vibrate(HAPTIC_PATTERNS[type] || 8); } catch (_) {} return; }
+  if (!IS_IOS) return;
+  const h = HAPTIC_CURVES[type] || HAPTIC_CURVES.light;
+  iosSwitchHaptic(h.taps);
+  playHapticCurve(h.curve, h.ms, h.wave, h.hz);
+}
+
+// 主題切換：與 480ms 圓形擴散同步的「漸漸放大」漣漪震動
+function _themeHaptic() {
+  if (hapticMuted()) return;
+  if (hasVibrate()) { try { navigator.vibrate([8, 60, 20, 60, 40, 60, 80]); } catch (_) {} return; }
+  if (!IS_IOS) return;
+  iosSwitchHaptic(3, 140);
+  playHapticCurve([0.02, 0.01, 0.05, 0.02, 0.15, 0.25, 0.001], 400, 'sine', 120);
 }
 
 // ─── 自訂確認對話框 (替代原生 confirm) ─────────────────────────────────────
@@ -120,24 +192,14 @@ window.addEventListener('pointerdown', (e) => {
     lastTapY = e.clientY;
   }
 }, { passive: true });
-// ─── 觸覺震動反饋 ───────────────────────────────────────────────────────
+// ─── 觸覺震動反饋 (按鍵音效附帶) ───────────────────────────────────────
 function triggerHapticFeedback(type = 'default') {
-  if (localStorage.getItem('mute_haptic') === 'true') return;
-  if (!navigator.vibrate) return;
-  try {
-    switch (type) {
-      case 'confirm': navigator.vibrate(30); break;
-      case 'back': navigator.vibrate([15, 30, 15]); break;
-      case 'unlock': navigator.vibrate([20, 40, 30]); break;
-      case 'pin': navigator.vibrate(10); break;
-      case 'dev_unlock': navigator.vibrate([30, 50, 20, 50, 40]); break;
-      case 'dev_error': navigator.vibrate([40, 50, 40, 50, 60]); break;
-      case 'heavy': navigator.vibrate(40); break;
-      case 'light': navigator.vibrate(10); break;
-      case 'roll_in': navigator.vibrate(5); break;
-      default: navigator.vibrate(15);
-    }
-  } catch (e) { }
+  if (hapticMuted()) return;
+  const patterns = { confirm: 30, back: [15, 30, 15], unlock: [20, 40, 30], pin: 10, dev_unlock: [30, 50, 20, 50, 40], dev_error: [40, 50, 40, 50, 60], heavy: 40, light: 10, roll_in: 5, default: 15 };
+  if (hasVibrate()) { try { navigator.vibrate(patterns[type] ?? patterns.default); } catch (_) {} return; }
+  // iPhone：按鍵只敲 Taptic (無聲)，不播放低頻波形，避免每次點按都嗡一聲
+  const taps = { dev_unlock: 2, dev_error: 3, heavy: 2 };
+  iosSwitchHaptic(taps[type] || 1);
 }
 
 // ─── UI 清脆音效 (Web Audio API) ───────────────────────────────────────────
@@ -342,8 +404,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const hapticToggle = document.getElementById('setting-haptic');
     if (hapticToggle) hapticToggle.checked = localStorage.getItem('mute_haptic') !== 'true';
     const hapticHelp = document.getElementById('haptic-help');
-    if (hapticHelp && typeof navigator.vibrate !== 'function') {
-      hapticHelp.textContent = '此瀏覽器不支援網頁震動（包含 iPhone Safari）；音效可另外設定';
+    if (hapticHelp && !hasVibrate()) {
+      hapticHelp.textContent = IS_IOS ? 'iPhone 會用 Safari 觸覺開關與低頻波形模擬震動' : '此瀏覽器不支援網頁震動；音效可另外設定';
     }
 
     // 初始狀態：潘仔模式
@@ -469,8 +531,8 @@ function toggleMute(el) {
 function toggleHaptic(el) {
   localStorage.setItem('mute_haptic', !el.checked);
   if (el.checked) {
-    triggerHapticFeedback('confirm');
-    if (typeof navigator.vibrate !== 'function') showToast('此瀏覽器不支援網頁震動', 'info');
+    haptic('medium');
+    if (!hasVibrate() && !IS_IOS) showToast('此瀏覽器不支援網頁震動', 'info');
   } else { try { navigator.vibrate?.(0); } catch (_) {} }
 }
 

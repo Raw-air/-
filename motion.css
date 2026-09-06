@@ -1,53 +1,7 @@
-/* Floating dark capsule and a protruding optical lens, based on the supplied reference. */
-.bottom-nav.liquid-nav,body.light-mode .bottom-nav.liquid-nav {
-  left:50%;right:auto;bottom:calc(16px + env(safe-area-inset-bottom,0px));
-  width:min(364px,calc(100% - 36px));height:64px;padding:0 8px;
-  transform:translateX(-50%);border:0;border-radius:40px;
-  background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;
-  isolation:isolate;overflow:visible;--lens-x:8px;
-}
-.liquid-nav::before {
-  content:'';position:absolute;inset:0;border-radius:inherit;z-index:-2;
-  background:linear-gradient(180deg,rgba(24,28,31,.87),rgba(2,4,7,.93));
-  border:1px solid rgba(255,255,255,.2);
-  box-shadow:inset 0 1px 1px rgba(255,255,255,.16),0 12px 28px rgba(0,0,0,.32);
-  backdrop-filter:blur(22px) saturate(160%);-webkit-backdrop-filter:blur(22px) saturate(160%);
-}
-.liquid-lens {
-  position:absolute;left:0;top:-12px;width:88px;height:88px;border-radius:50%;
-  transform:translate3d(var(--lens-x),0,0);pointer-events:none;z-index:-1;
-  transition:transform .52s cubic-bezier(.2,.85,.2,1);
-  background:radial-gradient(ellipse at 18% 6%,rgba(228,251,255,.7),transparent 36%),
-    radial-gradient(ellipse at 85% 94%,rgba(197,235,255,.55),transparent 33%),
-    linear-gradient(135deg,rgba(230,244,252,.13),rgba(8,12,15,.08) 45%,rgba(189,219,228,.22));
-  backdrop-filter:blur(3px) saturate(180%) contrast(115%);
-  -webkit-backdrop-filter:blur(3px) saturate(180%) contrast(115%);
-  border:1px solid rgba(242,250,255,.64);
-  box-shadow:inset 2px 0 2px rgba(141,223,255,.9),inset -1px 0 1px rgba(255,229,213,.8),
-    inset 0 12px 12px -10px #ecf8ff,inset 0 -13px 10px -10px #adc8d7,
-    -2px 1px 1px rgba(12,73,133,.95),0 8px 18px rgba(0,0,0,.25);
-}
-.liquid-lens::before {
-  content:'';position:absolute;inset:2px;border-radius:inherit;
-  background:conic-gradient(from 15deg,transparent 0 15%,rgba(235,250,255,.85) 22%,transparent 28% 47%,rgba(207,233,245,.88) 58%,rgba(184,216,236,.65) 73%,transparent 82%);
-  mask:radial-gradient(ellipse 73% 56% at 57% 50%,transparent 58%,#000 62%);
-  -webkit-mask:radial-gradient(ellipse 73% 56% at 57% 50%,transparent 58%,#000 62%);
-  opacity:.8;
-}
-.liquid-nav .nav-item {height:64px;padding:9px 0;gap:2px;border:0;background:none;box-shadow:none;min-width:0;flex:1;border-radius:32px;transition:transform .2s;color:#889092;font:inherit;}
-.liquid-nav .nav-icon,.liquid-nav .nav-label,body.light-mode .liquid-nav .nav-icon,body.light-mode .liquid-nav .nav-label {color:#858b8d;filter:none;transition:color .22s,transform .3s;}
-.liquid-nav .nav-label {font-size:10px;line-height:14px;font-weight:600;}
-.liquid-nav .nav-icon {display:flex;align-items:center;justify-content:center;height:25px;}
-.liquid-nav .nav-icon svg {width:23px;height:23px;stroke-width:2;}
-.liquid-nav .nav-item.active .nav-icon,.liquid-nav .nav-item.active .nav-label,
-body.light-mode .liquid-nav .nav-item.active .nav-icon,body.light-mode .liquid-nav .nav-item.active .nav-label {color:#fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45));transform:none;}
-.liquid-nav .nav-item.active .nav-icon svg {fill:rgba(255,255,255,.15);}
-.liquid-nav .nav-item:focus-visible {outline:2px solid #b5e9ff;outline-offset:3px;}
-.liquid-nav .nav-item:active {transform:scale(.93);}
+/* 主題切換、住宿生卡片相關的動態規則；底部導覽列在 liquid-nav.css */
 label.switch:has(#setting-white-mode){view-transition-name:none;}
 html.theme-reveal * {transition-duration:0s!important;}
 body.light-mode img[src*="Lp/ICON/"]:not([src*="/BLACK/"]) {filter:brightness(0);}
-body.gravity-running .liquid-nav {z-index:10010;}
 ::view-transition-group(root){animation:none;}
 html.theme-reveal::view-transition-old(root){animation:none;z-index:1;}
 html.theme-reveal::view-transition-new(root){
@@ -55,12 +9,12 @@ html.theme-reveal::view-transition-new(root){
   animation:theme-circle-reveal 480ms cubic-bezier(.2,.7,.2,1) both;
 }
 @keyframes theme-circle-reveal {
-  from{clip-path:circle(0px at var(--theme-x) var(--theme-y));}
-  to{clip-path:circle(var(--theme-radius) at var(--theme-x) var(--theme-y));}
+  from{clip-path:circle(0px at var(--theme-x,50%) var(--theme-y,50%));}
+  to{clip-path:circle(var(--theme-radius,150%) at var(--theme-x,50%) var(--theme-y,50%));}
 }
 .sf-card-area-2d {touch-action:pan-y pinch-zoom;}
 .sf-card-area-2d:focus-visible {outline:2px solid var(--blue);outline-offset:-8px;}
 #page-student-files.sf-moving .sf-student-card-2d,
 #page-student-files.sf-moving .sf-student-card-2d * {transition:none!important;}
 .sf-student-card-2d.is-3d-active::after {box-shadow:var(--neu-out),0 12px 30px rgba(0,0,0,.15);}
-@media(prefers-reduced-motion:reduce){.liquid-lens{transition:none;} }
+
