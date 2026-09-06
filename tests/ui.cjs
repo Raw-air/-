@@ -35,6 +35,8 @@ async function run(engine,viewport){
   await page.waitForFunction(()=>typeof state!=='undefined'&&!state.loading);
   await page.evaluate(()=>navigateTo('settings'));
   await page.waitForTimeout(900);
+  assert.equal(await page.locator('.liquid-nav button').count(),4);
+  assert.equal(await page.locator('.liquid-nav [aria-current="page"]').getAttribute('data-page'),'settings');
   assert.equal(await page.locator('#setting-haptic').isChecked(),true);
   await page.evaluate(()=>{const el=document.getElementById('setting-haptic');el.checked=false;toggleHaptic(el);window.__vibrations=[];haptic('heavy');});
   assert.equal(await page.evaluate(()=>window.__vibrations.length),0);
@@ -45,7 +47,17 @@ async function run(engine,viewport){
     assert.ok(await page.evaluate(cls=>document.body.classList.contains(cls),cls));
     await page.evaluate(({id,fn})=>{let e=document.getElementById(id);e.checked=false;window[fn](e);},{id,fn});
   }
-  await page.evaluate(()=>{const e=document.getElementById('setting-white-mode');e.checked=true;toggleWhiteMode(e);});
+  await page.evaluate(()=>{const e=document.getElementById('setting-white-mode');window.__themeOrigin=_themeTapPoint(e);e.checked=true;toggleWhiteMode(e);});
+  await page.waitForFunction(()=>document.getAnimations().some(a=>a.animationName==='theme-circle-reveal'));
+  await page.evaluate(()=>_themeTransition?.ready);
+  assert.ok(await page.evaluate(()=>document.body.classList.contains('light-mode')));
+  assert.ok(await page.evaluate(()=>{
+    const p=window.__themeOrigin;
+    return parseFloat(document.documentElement.style.getPropertyValue('--theme-x'))===p.x && parseFloat(document.documentElement.style.getPropertyValue('--theme-y'))===p.y;
+  }));
+  await page.waitForTimeout(90);
+  assert.ok(await page.evaluate(()=>!document.documentElement.classList.contains('theme-reveal') || !getComputedStyle(document.documentElement,'::view-transition-new(root)').clipPath.startsWith('circle(0px')),'The first reveal must actually advance, including WebKit');
+  await page.screenshot({path:path.join(out,engine.name()+'-first-theme.png')});
   await page.waitForTimeout(120);
   await page.evaluate(()=>{const e=document.getElementById('setting-white-mode');e.checked=false;toggleWhiteMode(e);});
   await page.waitForTimeout(900);
@@ -83,9 +95,37 @@ async function run(engine,viewport){
   await page.waitForTimeout(100);
   assert.ok(await page.locator('.sf-student-card-2d').count()<=13);
   await page.evaluate(()=>{window._sfStopMotion();});
+  // A swipe can begin over an unfocused input; release settles in one short spring.
+  const field=await page.locator('.sf-student-card-2d.active .sf-input-name').boundingBox();
+  await page.mouse.move(field.x+field.width*.8,field.y+field.height*.5);
+  await page.mouse.down();await page.mouse.move(field.x-120,field.y+field.height*.5,{steps:12});await page.mouse.up();
+  await page.waitForTimeout(950);
+  assert.ok(await page.evaluate(()=>_sfActiveIndex>0));
+  assert.ok(await page.evaluate(()=>Math.abs(_currentX+_sfActiveIndex*_cardWidth)<.5));
+  // Return to the first synthetic card for deterministic screenshots.
+  await page.evaluate(()=>{window._sfStopMotion();renderStudentFileCards();});
+  await page.waitForTimeout(100);
+  await page.locator('.sf-student-card-2d.active .sf-input-name').fill('滑動後保留');
+  await page.evaluate(()=>window._sfSweepTo(0,-20*_cardWidth));
+  await page.waitForTimeout(950);
+  await page.evaluate(()=>window._sfSweepTo(_currentX,0));
+  await page.waitForTimeout(950);
+  assert.equal(await page.locator('.sf-student-card-2d.active .sf-input-name').inputValue(),'滑動後保留');
+  await page.evaluate(()=>{window._sfStopMotion();document.querySelector('.sf-student-card-2d.active .sf-input-name').value='測試住宿生 0';});
   await page.screenshot({path:path.join(out,engine.name()+'-cards.png')});
-  await page.evaluate(()=>{window.__bhDone=false;clearStudentData(document.querySelector('.sf-student-card-2d.active .sf-broom-btn')).then(()=>window.__bhDone=true);});
+  await page.evaluate(()=>{
+    const capture=captureGravityScene;
+    window.captureGravityScene=async(...args)=>{
+      const result=await capture(...args);window.__gravityBackground=result.background.toDataURL();
+      const cv=result.background,data=cv.getContext('2d').getImageData(0,0,cv.width,cv.height).data,colors=new Set();
+      for(let y=0;y<cv.height;y+=31)for(let x=0;x<cv.width;x+=29){const i=(y*cv.width+x)*4;colors.add(data[i]+','+data[i+1]+','+data[i+2]);}
+      window.__backgroundColors=colors.size;return result;
+    };
+    window.__bhDone=false;clearStudentData(document.querySelector('.sf-student-card-2d.active .sf-broom-btn')).then(()=>window.__bhDone=true);
+  });
   await page.waitForSelector('.bh-webgl-layer',{timeout:8000});
+  assert.ok(await page.evaluate(()=>window.__backgroundColors>10),'The background capture must contain page content, not an empty colour');
+  fs.writeFileSync(path.join(out,engine.name()+'-background.png'),Buffer.from((await page.evaluate(()=>window.__gravityBackground)).split(',')[1],'base64'));
   await page.waitForTimeout(1100);
   await page.screenshot({path:path.join(out,engine.name()+'-black-hole.png')});
   await page.waitForSelector('.bh-final-star',{timeout:7000});
@@ -144,6 +184,11 @@ async function run(engine,viewport){
     return [invalidBlocked,pinSaved,failedAppearancePreserved,failedSwitchRestored,muteSaved];
   });
   assert.deepEqual(adminChecks,[true,true,true,true,true]);
+  await page.evaluate(()=>localStorage.setItem('white_mode','true'));
+  await page.reload();await page.waitForFunction(()=>typeof state!=='undefined'&&!state.loading);
+  assert.equal(await page.locator('.liquid-nav .nav-icon img').count(),0);
+  assert.ok(await page.evaluate(()=>document.body.classList.contains('light-mode')));
+  await page.screenshot({path:path.join(out,engine.name()+'-light-navigation.png')});
   assert.deepEqual(errors,[]);
   console.log(engine.name()+' '+viewport.width+'x'+viewport.height+': settings, theme race, reel race, validation, virtual cards, lens/star, cancellation PASS');
   await browser.close();
@@ -155,7 +200,7 @@ async function offline(){
   await page.goto('http://127.0.0.1:'+server.address().port);
   await page.evaluate(()=>navigator.serviceWorker.ready);
   await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
-  assert.ok(await page.evaluate(async()=>(await caches.keys()).includes('biyuan-v51')));
+  assert.ok(await page.evaluate(async()=>(await caches.keys()).includes('biyuan-v52')));
   await context.setOffline(true);
   await page.reload({waitUntil:'domcontentloaded'});
   assert.ok(await page.evaluate(()=>typeof clearStudentData==='function' && typeof THREE==='object'));

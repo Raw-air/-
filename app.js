@@ -497,74 +497,11 @@ function performAppearanceChange(isLight) {
 // ─── 主題切換：一律「從按鈕位置往外擴散」(深色/淺色都一樣) ───────────────────
 // 舊版深色模式是把舊畫面往按鈕「縮進去」，看起來像從四周包過來，不是從按鈕展開。
 // 現在兩個方向都用「新畫面從按鈕位置畫圓擴散」，並補上舊 iPhone (沒有 View Transition) 的替代動畫。
-const THEME_VT_DURATION = 480;
-let _themeTransition = null;
-let _themeGeneration = 0;
-let _themeFallbackOverlay = null;
-let _themeFallbackTimer = null;
-
-function _themeTapPoint(el) {
-  const r = (el?.closest('label') || el || document.getElementById('setting-white-mode')).getBoundingClientRect();
-  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-}
-function _themeEndRadius(x, y) {
-  return Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y)) + 8;
-}
-function _themeFallbackTransition(isLight, x, y) {
-  // Older Safari: retain the original page while a target-colour ripple expands.
-  const ov = document.createElement('div');
-  _themeFallbackOverlay = ov;
-  ov.style.cssText = 'position:fixed;inset:0;z-index:20000;pointer-events:none;background:' + (isLight ? '#ebecf0' : '#151518');
-  document.body.appendChild(ov);
-  const animation = ov.animate({clipPath: ['circle(0px at '+x+'px '+y+'px)', 'circle('+_themeEndRadius(x,y)+'px at '+x+'px '+y+'px)']}, {duration: THEME_VT_DURATION, easing:'ease-out',fill:'forwards'});
-  const generation = _themeGeneration;
-  _themeFallbackTimer = setTimeout(() => {
-    if (generation !== _themeGeneration) return;
-    performAppearanceChange(isLight);
-    ov.animate({opacity:[1,0]}, {duration:180,fill:'forwards'}).finished.then(() => { ov.remove(); if (_themeFallbackOverlay === ov) _themeFallbackOverlay = null; });
-  }, THEME_VT_DURATION);
-  animation.finished.catch(() => {});
-}
-function toggleWhiteMode(el) {
-  const isLight = el.checked;
-  localStorage.setItem('white_mode', isLight);
-  const generation = ++_themeGeneration;
-  clearTimeout(_themeFallbackTimer);
-  _themeFallbackOverlay?.remove();
-  _themeFallbackOverlay = null;
-  _themeTransition?.skipTransition();
-  document.documentElement.classList.remove('vt-active');
-  const {x,y} = _themeTapPoint(el);
-  haptic('medium');
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { performAppearanceChange(isLight); return; }
-  if (!document.startViewTransition) { _themeFallbackTransition(isLight,x,y); return; }
-  document.documentElement.classList.add('vt-active');
-  const transition = document.startViewTransition(() => {
-    if (generation === _themeGeneration) performAppearanceChange(isLight);
-  });
-  _themeTransition = transition;
-  transition.ready.then(() => {
-    if (generation !== _themeGeneration) return;
-    return document.documentElement.animate(
-      {clipPath:['circle(0px at '+x+'px '+y+'px)', 'circle('+_themeEndRadius(x,y)+'px at '+x+'px '+y+'px)']},
-      {duration:THEME_VT_DURATION,easing:'cubic-bezier(.2,.7,.2,1)',fill:'forwards',pseudoElement:'::view-transition-new(root)'}
-    ).finished;
-  }).catch(() => { if (generation === _themeGeneration) performAppearanceChange(isLight); });
-  const cleanup = () => {
-    if (generation !== _themeGeneration) return;
-    document.documentElement.classList.remove('vt-active');
-    _themeTransition = null;
-  };
-  transition.finished.then(cleanup, cleanup);
-}
+// Theme transitions are defined in theme.js.
 
 function getIconSrc(baseName) {
-  const isLight = document.body.classList.contains('light-mode');
-  if (!isLight) return `./Lp/ICON/${baseName}.svg`;
-
-  if (baseName === 'SETTIN') return './Lp/ICON/BLACK/SETTINGS__BLACK.svg';
-  if (baseName === 'SAVE') return './Lp/ICON/BLACK/SAVE.svg';
-  return `./Lp/ICON/BLACK/${baseName}_BLACK.svg`;
+  // Keep one decoded SVG per icon; CSS recolours it without a first-toggle network load.
+  return './Lp/ICON/' + baseName + '.svg';
 }
 
 function updateAllImagesToTheme() {
@@ -1125,11 +1062,7 @@ function initDevChangelog() {
 let currentPage = 'home';
 let isInitialHomeRender = true;
 
-function setupNav() {
-  document.querySelectorAll('.nav-item').forEach(item => {
-    item.addEventListener('click', () => navigateTo(item.dataset.page));
-  });
-}
+// Liquid-glass navigation is defined in navigation.js.
 
 function navigateTo(page) {
   if (page === currentPage) { renderCurrentPage(true); return; }
@@ -2634,6 +2567,7 @@ const NAV_ICON_MAP = {
 };
 
 function applyNavIcons() {
+  if (document.querySelector('.liquid-nav')) return;
   const items = document.querySelectorAll('.nav-item');
   items.forEach(item => {
     const page = item.dataset.page;
@@ -3692,8 +3626,8 @@ function getRandomStudents(count) {
 
 function sfStudentAt(vIndex) {
   const n = _sfResults.length;
-  if (!n) return null;
-  return _sfResults[((vIndex % n) + n) % n];
+  if (vIndex < 0 || vIndex >= n) return null;
+  return _sfResults[vIndex];
 }
 
 function sfEsc(v) {
@@ -3782,6 +3716,7 @@ function sfBindCard(entry, vIndex) {
     _sfRenderMap.set(el, s);
   } else {
     el.innerHTML = '';
+    _sfRenderMap.delete(el);
   }
 }
 
@@ -3916,376 +3851,7 @@ let _currentX = 0;
 let _cardWidth = 308; // 300(card) + 8(gap)
 let _carouselAttached = false;
 
-function setup2DCarouselInteraction() {
-  const area = document.getElementById('sf-card-area');
-  const track = document.getElementById('sf-card-track');
-  const scene = document.getElementById('sf-scene');
-  const page = document.getElementById('page-student-files');
-
-  if (_carouselAttached || !scene || !track) return;
-  _carouselAttached = true;
-
-  let startX = 0;
-  let startY = 0;
-  let trackStartX = 0;
-  let isDragging = false;
-  let isHorizontalSwipe = null;
-
-  let _3dTimer = null;
-
-  const DRAG_THRESHOLD = 8;
-  const DECEL_RATE = 0.985;
-  const MIN_VELOCITY = 0.08;
-  const SNAP_SPRING_TENSION = 0.03;
-  const SNAP_SPRING_DAMPING = 0.88;
-  const VELOCITY_SAMPLES = 6;
-  const VELOCITY_WEIGHT_DECAY = 0.7;
-  const MAX_FLICK_CARDS = 6;
-
-  let _velocitySamples = [];
-  let _momentumFrame = null;
-  let _animFrame = null;
-  let _dragFrame = null;
-  let _sweepFrame = null;
-  let _isAnimating = false;
-
-  function setMoving(on) {
-    if (page) page.classList.toggle('sf-moving', !!on);
-  }
-
-  function cancelAllAnimations() {
-    if (_dragFrame) { cancelAnimationFrame(_dragFrame); _dragFrame = null; }
-    setMoving(false);
-    if (_momentumFrame) { cancelAnimationFrame(_momentumFrame); _momentumFrame = null; }
-    if (_animFrame) { cancelAnimationFrame(_animFrame); _animFrame = null; }
-    if (_sweepFrame) { cancelAnimationFrame(_sweepFrame); _sweepFrame = null; }
-    _isAnimating = false;
-  }
-
-  function applyX() {
-    track.style.transition = 'none';
-    track.style.transform = `translateX(${_currentX}px)`;
-    updateContinuousScale(_currentX);
-  }
-
-  window._restart3DTimer = function () {
-    disable3D();
-    _3dTimer = setTimeout(enable3D, 1200);
-  };
-
-  function enable3D() {
-    if (isDragging || _isAnimating || window._sfBHBusy || document.hidden || currentPage !== 'student-files') return;
-    const entry = sfActiveEntry();
-    if (entry) {
-      entry.el.classList.add('is-3d-active');
-      haptic('medium');
-      _3dCardIndex = _sfActiveIndex;
-      window._is3dMode = true;
-      updateContinuousScale(_currentX);
-    }
-  }
-
-  function disable3D() {
-    const was3dMode = window._is3dMode;
-    window._is3dMode = false;
-    if (_3dTimer) { clearTimeout(_3dTimer); _3dTimer = null; }
-    let changed = false;
-    for (const entry of _sfPool) {
-      const c = entry.el;
-      if (c.classList.contains('is-3d-active')) {
-        c.classList.remove('is-3d-active');
-        c.dataset.was3d = 'true';
-        setTimeout(() => { c.dataset.was3d = 'false'; }, 1200);
-        changed = true;
-      } else if (was3dMode) {
-        c.dataset.wasAway = 'true';
-        setTimeout(() => { c.dataset.wasAway = 'false'; }, 1200);
-        changed = true;
-      }
-    }
-    if (changed) updateContinuousScale(_currentX);
-  }
-  window._sfDisable3D = disable3D;
-  window._sfStopMotion = () => { cancelAllAnimations(); isDragging = false; disable3D(); };
-
-  function getWeightedVelocity() {
-    if (_velocitySamples.length === 0) return 0;
-    const now = performance.now();
-    const recent = _velocitySamples.filter(s => now - s.time < 100);
-    if (recent.length === 0) return 0;
-    let weightedSum = 0, weightTotal = 0;
-    for (let i = 0; i < recent.length; i++) {
-      const weight = Math.pow(VELOCITY_WEIGHT_DECAY, recent.length - 1 - i);
-      weightedSum += recent[i].velocity * weight;
-      weightTotal += weight;
-    }
-    return weightTotal > 0 ? weightedSum / weightTotal : 0;
-  }
-
-  let _3dCardIndex = -1;
-
-  function softDisable3DSpread() {
-    window._is3dMode = false;
-    if (_3dTimer) { clearTimeout(_3dTimer); _3dTimer = null; }
-    for (const entry of _sfPool) {
-      const c = entry.el;
-      if (!c.classList.contains('is-3d-active')) {
-        c.dataset.wasAway = 'true';
-        setTimeout(() => { c.dataset.wasAway = 'false'; }, 1200);
-      }
-    }
-  }
-
-  function onDown(e) {
-    if (window._sfBHBusy || scene.classList.contains('is-searching')) return;
-    if (e.target.closest('input, textarea, button, label, select')) return;
-    if (!_sfPool.length) return;
-    if (e.type === 'mousedown' && e.button !== 0) return;
-
-    cancelAllAnimations();
-
-    const targetCard = e.target.closest('.sf-student-card-2d');
-    const isClickOnActive = targetCard && targetCard.classList.contains('active');
-    if (!isClickOnActive) disable3D();
-
-    isDragging = true;
-    isHorizontalSwipe = null;
-    const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-    startX = clientX;
-    startY = clientY;
-    trackStartX = _currentX;
-    _velocitySamples = [{ x: clientX, time: performance.now(), velocity: 0 }];
-    track.style.transition = 'none';
-  }
-
-  function onMove(e) {
-    if (!isDragging) return;
-    const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-    const deltaX = clientX - startX;
-    const deltaY = clientY - startY;
-
-    if (isHorizontalSwipe === null && (Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD)) {
-      isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
-      if (!isHorizontalSwipe) { isDragging = false; return; }
-      setMoving(true);
-      if (window._is3dMode) softDisable3DSpread();
-    }
-
-    if (isHorizontalSwipe !== true && Math.abs(deltaX) < DRAG_THRESHOLD) return;
-    if (e.cancelable) e.preventDefault();
-
-    const now = performance.now();
-    const lastSample = _velocitySamples[_velocitySamples.length - 1];
-    const dt = now - lastSample.time;
-    if (dt > 0) {
-      const v = (clientX - lastSample.x) / dt;
-      _velocitySamples.push({ x: clientX, time: now, velocity: v });
-      if (_velocitySamples.length > VELOCITY_SAMPLES) _velocitySamples.shift();
-    }
-
-    _currentX = trackStartX + deltaX;
-    if (!_dragFrame) _dragFrame = requestAnimationFrame(() => { _dragFrame = null; applyX(); });
-  }
-
-  let _lastHapticIdx = null;
-  function updateContinuousScale(trackXStr) {
-    const currentTrackX = trackXStr !== undefined ? parseFloat(trackXStr) : _currentX;
-    const centerIdxFloat = -currentTrackX / _cardWidth;
-
-    sfSyncWindow(centerIdxFloat);
-
-    const currentIdx = Math.round(centerIdxFloat);
-    if (currentIdx !== _lastHapticIdx) {
-      if (_lastHapticIdx !== null) haptic('light');
-      _lastHapticIdx = currentIdx;
-    }
-
-    for (const entry of _sfPool) {
-      const c = entry.el;
-      if (entry.vIndex === null) continue;
-      const rawDiff = entry.vIndex - centerIdxFloat;
-      const absDiff = Math.abs(rawDiff);
-
-      // 離中心 4 張以上的卡片：完全不畫 (visibility + content-visibility)
-      if (absDiff > 4) { c.classList.add('sf-far'); continue; }
-      c.classList.remove('sf-far');
-
-      const t = Math.max(0, 1 - absDiff * 0.45);
-      const scale = 0.85 + 0.15 * (t * t);
-      const alpha = 0.8 + 0.2 * t;
-
-      c.style.zIndex = Math.round(100 - absDiff * 10);
-      c.style.opacity = alpha;
-
-      if (c.classList.contains('is-3d-active')) {
-        const displacement = absDiff;
-        const rotProgress = Math.max(0, Math.min(1, 1 - displacement / 0.6));
-        const rotAngle = 15 * rotProgress;
-        const scaleBoost = 0.05 * rotProgress;
-
-        if (displacement > 0.65 && isDragging) {
-          c.classList.remove('is-3d-active');
-          c.dataset.was3d = 'true';
-          _3dCardIndex = -1;
-          setTimeout(() => { c.dataset.was3d = 'false'; }, 1200);
-          c.style.transition = 'transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s';
-          c.style.transform = `translateX(0px) scale(${scale})`;
-        } else {
-          c.style.transition = isDragging
-            ? 'transform 0.15s ease-out'
-            : 'transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)';
-          c.style.transform = `perspective(1000px) rotate3d(0.5, 1, 0, ${rotAngle}deg) scale(${scale + scaleBoost})`;
-          c.style.opacity = '1';
-        }
-      } else {
-        if (isDragging) {
-          if (c.dataset.was3d === 'true' || c.dataset.wasAway === 'true') {
-            c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
-          } else {
-            c.style.transition = 'none';
-          }
-        } else {
-          if (c.dataset.was3d === 'true' || c.dataset.wasAway === 'true') {
-            c.style.transition = 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.8s';
-          } else {
-            c.style.transition = 'transform 0.8s cubic-bezier(0.25, 1, 0.5, 1)';
-          }
-        }
-
-        if (window._is3dMode && !isDragging) {
-          const spread = rawDiff < 0 ? -1500 : 1500;
-          c.style.transform = `translateX(${spread}px) scale(${scale})`;
-        } else {
-          c.style.transform = `translateX(0px) scale(${scale})`;
-        }
-      }
-    }
-  }
-  window._updateContinuousScale = updateContinuousScale;
-
-  function setActive(index) {
-    _sfActiveIndex = index;
-    for (const entry of _sfPool) entry.el.classList.toggle('active', entry.vIndex === _sfActiveIndex);
-  }
-
-  function springSnapTo(targetIndex) {
-    setActive(targetIndex);
-    const targetX = -(_sfActiveIndex * _cardWidth);
-
-    cancelAllAnimations();
-    _isAnimating = true;
-    setMoving(true);
-
-    let springVel = 0;
-    let springPos = _currentX;
-    const startTime = performance.now();
-
-    function finish() {
-      _currentX = targetX;
-      applyX();
-      _animFrame = null;
-      _isAnimating = false;
-      setMoving(false);
-      if (window._restart3DTimer) window._restart3DTimer();
-    }
-
-    function springStep() {
-      const displacement = springPos - targetX;
-      const springForce = -SNAP_SPRING_TENSION * displacement;
-      springVel = (springVel + springForce) * SNAP_SPRING_DAMPING;
-      springPos += springVel;
-
-      _currentX = springPos;
-      applyX();
-
-      if ((Math.abs(displacement) < 0.5 && Math.abs(springVel) < 0.1) || performance.now() - startTime > 2500) {
-        finish();
-        return;
-      }
-      _animFrame = requestAnimationFrame(springStep);
-    }
-    _animFrame = requestAnimationFrame(springStep);
-  }
-
-  function onUp(e) {
-    if (!isDragging) return;
-    isDragging = false;
-
-    const clientX = e.type.includes('touch')
-      ? (e.changedTouches ? e.changedTouches[0].clientX : startX)
-      : e.clientX;
-
-    const totalDeltaX = Math.abs(clientX - startX);
-    if (totalDeltaX < DRAG_THRESHOLD) { setMoving(false); return; }
-
-    const flickVelocity = getWeightedVelocity();
-    if (Math.abs(flickVelocity) < MIN_VELOCITY) {
-      springSnapTo(Math.round(-_currentX / _cardWidth));
-      return;
-    }
-
-    cancelAllAnimations();
-    _isAnimating = true;
-
-    const frameTime = 16.67;
-    let vel = flickVelocity * frameTime;
-    const maxVel = _cardWidth * 0.4;
-    if (vel > maxVel) vel = maxVel;
-    if (vel < -maxVel) vel = -maxVel;
-    // 一次甩最多滑 6 張卡 (以前不設限，用力一甩會滑 20 幾張、飄好幾秒)
-    const projected = Math.abs(vel) / (1 - DECEL_RATE);
-    const maxDist = MAX_FLICK_CARDS * _cardWidth;
-    if (projected > maxDist) vel *= maxDist / projected;
-
-    function momentumStep() {
-      vel *= DECEL_RATE;
-      _currentX += vel;
-      applyX();
-      if (Math.abs(vel) < 0.5) {
-        _momentumFrame = null;
-        springSnapTo(Math.round(-_currentX / _cardWidth));
-        return;
-      }
-      _momentumFrame = requestAnimationFrame(momentumStep);
-    }
-    _momentumFrame = requestAnimationFrame(momentumStep);
-  }
-
-  // 搜尋完成的「刷」一聲滑入
-  window._sfSweepTo = function (fromX, toX) {
-    cancelAllAnimations();
-    _isAnimating = true;
-    setMoving(true);
-    setActive(Math.round(-toX / _cardWidth));
-    const dur = 900;
-    const t0 = performance.now();
-    _currentX = fromX;
-    applyX();
-    function step(now) {
-      const p = Math.min(1, (now - t0) / dur);
-      const ease = 1 - Math.pow(1 - p, 4);
-      _currentX = fromX + (toX - fromX) * ease;
-      applyX();
-      if (p < 1) { _sweepFrame = requestAnimationFrame(step); return; }
-      _sweepFrame = null;
-      _isAnimating = false;
-      setMoving(false);
-      if (window._restart3DTimer) window._restart3DTimer();
-    }
-    _sweepFrame = requestAnimationFrame(step);
-  };
-
-  area.addEventListener('mousedown', onDown);
-  window.addEventListener('mousemove', onMove, { passive: false });
-  window.addEventListener('mouseup', onUp);
-
-  area.addEventListener('touchstart', onDown, { passive: true });
-  area.addEventListener('touchmove', onMove, { passive: false });
-  window.addEventListener('touchend', onUp);
-  window.addEventListener('touchcancel', onUp);
-}
+// Carousel interactions are defined in carousel.js.
 
 window.initStudentFiles = function () {
   _sfRandomDefaults = [];
