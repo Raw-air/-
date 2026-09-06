@@ -6,14 +6,16 @@ function setup2DCarouselInteraction() {
   const page=document.getElementById('page-student-files');
   if(_carouselAttached||!area||!track)return;
   _carouselAttached=true;
-  // 扇形排列參數：離中心越遠越往中間擠、轉得越側、退得越深 → 兩側疊成一落玻璃卡
-  const NEAR_PULL=64,FAR_PULL=200,MAX_ROT=62,ROT_PER=34,DEPTH=95,VISIBLE=2.7;
+  // 像在翻一疊資料夾：中間那張攤平可讀，兩側越後面轉得越側、越薄，一片片露出邊緣
+  // 位置不是「往中間擠多少」，而是反推「這張卡的外緣要落在哪」，所以不管螢幕多寬都剛好排滿
+  const CARD_HALF=150,MAX_ROT=76,DEPTH=84,SINK=7,VISIBLE=3.6;
   let active=false,dragging=false,touchId=null,mouseActive=false;
   let startX=0,startY=0,startTrack=0,lastX=0,lastTime=0,velocity=0;
   let frame=0,dragFrame=0,idle=0,suppressClick=false,lastIndex=0,smoothUntil=0;
   const SMOOTH='transform .75s cubic-bezier(.22,1,.36,1),opacity .5s ease';
   const count=()=>_sfResults.length;
-  const clampIndex=i=>Math.max(0,Math.min(count()-1,i));
+  // 名單是環狀的 (sfStudentAt 取模)，索引不設上下限
+  const clampIndex=i=>i;
   function moving(on){page.classList.toggle('sf-moving',on);}
   function stop(){cancelAnimationFrame(frame);cancelAnimationFrame(dragFrame);frame=dragFrame=0;clearTimeout(idle);moving(false);}
   // 每張卡只在數值真的改變時才寫 style，滑動時省下大量重複的樣式計算
@@ -28,30 +30,47 @@ function setup2DCarouselInteraction() {
   function paint(){
     track.style.transform=`translate3d(${_currentX}px,0,0)`;
     const center=-_currentX/_cardWidth,n=count(),spread=window._is3dMode;
+    // 中間卡片左右各剩多少空間可以攤開這疊檔案 (手機約 40px，桌機給到 150px)
+    const room=Math.max(24,Math.min(150,innerWidth/2-CARD_HALF-6));
     sfSyncWindow(center);
     for(const entry of _sfPool){
       const el=entry.el,v=entry.vIndex;
       if(v===null){el.classList.add('sf-far');continue;}
       const d=v-center,ad=Math.abs(d);
-      const visible=v>=0&&v<n&&ad<VISIBLE;
+      const visible=n>0&&ad<VISIBLE;
       el.classList.toggle('sf-far',!visible);
       if(!visible)continue;
       el.classList.toggle('active',v===_sfActiveIndex);
       if(spread&&v!==_sfActiveIndex){
         // 中央卡立起來的時候，兩側卡片讓開 (跟舊版一樣往左右飛出畫面)
+        if(el._bl){el.classList.remove('sf-blur1','sf-blur2');el._bl=0;}
+        if(el._sh){el.classList.remove('sf-sheet');el._sh=false;}
         put(el,`translate3d(${d<0?-1500:1500}px,0,0) scale(.85)`,'0','1');
         continue;
       }
       if(spread){
+        if(el._bl){el.classList.remove('sf-blur1','sf-blur2');el._bl=0;}
         put(el,'perspective(1200px) rotate3d(.5,1,0,14deg) scale(1.04)','1','120');
         continue;
       }
-      const s=d<0?-1:1,cap=Math.min(ad,3);
-      const pull=ad<=1?ad*NEAR_PULL:NEAR_PULL+(ad-1)*FAR_PULL;
-      const rot=-s*Math.min(MAX_ROT,ad*ROT_PER);
+      const s=d<0?-1:1,cap=Math.min(ad,4);
+      const deg=MAX_ROT*(1-Math.exp(-ad/1.15));          // 越後面轉得越側 → 看起來越薄
+      const scale=1-cap*.045;
+      const half=CARD_HALF*scale*Math.cos(deg*Math.PI/180); // 側轉後在畫面上的半寬
+      const edge=CARD_HALF+room*(1-Math.exp(-ad*.9));       // 這張卡外緣要露到哪
+      const cx=ad<.002?0:Math.max(0,edge-half);
+      const rot=-s*deg;
+      const sink=Math.pow(cap,1.2)*SINK;
+      const alpha=ad<=1?1-ad*.15:Math.max(.3,.85-(ad-1)*.17);
+      // 遠處的卡片用兩段固定模糊 (切 class 而不是逐幀寫 filter，才不會每幀重新解析)
+      const blur=ad<2?0:ad<3?1:2;
+      if(el._bl!==blur){el.classList.toggle('sf-blur1',blur===1);el.classList.toggle('sf-blur2',blur===2);el._bl=blur;}
+      // 不是中間那張就收起表單，只留玻璃面與床號 → 兩側像資料夾裡一張張紙
+      const sheet=ad>.55;
+      if(el._sh!==sheet){el.classList.toggle('sf-sheet',sheet);el._sh=sheet;}
       put(el,
-        `perspective(1400px) translate3d(${(-s*pull).toFixed(1)}px,0,${(-cap*DEPTH).toFixed(1)}px) rotateY(${rot.toFixed(1)}deg) scale(${(1-cap*.05).toFixed(3)})`,
-        (1-cap*.2).toFixed(3),
+        `perspective(1400px) translate3d(${(s*(cx-ad*_cardWidth)).toFixed(1)}px,${sink.toFixed(1)}px,${(-cap*DEPTH).toFixed(1)}px) rotateY(${rot.toFixed(1)}deg) scale(${scale.toFixed(3)})`,
+        alpha.toFixed(3),
         String(Math.round(100-ad*10)));
     }
     const index=clampIndex(Math.round(center));
@@ -111,12 +130,8 @@ function setup2DCarouselInteraction() {
     const dt=now-lastTime;
     if(dt>0)velocity=.65*((x-lastX)/dt*1000)+.35*velocity;
     lastX=x;lastTime=now;
-    // 有邊界：超出第一張/最後一張時用橡皮筋阻尼，放手會彈回去
-    const min=-(count()-1)*_cardWidth;
-    let px=startTrack+dx;
-    if(px>0)px=110*(1-Math.exp(-px/210));
-    else if(px<min)px=min-110*(1-Math.exp((px-min)/210));
-    _currentX=px;
+    _currentX=startTrack+dx;   // 無限循環：兩端都不設限
+
     if(!dragFrame)dragFrame=requestAnimationFrame(()=>{dragFrame=0;paint();});
     return true;
   }

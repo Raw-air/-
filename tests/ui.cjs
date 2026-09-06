@@ -219,7 +219,7 @@ async function offline(){
   await page.goto('http://127.0.0.1:'+server.address().port);
   await page.evaluate(()=>navigator.serviceWorker.ready);
   await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
-  assert.ok(await page.evaluate(async()=>(await caches.keys()).includes('biyuan-v55')));
+  assert.ok(await page.evaluate(async()=>(await caches.keys()).includes('biyuan-v56')));
   await context.setOffline(true);
   await page.reload({waitUntil:'domcontentloaded'});
   assert.ok(await page.evaluate(()=>typeof clearStudentData==='function' && typeof THREE==='object'));

@@ -10,8 +10,8 @@
   background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;
   isolation:isolate;overflow:visible;
   touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
-  /* 橢圓長條鏡片 (iOS 26 tab bar 的比例) */
-  --lens-w:84px;--lens-h:54px;--nav-w:364px;
+  /* 長條圓角鏡片：跟底下的膠囊同一種形狀，只是小一號 */
+  --lens-w:84px;--lens-h:54px;--lens-radius:27px;--nav-w:364px;
   --lens-ease:cubic-bezier(.22,1.2,.36,1);--lens-time:.55s;
   --lens-x:8px;
   transition:--lens-x var(--lens-time) var(--lens-ease);
@@ -47,15 +47,17 @@ body.light-mode .bottom-nav.liquid-nav {
 /* 鏡片後方的柔和粉/藍光暈 (soft glow, hints of pink) */
 .liquid-nav::after {
   content:'';position:absolute;left:0;top:50%;width:var(--lens-w);height:var(--lens-h);
-  margin-top:calc(var(--lens-h) / -2);border-radius:50%;z-index:-1;pointer-events:none;
+  margin-top:calc(var(--lens-h) / -2);border-radius:var(--lens-radius);z-index:-1;pointer-events:none;
   transform:translate3d(var(--lens-x),0,0);
   box-shadow:var(--halo);
 }
 /* 真實的四顆按鈕：包成一列，在鏡片位置挖一個橢圓洞 → 鏡片下只看得到複本，不會疊影 */
 .liquid-nav .nav-row {
   display:flex;flex:1;min-width:0;height:64px;align-items:center;
-  -webkit-mask-image:radial-gradient(ellipse calc(var(--lens-w) / 2 - 3px) calc(var(--lens-h) / 2 - 3px) at calc(var(--lens-x) - 8px + var(--lens-w) / 2) 50%,transparent 94%,#000 100%);
-  mask-image:radial-gradient(ellipse calc(var(--lens-w) / 2 - 3px) calc(var(--lens-h) / 2 - 3px) at calc(var(--lens-x) - 8px + var(--lens-w) / 2) 50%,transparent 94%,#000 100%);
+  --hole-l:calc(var(--lens-x) - 8px + 3px);
+  --hole-r:calc(var(--lens-x) - 8px + var(--lens-w) - 3px);
+  -webkit-mask-image:linear-gradient(90deg,#000 var(--hole-l),transparent calc(var(--hole-l) + 3px),transparent calc(var(--hole-r) - 3px),#000 var(--hole-r));
+  mask-image:linear-gradient(90deg,#000 var(--hole-l),transparent calc(var(--hole-l) + 3px),transparent calc(var(--hole-r) - 3px),#000 var(--hole-r));
 }
 /* 鏡片外層：只負責位移 */
 .liquid-lens {
@@ -66,7 +68,7 @@ body.light-mode .bottom-nav.liquid-nav {
 }
 /* 鏡片本體：橢圓裁切、按住時微放大、拖曳時依速度拉長、行進時的液態擠壓 */
 .lens-shape {
-  position:absolute;inset:0;border-radius:50%;overflow:hidden;isolation:isolate;
+  position:absolute;inset:0;border-radius:var(--lens-radius);overflow:hidden;isolation:isolate;
   -webkit-mask-image:-webkit-radial-gradient(#fff,#000);
   background:var(--lens-fill);
   box-shadow:var(--lens-shadow);
@@ -76,7 +78,7 @@ body.light-mode .bottom-nav.liquid-nav {
 .liquid-nav.is-pressing .lens-shape {transform:scale(calc(var(--lens-sx,1) * 1.05),calc(var(--lens-sy,1) * 1.07));}
 .liquid-nav.is-dragging .lens-shape {transition:transform .06s linear;}
 .lens-blur {
-  position:absolute;inset:0;border-radius:50%;
+  position:absolute;inset:0;border-radius:var(--lens-radius);
   backdrop-filter:blur(2px) saturate(150%) brightness(var(--lens-bright));-webkit-backdrop-filter:blur(2px) saturate(150%) brightness(var(--lens-bright));
 }
 @keyframes liquid-squish {
@@ -101,7 +103,7 @@ body.light-mode .bottom-nav.liquid-nav {
 .lens-item.active .nav-icon {filter:drop-shadow(0 1px 6px rgba(191,90,242,.45));}
 /* 邊緣：亮環、上方鏡面高光、底部內陰影 (球面)、右下藍光、左上粉光 (色散) */
 .lens-rim {
-  position:absolute;inset:0;border-radius:50%;z-index:2;
+  position:absolute;inset:0;border-radius:var(--lens-radius);z-index:2;
   background:radial-gradient(ellipse 60% 55% at 32% 20%,var(--rim-hi),rgba(255,255,255,0) 70%),
     radial-gradient(ellipse 55% 50% at 74% 86%,var(--rim-pink),rgba(255,170,235,0) 72%);
   box-shadow:inset 0 0 0 1px var(--lens-ring),
