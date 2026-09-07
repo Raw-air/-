@@ -3999,7 +3999,7 @@ function sfBindCard(entry, vIndex) {
   el.style.visibility = '';
   el.style.webkitMaskImage = ''; el.style.maskImage = '';
   el.style.removeProperty('--fd-alpha'); el.style.removeProperty('--fd-overlap');
-  el._tf = el._op = el._nr = null; el._bl = 0;   // 資料夾換人時清掉 carousel.js 的樣式快取
+  el._tf = el._op = el._nr = el._lf = null; el._bl = 0;   // 資料夾換人時清掉 carousel.js 的樣式快取 (className 重設會把 class 全清掉，快取也要一起清)
   if (vIndex === _sfActiveIndex) el.classList.add('active');
   if (s) {
     el.innerHTML = sfCardHTML(s, _sfDrafts.get(s.id) || sfLiveDraft(s.id, el));

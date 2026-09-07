@@ -1,11 +1,12 @@
-// 住宿生檔案：透明壓克力資料夾的「空間軌道」(spatial folder rail)
+// 住宿生檔案：透明壓克力資料夾的「弧形空間軌道」(curved spatial folder rail)
 // ─────────────────────────────────────────────────────────────────────────────
-// 這不是輪播，是一條斜插進畫面的檔案軌道：所有資料夾同一個朝向 (yaw -24°，左右不鏡像)，
-// 沿著一條往「右後方 44°」延伸的直線排列，越後面的離鏡頭越遠 —— 大小完全由透視決定
-// (不用 scale)，所以最近與最遠差到 2.4 倍，一整排會明顯往深處收斂、彼此重疊。
-// 目前這本從軌道上「抽離」出來：往鏡頭 +155px、微微上移、稍微離開軌道，角度只校正三分之一，
-// 看起來像從一整疊檔案裡被拉出來查看，而不是中間那張被放大。
-// 近端 (已經看過的) 在 z 上很快飽和並淡出，才不會衝到鏡頭前面擋住抽出來的那本。
+// 不是輪播。一整排透明資料夾像抽屜裡的檔案，站在一段橢圓弧上 (圓心在鏡頭這一側，弧的頂點
+// 最靠近鏡頭)。每本的位置與朝向都來自同一條曲線：位置 = 弧上的點，朝向 = 弧的切線 + 90°
+// (資料夾正面跟軌道方向垂直)。所以頂點附近的資料夾幾乎側對鏡頭 (只看到壓克力邊緣與內頁、
+// 中間露出黑色空隙)，離頂點越遠正面露得越多；過了頂點的那些從另一側看到正面。
+// 大小交給 perspective + translateZ (弧的縱深)，manual scale 只有抽出時 ±3% 的脈衝。
+// 目前這本停在頂點左邊 (φA)，「抽出」= 離開弧往鏡頭 +200px、微微上移、往左一點，朝向從軌道給的
+// 側視角校正到 22°，看起來是從一整疊裡拉出來查看，不是中間那張放大。
 // 每本的姿態都是「離中心幾本 (d)」的連續函數，拖曳時逐幀直接寫 transform，放手用阻尼彈簧
 // 吸到最近一本；一個 rAF 迴圈推進全部子動畫，狀態機 idle / dragging / snapping /
 // extracting / entering / locked，不用 setTimeout 疊時間軸。
@@ -17,14 +18,27 @@ function setup2DCarouselInteraction() {
   if (_carouselAttached || !area || !track) return;
   _carouselAttached = true;
 
-  // ── 軌道幾何：依畫面寬度算，resize / 進場時重算 ────────────────────────────
+  // ── 弧形軌道：依畫面寬度算，resize / 進場時重算 ────────────────────────────
   const PERSP = 1500, ORIGIN_X = .34, ORIGIN_Y = .40;   // 跟 folder.css 的 perspective / perspective-origin 一致
   const RAD = Math.PI / 180;
   const cfg = {};
-  // 軌道參數：遠端 (d>0) 線性往後延伸，近端 (d<0) 指數飽和 —— 否則往前會衝到鏡頭前面爆掉
-  const soft = (d, n) => d >= 0 ? d : -n * (1 - Math.exp(d / n));
-  const railX = d => (soft(d, cfg.nearX)) * cfg.rail * Math.cos(cfg.theta * RAD) + cfg.offset;
-  const railZ = d => -(soft(d, cfg.nearZ)) * cfg.rail * Math.sin(cfg.theta * RAD);
+  // 軌道是一段橢圓弧：φ 是弧上的角度，φ=0 是最靠近鏡頭的頂點，目前這本停在 φA (<0，頂點左邊)，
+  //   x(φ) = cx + RX·sin φ,   z(φ) = zNear − RZ·(1 − cos φ)
+  // 切線 = (RX·cos φ, −RZ·sin φ)；資料夾正面跟軌道方向垂直，朝向取正面朝著鏡頭的那個解：
+  //   yaw = atan2(RX·cos φ, −RZ·sin φ)  → 頂點左邊是正角 (從右前方看到正面)，頂點 = 90° (側對)，
+  //   過了頂點是負角 (從左前方看到正面)。角度沿弧連續變化，頂點那一格的 ±90° 換面是刻意的
+  //   (正面永遠朝著鏡頭)，不是 sign(offset) 那種左右鏡像的固定角度。
+  const phiOf = d => cfg.phiA + d * cfg.dPhi;
+  const R0 = {}, R1 = {};
+  function rail(d, out) {
+    const phi = phiOf(d) * RAD, s = Math.sin(phi), co = Math.cos(phi);
+    out.x = cfg.cx + cfg.RX * s;
+    out.z = cfg.zNear - cfg.RZ * (1 - co);
+    let yaw = Math.atan2(cfg.RX * co, -cfg.RZ * s) / RAD;
+    if (yaw > 90) yaw -= 180;
+    out.yaw = yaw;
+    return out;
+  }
   // 世界座標 → 畫面 px (元素本身排在舞台正中，所以要加 W/2)
   function project(x, z) {
     const W = area.clientWidth || innerWidth, ox = W * ORIGIN_X;
@@ -34,32 +48,35 @@ function setup2DCarouselInteraction() {
     const W = area.clientWidth || innerWidth;
     const mobile = W < 640, tablet = W < 1024;
     cfg.mobile = mobile;
-    cfg.fw = mobile ? Math.max(268, Math.min(W - 78, 400)) : tablet ? 380 : 440;   // 橫式：寬 : 高 ≈ 1.55
+    cfg.fw = mobile ? Math.max(256, Math.min(W - 96, 380)) : tablet ? 380 : 440;   // 橫式：寬 : 高 ≈ 1.55
     cfg.fh = Math.round(cfg.fw / 1.55);
-    cfg.rail = mobile ? 95 : tablet ? 150 : 200;    // 沿軌道每本的間距 (世界座標)
-    // 軌道與畫面平面的夾角：手機螢幕窄，角度開大一點，同樣的橫向寬度才換得到足夠的縱深
-    cfg.theta = mobile ? 52 : 44;
-    cfg.nearX = 2.4;                                // 近端在 X 上還會再散開一點
-    cfg.nearZ = .5;                                 // 近端在 Z 上很快飽和 (最多 ~70px，遠低於抽出的 155)
-    // 抽出那本落在畫面寬度的幾成 (偏左前方)；手機螢幕窄，太靠左會被切掉，所以往中間挪
-    cfg.activeX = mobile ? .42 : tablet ? .29 : .27;
-    cfg.pull = mobile ? 122 : tablet ? 140 : 155;   // 從軌道抽離往鏡頭多少
-    cfg.side = mobile ? 16 : 26;                    // 抽出時再往左偏一點 (離開軌道)
-    cfg.lift = mobile ? 13 : 18;                    // 抽出時上移
-    cfg.part = .14;                                 // 鄰居讓開 (沿軌道，單位 = 幾本)
-    cfg.yaw = -24;                                  // 每一本的朝向，整排相同、左右不鏡像
-    cfg.yawDrift = .34;                             // 越遠只多轉 0.34°/本 (最多 +3°)
-    cfg.faceUp = .34;                               // 抽出時角度只校正三分之一 (-24° → -16°)，不轉正
-    cfg.farVisible = mobile ? 7 : tablet ? 9.5 : 13.2;     // 往深處看得到幾本
-    cfg.nearVisible = 2.8;                                 // 往近處看得到幾本
+    cfg.RX = mobile ? 250 : tablet ? 520 : 700;      // 弧的橫向半徑
+    cfg.RZ = mobile ? 200 : tablet ? 400 : 520;      // 弧的縱深半徑 (越大越有透視收斂，但近遠倍率差也越大)
+    cfg.zNear = 40;                                  // 頂點離鏡頭多近，其餘都在它後面
+    cfg.phiA = mobile ? -40 : -42;                   // 目前這本停在弧的哪個角度
+    cfg.dPhi = mobile ? 15 : tablet ? 9 : 8;         // 每本差幾度 (越大間隙越明顯)
+    cfg.activeX = mobile ? .40 : .30;                // 抽出那本落在畫面寬度的幾成
+    cfg.pull = mobile ? 150 : tablet ? 180 : 200;    // 抽出：離開弧往鏡頭多少
+    cfg.side = mobile ? 14 : 30;                     // 抽出：再往左偏一點 (離開軌道)
+    cfg.lift = mobile ? 14 : 20;                     // 抽出：上移
+    cfg.activeYaw = 22;                              // 抽出後的朝向 (軌道給的側視角只校正到這裡，不轉正)
+    cfg.part = .12;                                  // 鄰居沿弧讓開幾本
+    cfg.farVisible = mobile ? 5.4 : tablet ? 9 : 11.5;   // 深處看得到幾本 (超出舞台的就別畫了)
+    cfg.fade = mobile ? 1.8 : 3.5;                       // 尾端幾本內淡到 0
+    cfg.nearVisible = mobile ? 2.4 : 3.2;
+    // 依深度切兩段模糊：門檻取弧上「真正到得了」的深度範圍 (近端 / 遠端誰更深就用誰) 的 45% 與 75%
+    cfg.cx = 0;
+    const zEnd = Math.min(rail(cfg.farVisible, R0).z, rail(-cfg.nearVisible, R1).z), zTop = cfg.zNear;
+    cfg.blur1 = zTop + (zEnd - zTop) * .45; cfg.blur2 = zTop + (zEnd - zTop) * .75;
     area.style.setProperty('--fd-w', cfg.fw + 'px');
     area.style.setProperty('--fd-h', cfg.fh + 'px');
-    // 解出軌道位移，讓抽出那本剛好落在 activeX
-    const ox = W * ORIGIN_X, P = PERSP / (PERSP - cfg.pull);
-    cfg.offset = 0;
-    cfg.offset = (cfg.activeX * W - ox) / P - (W / 2 - ox);
-    // 拖一個虛擬索引，中央那本在畫面上實際走幾 px (手指 1:1 帶著它走)
-    _cardWidth = Math.max(36, Math.abs(project(railX(1), railZ(1)) - cfg.activeX * W));
+    // 解出弧的位置 cx，讓抽出來的那本 (含 pull、side) 剛好落在 activeX
+    cfg.cx = 0;
+    const a = rail(0, R0), ox = W * ORIGIN_X, P = PERSP / (PERSP - a.z - cfg.pull);
+    cfg.cx = (cfg.activeX * W - ox) / P - (W / 2 + a.x - cfg.side - ox);
+    // 拖一個虛擬索引 = 中央那本在畫面上實際走幾 px (手指 1:1 帶著它走；太小會太敏感，給個下限)
+    const b = rail(1, R1);
+    _cardWidth = Math.max(mobile ? 54 : 60, Math.abs(project(b.x, b.z) - cfg.activeX * W));
   }
   measure();
 
@@ -68,7 +85,7 @@ function setup2DCarouselInteraction() {
   let c = 0;                          // 目前中心 (虛擬索引，浮點)
   let frame = 0;
   let lastIndex = 0, suppressClick = false;
-  const ext = { mode: 'none', t0: 0, from: 0, base: 0, ex: 1, part: 1, pulse: 1, done: null };   // 抽出時間軸
+  const ext = { mode: 'none', t0: 0, from: 0, base: 0, basePart: 0, ex: 1, part: 1, pulse: 1, done: null };   // 抽出時間軸
   let ent = null;                     // 進場：{ t0, only: entry|null }
   const sheet = { amt: 0, target: 0, t0: 0, from: 0, shift: 0, timer: 0, entry: null, vIndex: null };   // 詳細資料紙
   const snap = { active: false, target: 0, delta: 0, speed: 0, t0: 0 };
@@ -97,44 +114,43 @@ function setup2DCarouselInteraction() {
   }
 
   // ── 每本的姿態：離中心 d 本 (可為負、浮點) ───────────────────────────────
-  // 大小不用 scale，全部交給透視：z 從 +155 (抽出) 一路退到 -1800 (最深)，倍率 1.12 → 0.45
   const P0 = {}, G0 = {};
   function pose(d, out) {
     const ad = Math.abs(d), s = d < 0 ? -1 : 1;
     // 抽出只影響中央這本 (ad<.5)，用鐘形權重讓拖曳時連續過渡
     const bump = ad < .5 ? 1 - smooth(ad / .5) : 0;
     const k = ext.ex * bump;
-    const room = s * cfg.part * ext.part * smooth(Math.min(ad, 1));   // 鄰居沿軌道讓開
-    const ux = soft(d, cfg.nearX) + room, uz = soft(d, cfg.nearZ) + room;
-    const th = cfg.theta * RAD;
-    out.x = ux * cfg.rail * Math.cos(th) + cfg.offset - cfg.side * k;
+    const room = s * cfg.part * ext.part * smooth(Math.min(ad, 1));   // 鄰居沿弧讓開
+    const r = rail(d + room, R0);
+    // 抽出：離開弧往鏡頭、微微上移、往左一點；朝向從軌道給的側視角校正到 activeYaw
+    out.x = r.x - cfg.side * k;
     out.y = -cfg.lift * k;
-    out.z = -uz * cfg.rail * Math.sin(th) + cfg.pull * k;
-    out.rot = cfg.yaw + Math.min(ad, 9) * cfg.yawDrift - cfg.yaw * cfg.faceUp * k;
-    out.scale = 1 + (ext.pulse - 1) * bump;
+    out.z = r.z + cfg.pull * k;
+    out.rot = r.yaw + (cfg.activeYaw - r.yaw) * k;
+    out.scale = 1 + (ext.pulse - 1) * bump;         // 大小交給透視；這裡只有抽出時 ±3% 的脈衝
     // 兩端都淡到 0 才離開視窗，回收換人時才不會在畫面上「跳出來」
     const near = d < -1 ? Math.max(0, 1 + (d + 1) / (cfg.nearVisible - 1)) : 1;
-    const far = Math.min(1, (cfg.farVisible - ux) / 3.5);
+    const far = Math.min(1, (cfg.farVisible - d) / cfg.fade);
     out.alpha = Math.max(0, Math.min(near, far));
-    out.near = d > -1.6 && d < 2.6;                                  // 只有這些給 will-change
-    out.blur = ux > cfg.farVisible * .74 ? 2 : ux > cfg.farVisible * .46 ? 1 : d < -1.9 ? 1 : 0;
+    out.near = d > -1.6 && d < 2.6;                 // 只有這些給 will-change
+    out.blur = out.z < cfg.blur2 ? 2 : out.z < cfg.blur1 ? 1 : 0;
+    out.lefty = r.yaw > 0;                          // yaw>0 (頂點左邊) 左緣離鏡頭近、露在外面 → 側標與標籤放左邊；yaw<0 放右邊
     return out;
   }
-  // 進場前「整疊還沒攤開」的姿態：全部擠在軌道前段、更深、透明
+  // 進場前「整疊還沒攤開」的姿態：全部擠在目前這本附近、更深、透明
   function gathered(d, out) {
-    const th = cfg.theta * RAD, u = soft(d, cfg.nearX) * .34;
-    out.x = u * cfg.rail * Math.cos(th) + cfg.offset;
-    out.y = 6; out.z = -u * cfg.rail * Math.sin(th) - 150;
-    out.rot = cfg.yaw - 9; out.scale = .96; out.alpha = 0;
+    const r = rail(d * .35, R0), dst = rail(d, R1);
+    out.x = r.x; out.y = 6; out.z = r.z - 140; out.rot = dst.yaw + (dst.yaw < 0 ? -8 : 8); out.scale = .96; out.alpha = 0;
     return out;
   }
 
   // 只有值真的變了才寫 style，拖曳時省下大量樣式計算
-  function put(el, transform, alpha, near, blur) {
+  function put(el, transform, alpha, near, blur, lefty) {
     if (el._tf !== transform) { el.style.transform = transform; el._tf = transform; }
     if (el._op !== alpha) { el.style.setProperty('--fd-alpha', alpha); el._op = alpha; }
     if (el._nr !== near) { el.classList.toggle('fd-near', near); el._nr = near; }
     if (el._bl !== blur) { el.classList.toggle('fd-blur1', blur === 1); el.classList.toggle('fd-blur2', blur === 2); el._bl = blur; }
+    if (el._lf !== lefty) { el.classList.toggle('fd-lefty', lefty); el._lf = lefty; }
   }
 
   function paint() {
@@ -166,7 +182,7 @@ function setup2DCarouselInteraction() {
       const y = p.y + (entry === sheet.entry && v === sheet.vIndex ? sheet.shift * sheet.amt : 0);   // 回收換人就不套
       put(el,
         `translate3d(${p.x.toFixed(1)}px,${y.toFixed(1)}px,${p.z.toFixed(1)}px) rotateY(${p.rot.toFixed(2)}deg) scale(${p.scale.toFixed(3)})`,
-        p.alpha.toFixed(3), p.near, p.blur);
+        p.alpha.toFixed(3), p.near, p.blur, p.lefty);
       // 資料紙要正對使用者，所以把這本的 yaw 反轉回去
       if (isActive) {
         const cy = (-p.rot).toFixed(2) + 'deg';
@@ -192,8 +208,8 @@ function setup2DCarouselInteraction() {
     }
     // 抽出 (in) / 塞回 (out)
     if (ext.mode === 'in') {
-      const t = (now - ext.t0) / 1000, b = ext.base;
-      ext.part = b + (1 - b) * outCubic(t / .16);
+      const t = (now - ext.t0) / 1000, b = ext.base, bp = ext.basePart;
+      ext.part = bp + (1 - bp) * outCubic(t / .16);
       ext.ex = b + (1 - b) * springEx(t - .06);
       ext.pulse = 1 + .03 * (1 - b) * Math.sin(Math.PI * clamp01(t / .55));
       if (t < .68) more = true;
@@ -219,7 +235,7 @@ function setup2DCarouselInteraction() {
     if (sheet.amt !== sheet.target) {
       const t = clamp01((now - sheet.t0) / (sheet.target ? 480 : 220));
       sheet.amt = sheet.from + (sheet.target - sheet.from) * outQuint(t);
-      if (t < 1) more = true; else sheet.amt = sheet.target;
+      if (t < 1) more = true; else { sheet.amt = sheet.target; if (!sheet.target) { sheet.entry = null; sheet.vIndex = null; } }
     }
     paint();
     if (more) requestFrame();
@@ -230,8 +246,8 @@ function setup2DCarouselInteraction() {
     if (reduced()) { ext.mode = 'none'; ext.ex = ext.part = ext.pulse = 1; state = 'idle'; paint(); scheduleOpen(); const cb = ext.done; ext.done = null; if (cb) cb(); return; }
     state = 'extracting';
     ext.mode = 'in'; ext.t0 = now || performance.now();
-    ext.base = clamp01(Math.min(ext.ex, ext.part));      // 從目前抽到一半的位置接著抽，不跳回 0
-    ext.ex = ext.part = ext.base; ext.pulse = 1;
+    ext.base = clamp01(ext.ex); ext.basePart = clamp01(ext.part);   // 從目前的位置接著抽，不跳回 0
+    ext.ex = ext.base; ext.part = ext.basePart; ext.pulse = 1;
     haptic('medium');
     requestFrame();
   }
@@ -251,7 +267,8 @@ function setup2DCarouselInteraction() {
     // 透視原點在舞台 (50%, 44%)。要讓紙的頂端留 12px、資料夾底部也留 12px。
     const sh = area.clientHeight || 560, fh = cfg.fh, h = s.offsetHeight;
     const oy = sh * ORIGIN_Y, Ly = sh / 2 - fh / 2;
-    const Pz = PERSP / (PERSP - cfg.pull), Ps = PERSP / (PERSP - cfg.pull - 40);
+    const zA = rail(0, R0).z + cfg.pull;                 // 抽出那本的深度
+    const Pz = PERSP / (PERSP - zA), Ps = PERSP / (PERSP - zA - 40);
     let overlap = 74;                                   // 紙的下緣插進資料夾多深
     const yActive = -cfg.lift;                           // pose() 給抽出那本的 y
     let need = (12 - oy) / Ps + oy - Ly - overlap + h;   // 紙頂端不被切到，根節點至少要往下多少
@@ -464,14 +481,14 @@ function setup2DCarouselInteraction() {
       requestFrame();
     },
     // 刪除完、床位清空後，同一本資料夾重新「長回來」：短進場 + 小抽出。回傳抽出完成的 Promise
-    materialize(el) {
+    materialize(el) {   // 鄰居維持讓開的狀態 (part 保持 1)，只有這本從 0 重新抽出
       const entry = _sfPool.find(x => x.el === el);
       state = 'idle';
       if (!entry) { paint(); return Promise.resolve(); }
       return new Promise(resolve => {
         ext.done = resolve;
         if (reduced()) { ext.ex = ext.part = ext.pulse = 1; paint(); scheduleOpen(); const cb = ext.done; ext.done = null; cb(); return; }
-        ext.mode = 'none'; ext.ex = ext.part = 0; ext.pulse = 1;
+        ext.mode = 'none'; ext.ex = 0; ext.part = 1; ext.pulse = 1;
         ent = { t0: performance.now(), only: entry };
         state = 'entering';
         paint(); ent.t0 = performance.now();

@@ -98,29 +98,35 @@ async function run(engine,viewport){
   await page.waitForTimeout(100);
   assert.ok(await page.locator('.sf-folder').count()<=17);
   await page.evaluate(()=>{window._sfStopMotion();});
-  // 斜向空間軌道：橫式資料夾、多層殼 + 資料紙；整排同一個 yaw、只有 X/Z 不同；深度差要夠大
+  // 弧形空間軌道：橫式多層資料夾 + 資料紙；朝向來自弧的切線 (弧頂側對鏡頭、兩端露正面、連續變化)；
+  // 抽出那本 z 最前且朝向 10–30°；大小靠透視 (manual scale 只有 1)
   const geo=await page.evaluate(()=>{
     const num=(el,re)=>parseFloat((el.style.transform.match(re)||[])[1]);
     const zOf=el=>num(el,/translate3d\([^,]+,[^,]+,\s*(-?[\d.]+)px\)/);
-    const xOf=el=>num(el,/translate3d\(\s*(-?[\d.]+)px/);
     const yawOf=el=>num(el,/rotateY\((-?[\d.]+)deg\)/);
+    const scOf=el=>num(el,/scale\((-?[\d.]+)\)/);
     const f=document.querySelector('.sf-folder.active'),r=f.getBoundingClientRect();
-    const n=Array.from(document.querySelectorAll('.sf-folder:not(.sf-far):not(.active)'));
-    const far=n.filter(e=>parseFloat(e.dataset.index)>_sfActiveIndex);
+    const n=Array.from(document.querySelectorAll('.sf-folder:not(.sf-far):not(.active)')).map(e=>({i:+e.dataset.index,yaw:yawOf(e),z:zOf(e),scale:scOf(e)})).sort((p,q)=>p.i-q.i);
     return {ratio:r.width/r.height,layers:f.children.length,front:!!f.querySelector('.fd-front'),sheet:!!f.querySelector('.fd-sheet'),
-      top:!!f.querySelector('.fd-top'),spines:f.querySelectorAll('.fd-spine').length,
-      neighbours:n.length,yaws:n.map(yawOf),activeYaw:yawOf(f),activeZ:zOf(f),zs:n.map(zOf),
-      farZ:far.map(zOf),farX:far.map(xOf),preserve:getComputedStyle(f).transformStyle==='preserve-3d'};
+      top:!!f.querySelector('.fd-top'),spines:f.querySelectorAll('.fd-spine').length,active:{i:_sfActiveIndex,yaw:yawOf(f),z:zOf(f),scale:scOf(f)},
+      n,preserve:getComputedStyle(f).transformStyle==='preserve-3d'};
   });
   assert.ok(geo.ratio>1.3&&geo.ratio<1.9,'landscape folder '+geo.ratio);
   assert.ok(geo.layers>=9&&geo.front&&geo.sheet&&geo.top&&geo.spines===2&&geo.preserve,'layered folder (front/back/top/2 spines/paper/edge) + sheet in a 3D context');
-  assert.ok(geo.neighbours>=4,'the rail shows a run of folders: '+geo.neighbours);
-  assert.ok(geo.yaws.concat(geo.activeYaw).every(y=>y<=-13&&y>=-31),'every folder shares one yaw, no mirrored fan: '+geo.yaws.join(','));
-  assert.ok(geo.zs.every(z=>geo.activeZ-z>55),'the active folder is pulled out of the rail: '+geo.activeZ+' vs '+geo.zs.join(','));
-  assert.ok(Math.max(...geo.zs)-Math.min(...geo.zs)>500,'the rail really recedes into the distance: '+geo.zs.join(','));
-  // 往深處那一段：index 越大 → X 越右、Z 越後 (斜向軌道，不是水平平鋪)
-  const farPairs=geo.farX.map((x,i)=>[x,geo.farZ[i]]).sort((p,q)=>p[0]-q[0]);
-  assert.ok(farPairs.length>=3&&farPairs.every((p,i)=>i===0||p[1]<farPairs[i-1][1]),'往右的同時往後退 (斜向軌道): '+JSON.stringify(farPairs));
+  assert.ok(geo.n.length>=4,'the rail shows a run of folders: '+geo.n.length);
+  const yaws=geo.n.map(p=>p.yaw),absY=yaws.map(Math.abs);
+  assert.ok(geo.active.yaw>=10&&geo.active.yaw<=30,'the extracted folder faces the viewer at 10–30°: '+geo.active.yaw);
+  assert.ok(absY.filter(y=>y>=45&&y<=90).length>=absY.length*.6,'most folders are seen from the side (45–90°): '+yaws.join(','));
+  assert.ok(absY.some(y=>y>78),'the apex of the arc is nearly edge-on: '+yaws.join(','));
+  // 朝向沿弧連續：相鄰兩本差 < 36° (手機每本差 15°，橢圓弧兩端的切線變化比較快)，跨過 ±90 (側對) 那一格視為連續
+  for(let k=1;k<geo.n.length;k++){const d=Math.abs(geo.n[k].yaw-geo.n[k-1].yaw);assert.ok(d<36||Math.abs(d-180)<36,'yaw follows the rail tangent continuously: '+yaws.join(','));}
+  assert.ok(geo.n.every(p=>geo.active.z-p.z>55),'the active folder is pulled out of the rail towards the viewer: '+geo.active.z+' vs '+geo.n.map(p=>p.z).join(','));
+  assert.ok(geo.n.concat(geo.active).every(p=>p.scale>=.88&&p.scale<=1.08),'size comes from perspective, manual scale stays within 0.88–1.08');
+  const zs=geo.n.map(p=>p.z);
+  assert.ok(Math.max(...zs)-Math.min(...zs)>110,'the arc has real depth: '+zs.join(','));
+  // 弧：最靠近鏡頭的頂點在中間，兩端都比它後退 (不是單向縮小的斜直線)
+  const apex=zs.indexOf(Math.max(...zs));
+  assert.ok(apex>0&&apex<zs.length-1&&zs[0]<zs[apex]-30&&zs[zs.length-1]<zs[apex]-30,'curved rail: both ends recede behind the apex: '+zs.join(','));
   // A swipe can begin over the folder front; release settles in one short spring, then the sheet re-opens.
   const front=await page.locator('.sf-folder.active .fd-front').boundingBox();
   await page.mouse.move(front.x+front.width*.7,front.y+front.height*.5);
@@ -170,8 +176,8 @@ async function run(engine,viewport){
   assert.equal(await page.locator('.sf-folder.active .sf-input-name').inputValue(),'');
   assert.equal(await page.locator('.sf-folder.active .fd-name').innerText(),'空床');
   assert.equal(requests.filter(r=>r.path==='/api/attendance'&&r.method!=='GET').length,0);
-  await page.waitForTimeout(400);
-  assert.equal(await page.locator('.sf-folder.active.is-open').count(),1,'sheet re-opens on the re-materialised folder');
+  await page.waitForFunction(()=>sfCarousel.state==='idle',null,{timeout:5000});
+  await page.waitForSelector('.sf-folder.active.is-open',{timeout:3000}).catch(()=>{throw new Error('sheet re-opens on the re-materialised folder');});
   await page.screenshot({path:path.join(out,engine.name()+'-after-delete.png')});
   // A pending save must not overwrite text the user types after pressing Save.
   await page.evaluate(async()=>{

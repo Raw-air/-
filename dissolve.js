@@ -147,8 +147,11 @@
       ctx2d.fillStyle = '#fff'; ctx2d.fillRect(0, 0, 4, 4); ctx2d.clearRect(0, 0, canvas.width, canvas.height);
     }
   }
+  let needResize = false;
   function resize() {
-    if (!canvas || running) return;
+    if (!canvas) return;
+    if (running) { needResize = true; return; }   // 跑的時候不能重配畫布，結束再補
+    needResize = false;
     W = innerWidth; H = innerHeight;
     // 粉塵只有 1-5px，超大螢幕不需要 2x：整張畫布壓在 3.2MP 以內
     dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(3.2e6 / Math.max(1, W * H))));
@@ -185,13 +188,19 @@
   // ── 顏色：依區塊取樣資料夾原本的視覺 (玻璃白、銀、薰衣草、紫、文字、內頁) ──
   function palette() {
     return isLight() ? [
-      [.62, .62, .70], [.66, .58, .92], [.55, .30, .88], [.80, .38, .84], [.22, .23, .32], [.70, .70, .78], [.85, .86, .92]
+      [.62, .62, .70], [.66, .58, .92], [.55, .30, .88], [.80, .38, .84], [.22, .23, .32], [.46, .47, .58], [.52, .50, .66]
     ] : [
       [.92, .93, 1.0], [.78, .72, .99], [.66, .33, .97], [.91, .36, .86], [.97, .97, 1.0], [.42, .42, .58], [.98, .98, 1.0]
     ];
   }
   function sampler(root) {
-    const R = (el, kind) => { if (!el) return null; const r = el.getBoundingClientRect(); return r.width > 0 ? { l: r.left, t: r.top, r: r.right, b: r.bottom, kind } : null; };
+    const R = (el, kind) => {
+      if (!el) return null;
+      const cs = getComputedStyle(el);
+      if (cs.visibility === 'hidden' || parseFloat(cs.opacity) < .05) return null;   // 看不見的 (收起的摘要、側標) 不算
+      const r = el.getBoundingClientRect();
+      return r.width > 0 ? { l: r.left, t: r.top, r: r.right, b: r.bottom, kind } : null;
+    };
     const list = [];
     const sheet = root.classList.contains('is-open') ? root.querySelector('.fd-sheet') : null;
     if (sheet) {
@@ -222,9 +231,9 @@
       return -1;
     };
   }
-  // 便宜的 2D 值雜訊：讓崩解邊界不是一個正圓
+  // 便宜的 2D 值雜訊 (-1 ~ 1)：讓崩解鋒面不是一條直線
   function noise(x, y) {
-    return (Math.sin(x * .029 + 1.7) * Math.cos(y * .023 - .4) + Math.sin((x + y) * .015) * .6) / 1.6;
+    return (Math.sin(x * .031 + 1.7) * Math.cos(y * .027 - .4) + Math.sin((x + y) * .017) * .6 + Math.sin(x * .071 - y * .053) * .35) / 1.95;
   }
   const easeInOut = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
@@ -244,32 +253,32 @@
     }, { l: rr.left, t: rr.top, r: rr.right, b: rr.bottom });
     const bw = box.r - box.l, bh = box.b - box.t;
     const mobile = innerWidth < 640;
-    // 崩解邊界從右緣 (垃圾桶那一側) 開始，往左把整本吃掉
-    const oy = clamp(opts.origin?.y ?? (box.t + bh * .3), box.t, box.b);
-    const ox = box.r + bw * .06;
-    // 黑洞在資料夾右上方：粉塵要有一段看得見的流線，不能一生出來就被吃掉
-    const hx = clamp(ox + (mobile ? bw * .22 : bw * .34), 60, innerWidth - 54);
-    const hy = clamp(box.t + bh * (mobile ? .12 : .2), 64, innerHeight - 120);
-    const holeR = clamp(bw * .13, 22, 56);          // 資料夾寬度的 13% (UI 尺度的微型黑洞)
-    const horizon = holeR * .95;              // 事件視界：進去就開始被吞 (放寬一點，快粒子才不會穿過去)
+    // 崩解鋒面：從右緣往左掃。DOM 遮罩與粒子誕生共用同一個門檻 —
+    //   threshold(x, y) = 離右緣的比例 + noise(x, y)；progress 掃過門檻，該格的 DOM 消失、同一位置生出粉塵。
+    //   DOM 端做不到逐像素雜訊，所以用一條 FEATHER 寬的漸層過渡帶，粒子 (帶雜訊) 就密集出生在這條帶裡 → ▓▒░
+    const FEATHER = Math.max(44, bw * .1);
+    // 黑洞在資料夾右上方外側：粉塵要有一段看得見的流線，不能一生出來就被吃掉
+    const hx = clamp(box.r + (mobile ? bw * .16 : bw * .26), 56, innerWidth - 54);
+    const hy = clamp(box.t + bh * (mobile ? .10 : .16), 64, innerHeight - 120);
+    const holeR = clamp(bw * .12, 20, 52);          // 資料夾寬度的 12% (UI 尺度的微型黑洞)
+    const horizon = holeR * .9;                     // 事件視界：進去就開始被吞
 
-    // ── 生成粒子：整本切成細格，依離邊界起點的距離排序，邊界掃到哪就生到哪 ──
-    const target = Math.round((mobile ? 1100 : innerWidth < 1024 ? 1800 : 2600) * quality);
+    // ── 生成：整本切成細格，每顆粉塵就出生在自己那一格 (一定在資料夾矩形內)，顏色取自該格所在的區塊 ──
+    const target = Math.round((mobile ? 1300 : innerWidth < 1024 ? 1800 : 2400) * quality);   // 桌機 1500-3000、手機 700-1400 (掉幀會再打折)
     let rnd = .137;
     const rand = () => (rnd = (rnd * 9301 + 49297) % 233280) / 233280;
     const sample = sampler(root);
-    const step = Math.max(2.4, Math.sqrt(bw * bh / Math.min(target, MAX)) * .84);
+    // 三成五的格子會多一顆，所以格距要把 1.35 倍算進去，總數才會落在目標附近 (桌機 ~2400、手機 ~1100)
+    const step = Math.max(2.2, Math.sqrt(bw * bh * 1.35 / Math.min(target, MAX)));
     const cells = [];
     for (let y = box.t + step / 2; y < box.b; y += step) {
       for (let x = box.l + step / 2; x < box.r; x += step) {
-        // 每格 1 顆，四成的格子多補一顆 (密度不平均，看起來才是粉塵不是網點)
-        const reps = rand() < .4 ? 2 : 1;
+        const reps = rand() < .35 ? 2 : 1;           // 三成五的格子多一顆：密度不平均，才像粉塵不像網點
         for (let k = 0; k < reps; k++) {
-          const jx = x + (rand() - .5) * step * 1.4, jy = y + (rand() - .5) * step * 1.4;
+          const jx = x + (rand() - .5) * step, jy = y + (rand() - .5) * step;
           const p = sample(jx, jy, rand());
           if (p < 0) continue;
-          const dx = jx - ox, dy = jy - oy;
-          cells.push({ x: jx, y: jy, p, d: Math.hypot(dx, dy) + noise(jx, jy) * 26 + (rand() - .5) * step * 2 });
+          cells.push({ x: jx, y: jy, p, d: (box.r - jx) / bw + noise(jx, jy) * .09 + (rand() - .5) * .025 });
         }
       }
     }
@@ -280,34 +289,25 @@
       const c = cells[i];
       px[i] = c.x; py[i] = c.y; age[i] = -1; eaten[i] = 0;
       const roll = rand();
-      // 七成極細粉塵、兩成中等、一成亮碎片
-      sz0[i] = roll < .7 ? 1 + rand() * 1.8 : roll < .9 ? 2.6 + rand() * 1.8 : 3.6 + rand() * 1.8;
-      const col = cols[c.p], bright = roll >= .9 ? 1.25 : 1;
+      // 七成 1-2px 極細粉塵、兩成 2-3px、8% 3-4px、2% 4-5px 亮碎片
+      sz0[i] = roll < .7 ? 1 + rand() : roll < .9 ? 2 + rand() : roll < .98 ? 3 + rand() : 4 + rand();
+      const col = cols[c.p], bright = roll >= .98 ? 1.3 : roll >= .9 ? 1.1 : 1;
       cr[i] = Math.min(1, col[0] * bright); cg[i] = Math.min(1, col[1] * bright); cb[i] = Math.min(1, col[2] * bright);
-      ca[i] = roll < .7 ? .5 + rand() * .3 : .75 + rand() * .25;
-      life[i] = 660 + rand() * 380;
-      delay[i] = 30 + rand() * 34;                   // 剝離後先照原速飄一下，才受引力影響
+      ca[i] = roll < .7 ? .5 + rand() * .32 : roll < .98 ? .72 + rand() * .25 : 1;
+      life[i] = 2000 + rand() * 600;                 // 只是保險；正常死法是進事件視界
+      delay[i] = 20 + rand() * 40;                   // 剝離後先留在原位這麼久，才受引力影響
       tang[i] = (rand() < .5 ? -1 : 1) * (.7 + rand() * .9);
-      // 初速：只從崩解邊界輕輕 puff 出來 (太大就會飛離黑洞，看起來像亂噴)
-      const ul = Math.hypot(c.x - ox, c.y - oy) || 1;
-      vx[i] = (c.x - ox) / ul * (10 + rand() * 24) + (rand() - .5) * 46;
-      vy[i] = (c.y - oy) / ul * (10 + rand() * 24) - 10 - rand() * 34;
+      // 初速：幾乎不動，只有一點點雜訊 (剛剝離時要看得出是從資料夾本體長出來的)
+      vx[i] = (rand() - .5) * 26;
+      vy[i] = -(3 + rand() * 12) + (rand() - .5) * 16;
     }
-    let corner = 0;
-    for (const [cx, cy] of [[box.l, box.t], [box.r, box.t], [box.l, box.b], [box.r, box.b]]) corner = Math.max(corner, Math.hypot(cx - ox, cy - oy));
-    const Rmax = corner + 40;
-    const masks = layers.map(el => {
-      const r = el.getBoundingClientRect();
-      const k = r.width && el.offsetWidth ? r.width / el.offsetWidth : 1;
-      return { el, k, lx: (ox - r.left) / k, ly: (oy - r.top) / k };
-    });
 
-    const WIPE_T0 = 80, WIPE_T1 = 520, REFLOW = 350;
+    const WIPE_T0 = 80, WIPE_T1 = 560, REFLOW = 350, OVER = 1.14;   // progress 掃過 1 之後再多一點，雜訊最高的格子才會全剝離
     // 引力：a = GM/(d²+soft)。最遠的粉塵離黑洞 ~600px，要在 450ms 內被拉過去，所以 GM 要夠大；
     // 加速度與速度都設上限，才不會在近距離爆掉 / 一幀衝過視界
     const GM = 1.8e9, SOFT = 100 * 100, AMAX = 14000, VMAX = 2600;
-    let emit = 0, alive = 0, frame = 0, t0 = 0, lastNow = 0, slow = 0, spawnSkip = 1;
-    let hidden = false, released = false, finished = false, cancelled = false, holeFade = 0, lastSpawnT = WIPE_T1;
+    let emit = 0, alive = 0, frame = 0, t0 = 0, lastNow = 0, slow = 0;
+    let hidden = false, released = false, finished = false, cancelled = false, holeFade = 0, shrinkAt = -1;
     let resolveDone, resolveReflow, reflowed = false;
     const done = new Promise(r => resolveDone = r);
     const reflow = new Promise(r => resolveReflow = r);
@@ -315,15 +315,21 @@
     stats.spawned = 0; stats.peak = 0; stats.frames = 0; stats.ms = 0; stats.masked = false;
     root.classList.add('fd-dissolving');
     canvas.classList.add('is-running');
-    function setMask(m, R) {
-      if (R > 0) stats.masked = true;
-      const v = R <= 0 ? 'none' : `radial-gradient(circle at ${m.lx.toFixed(1)}px ${m.ly.toFixed(1)}px, transparent ${Math.max(0, (R - 12) / m.k).toFixed(1)}px, #000 ${((R + 14) / m.k).toFixed(1)}px)`;
+    const masks = layers.map(el => {                 // 在 fd-dissolving (scale .985) 套上之後才量，遮罩才對得準
+      const r = el.getBoundingClientRect();
+      return { el, k: r.width && el.offsetWidth ? r.width / el.offsetWidth : 1, right: r.right };
+    });
+    // 遮罩：to left 的 0px 在右緣。鋒面右邊全透明、左邊保留，中間 FEATHER 寬的漸層就是正在崩解的那一帶
+    function setMask(m, frontX) {
+      stats.masked = true;
+      const dRight = (m.right - frontX) / m.k;
+      const v = `linear-gradient(to left, transparent ${Math.max(0, dRight - FEATHER * .5).toFixed(1)}px, #000 ${(dRight + FEATHER * .5).toFixed(1)}px)`;
       m.el.style.webkitMaskImage = v; m.el.style.maskImage = v;
     }
     function restore() {
       released = true;                        // 補位之後就別再寫遮罩了 (資料夾已經長回來)
       for (const m of masks) { m.el.style.webkitMaskImage = ''; m.el.style.maskImage = ''; m.el.style.visibility = ''; }
-      for (const s of rigid) s.style.visibility = '';
+      for (const s of rigid) { s.style.visibility = ''; s.style.opacity = ''; }
       root.classList.remove('fd-dissolving');
     }
     function finish(ok) {
@@ -333,6 +339,7 @@
       if (gl) { gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); }
       else if (ctx2d) ctx2d.clearRect(0, 0, canvas.width, canvas.height);
       canvas.classList.remove('is-running');
+      if (needResize) resize();
       if (!ok) restore();
       if (!reflowed) { reflowed = true; resolveReflow(ok); }
       resolveDone(ok);
@@ -344,30 +351,28 @@
       const t = now - t0, dtms = Math.min(48, now - lastNow); lastNow = now;
       const dt = dtms / 1000;
       // 自適應密度：連續兩幀掉到 45fps 以下就少生一些 (已經生出來的不動，不然畫面會突然變稀)
-      if (dtms > 22) { if (++slow >= 2) { quality = Math.max(.5, quality * (dtms > 28 ? .65 : .8)); spawnSkip = quality < .62 ? 3 : quality < .82 ? 2 : 1; slow = 0; } } else slow = 0;
+      if (dtms > 22) { if (++slow >= 2) { quality = Math.max(.5, quality * (dtms > 28 ? .65 : .8)); slow = 0; } } else slow = 0;
 
-      // ── 崩解邊界：DOM 遮罩與粒子誕生同步 ──
-      const R = t < WIPE_T0 ? 0 : Rmax * easeInOut(clamp((t - WIPE_T0) / (WIPE_T1 - WIPE_T0), 0, 1));
-      while (emit < n && cells[emit].d <= R) {
-        if (spawnSkip === 1 || emit % spawnSkip) { age[emit] = 0; stats.spawned++; }
+      // ── 崩解鋒面：DOM 遮罩與粒子誕生同步 ──
+      const prog = t < WIPE_T0 ? 0 : easeInOut(clamp((t - WIPE_T0) / (WIPE_T1 - WIPE_T0), 0, 1)) * OVER;
+      // 粒子跟 DOM 遮罩同一個時鐘：鋒面 80ms 才開始，粒子也 80ms 才開始生
+      while (t >= WIPE_T0 && emit < n && cells[emit].d <= prog) {
+        if (quality >= .999 || ((emit * .618034) % 1) < quality) { age[emit] = 0; stats.spawned++; }   // 保留比例 = quality
         emit++;
-        lastSpawnT = t;
       }
       if (!released) {
-        if (t >= WIPE_T0 && !hidden) for (const m of masks) setMask(m, R);
-        if (R > Rmax * .5) for (const s of rigid) s.style.visibility = 'hidden';
-        if (t >= WIPE_T1 + 30 && !hidden) { hidden = true; for (const m of masks) m.el.style.visibility = 'hidden'; }
+        const frontX = box.r - prog * bw;
+        if (t >= WIPE_T0 && !hidden) for (const m of masks) setMask(m, frontX);
+        for (const s of rigid) s.style.opacity = String(Math.max(0, 1 - prog * 1.6));
+        if (prog >= OVER && !hidden) { hidden = true; for (const m of masks) m.el.style.visibility = 'hidden'; }
       }
-      // 黑洞：50ms 開始淡入，最後一批粉塵吃完才收掉
-      const shrinkAt = Math.max(750, lastSpawnT + 260);
-      const holeScale = t < shrinkAt ? 1 : Math.max(.15, 1 - (t - shrinkAt) / 200 * .85);
-      holeFade = t < 50 ? 0 : t < shrinkAt ? Math.min(1, (t - 50) / 180) : Math.max(0, 1 - (t - shrinkAt) / 200);
       // 補位：粉塵還在飛的時候，資料夾就開始長回來
       if (!reflowed && t >= REFLOW) { reflowed = true; resolveReflow(true); }
 
-      // ── 物理：引力 + 切向漩渦 + 阻尼 ──
+      // ── 物理：引力 + 切向漩渦 + 阻尼；死法 = 進事件視界 ──
       alive = 0;
       let w = 0;
+      const fadeOut = shrinkAt >= 0 ? Math.max(0, 1 - (t - shrinkAt) / 240) : 1;   // 黑洞收掉時還沒進去的也一起收
       for (let i = 0; i < emit; i++) {
         if (age[i] < 0) continue;
         age[i] += dtms;
@@ -377,22 +382,28 @@
           const d2 = dx * dx + dy * dy, d = Math.sqrt(d2) || 1;
           const a = Math.min(AMAX, GM / (d2 + SOFT));
           const nx = dx / d, ny = dy / d;
-          // 切向分量讓它繞成弧線 / 螺旋，而不是直線射向中心
-          const sw = tang[i] * 30000 / (d + 70);
+          const sw = tang[i] * 30000 / (d + 70);          // 切向分量：繞成弧線 / 螺旋，不是直線射向中心
           vx[i] += (nx * a - ny * sw) * dt;
           vy[i] += (ny * a + nx * sw) * dt;
           const drag = Math.exp(-.6 * dt);
           vx[i] *= drag; vy[i] *= drag;
           const sp = Math.hypot(vx[i], vy[i]);
           if (sp > VMAX) { vx[i] = vx[i] / sp * VMAX; vy[i] = vy[i] / sp * VMAX; }
-          if (d < horizon) eaten[i] = Math.min(1, eaten[i] + dtms / 90);   // 進入事件視界
+          // 進入事件視界：快的粒子一幀能走 100px，點測試會直接穿過去，所以看這一幀的線段離中心最近多遠；
+          // 進去就鎖住 (eaten>0)，之後只往中心收、亮一下、縮到 0，不會再飛出來
+          if (eaten[i] === 0) {
+            const sx = vx[i] * dt, sy = vy[i] * dt, ss = sx * sx + sy * sy;
+            const u = ss > 0 ? clamp(((hx - px[i]) * sx + (hy - py[i]) * sy) / ss, 0, 1) : 0;
+            const cx = px[i] + sx * u - hx, cy = py[i] + sy * u - hy;
+            if (d < horizon || cx * cx + cy * cy < horizon * horizon) eaten[i] = .001;
+          }
+          if (eaten[i] > 0) { eaten[i] = Math.min(1, eaten[i] + dtms / 90); px[i] += (hx - px[i]) * .35; py[i] += (hy - py[i]) * .35; vx[i] *= .5; vy[i] *= .5; }
         }
         px[i] += vx[i] * dt; py[i] += vy[i] * dt;
-        const u = age[i] / life[i];
-        let alpha = ca[i] * Math.pow(1 - u, .5);   // 撐到被吸進去才淡，不要半路就消失
+        let alpha = ca[i] * fadeOut;
         let s = sz0[i];
         if (eaten[i] > 0) {
-          alpha *= (1 - eaten[i]) * (1 + eaten[i] * .8);          // 被吞前先亮一下
+          alpha *= (1 - eaten[i]) * (1 + eaten[i] * .9);          // 被吞前先亮一下
           s = sz0[i] * (1 - eaten[i]);
           if (eaten[i] >= 1) { age[i] = -2; continue; }
         }
@@ -403,6 +414,10 @@
         buf[o + 3] = cr[i]; buf[o + 4] = cg[i]; buf[o + 5] = cb[i]; buf[o + 6] = alpha; buf[o + 7] = 0;
         w++;
       }
+      // 黑洞：50ms 淡入；粉塵幾乎都吃完 (或超時) 才開始收
+      if (shrinkAt < 0 && emit >= n && (alive <= Math.max(6, stats.spawned * .03) || t > 1500)) shrinkAt = t;
+      holeFade = t < 50 ? 0 : shrinkAt < 0 ? Math.min(1, (t - 50) / 180) : Math.max(0, 1 - (t - shrinkAt) / 220);
+      const holeScale = shrinkAt < 0 ? 1 : Math.max(.15, 1 - (t - shrinkAt) / 220 * .85);
 
       // ── 畫：先粉塵，再黑洞蓋上去 (進到視界的就被核心吃掉) ──
       if (gl) {
@@ -429,7 +444,7 @@
         ctx2d.globalAlpha = 1;
       }
       stats.frames++; stats.ms = t; if (alive > stats.peak) stats.peak = alive;
-      if ((emit < n || alive > 0 || holeFade > 0) && t < 2400) { frame = requestAnimationFrame(tick); return; }
+      if ((emit < n || alive > 0 || holeFade > 0) && t < 2600) { frame = requestAnimationFrame(tick); return; }
       finish(true);
     }
     frame = requestAnimationFrame(tick);
@@ -477,10 +492,7 @@
       window.addEventListener('app:navigate', onNavigation);
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) { haptic('medium'); resetFields(); showToast('床位已清空，按「儲存修改」同步', 'info'); return; }
       haptic('medium');
-      const r = btn?.getBoundingClientRect();
-      const fr = folder.getBoundingClientRect();
-      const origin = r && r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : { x: fr.right - 40, y: fr.top + 40 };
-      handle = run(folder, { origin });
+      handle = run(folder);
       // 粉塵大約飛到一半 (350ms) 就開始補位：清空欄位、資料夾以空床長回來，兩段動畫重疊
       const ok = await handle.reflow;
       if (!ok || cancelled) return;

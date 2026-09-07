@@ -12,42 +12,46 @@
   --fd-radius: 22px;
   --fd-ease: cubic-bezier(.16, 1, .3, 1);
   /* 深色主題：白/銀色透明壓克力 */
-  --fd-front: linear-gradient(135deg, rgba(255,255,255,.36) 0%, rgba(255,255,255,.16) 42%, rgba(255,255,255,.12) 60%, rgba(255,255,255,.26) 100%);
+  --fd-front: linear-gradient(135deg, rgba(255,255,255,.15) 0%, rgba(255,255,255,.07) 42%, rgba(255,255,255,.05) 60%, rgba(255,255,255,.11) 100%);
   --fd-front-border: rgba(255,255,255,.42);
-  --fd-back: linear-gradient(160deg, rgba(232,234,246,.46) 0%, rgba(208,212,232,.28) 55%, rgba(226,228,244,.38) 100%);
+  --fd-back: linear-gradient(160deg, rgba(232,234,246,.09) 0%, rgba(208,212,232,.05) 55%, rgba(226,228,244,.08) 100%);
   --fd-back-border: rgba(255,255,255,.30);
-  --fd-paper: rgba(250,250,255,.90);
-  --fd-paper-line: rgba(118,118,146,.35);
-  --fd-spine: linear-gradient(180deg, rgba(255,255,255,.62), rgba(255,255,255,.22) 50%, rgba(255,255,255,.48));
-  --fd-edge: rgba(255,255,255,.72);
-  --fd-edge-soft: rgba(255,255,255,.18);
-  --fd-text: #24253a;
-  --fd-text-dim: rgba(36,37,58,.62);
+  --fd-front-border-soft: rgba(255,255,255,.22);
+  --fd-paper: rgba(250,250,255,.10);
+  --fd-paper-line: rgba(255,255,255,.42);
+  --fd-spine: linear-gradient(180deg, rgba(255,255,255,.7), rgba(255,255,255,.3) 50%, rgba(255,255,255,.6));
+  --fd-edge: rgba(255,255,255,.78);
+  --fd-edge-soft: rgba(255,255,255,.34);
+  --fd-text: #f2f2f8;
+  --fd-text-dim: rgba(242,242,248,.62);
   --fd-sheet-text: #f4f4f8;
   --fd-sheet-text-dim: rgba(244,244,248,.66);
-  --fd-tab: linear-gradient(135deg, rgba(255,255,255,.86), rgba(226,228,242,.7));
-  --fd-shadow: 0 30px 60px -28px rgba(0,0,0,.75), 0 12px 24px -16px rgba(0,0,0,.55);
-  --fd-glow: 0 34px 90px -30px rgba(168,85,247,.55), 0 0 0 1px rgba(216,180,254,.25);
-  --fd-accent: linear-gradient(135deg, rgba(139,92,246,.55) 0%, rgba(192,72,232,.42) 55%, rgba(236,72,153,.34) 100%);
+  --fd-tab: linear-gradient(135deg, rgba(255,255,255,.2), rgba(255,255,255,.1));
+  --fd-shadow: 0 18px 30px -22px rgba(0,0,0,.6);
+  --fd-glow: 0 0 0 1px rgba(216,180,254,.4), 0 14px 34px -16px rgba(168,85,247,.4);
+  --fd-accent: linear-gradient(135deg, rgba(139,92,246,.30) 0%, rgba(192,72,232,.22) 55%, rgba(236,72,153,.16) 100%);
   --fd-accent-solid: linear-gradient(90deg, #8b5cf6, #d946ef 55%, #ec4899);
   --fd-sheet: rgba(255,255,255,.11);
   --fd-sheet-border: rgba(255,255,255,.34);
   --fd-input: rgba(8,8,16,.38);
   --fd-input-border: rgba(255,255,255,.10);
-  --fd-floor: radial-gradient(ellipse 62% 30% at 50% 50%, rgba(168,85,247,.16), rgba(168,85,247,0) 70%);
+  --fd-floor: radial-gradient(ellipse 62% 30% at 50% 50%, rgba(168,85,247,.10), rgba(168,85,247,0) 70%);
+  --fd-active-front: linear-gradient(135deg, rgba(255,255,255,.24) 0%, rgba(255,255,255,.12) 45%, rgba(255,255,255,.10) 60%, rgba(255,255,255,.18) 100%);
 }
 body.light-mode {
   --fd-front: linear-gradient(135deg, rgba(255,255,255,.78) 0%, rgba(255,255,255,.42) 42%, rgba(255,255,255,.34) 60%, rgba(255,255,255,.62) 100%);
   --fd-front-border: rgba(255,255,255,.95);
   --fd-back: linear-gradient(160deg, rgba(255,255,255,.72) 0%, rgba(228,231,242,.6) 55%, rgba(244,245,252,.7) 100%);
   --fd-back-border: rgba(120,130,170,.22);
-  --fd-paper: rgba(255,255,255,.96);
-  --fd-paper-line: rgba(140,146,178,.42);
+  --fd-paper: rgba(255,255,255,.45);
+  --fd-paper-line: rgba(140,146,178,.5);
   --fd-spine: linear-gradient(180deg, rgba(255,255,255,1), rgba(214,218,236,.9) 50%, rgba(255,255,255,1));
   --fd-edge: rgba(255,255,255,1);
   --fd-edge-soft: rgba(120,130,170,.18);
   --fd-text: #26283a;
   --fd-text-dim: rgba(38,40,58,.62);
+  --fd-front-border-soft: rgba(120,130,170,.25);
+  --fd-active-front: linear-gradient(135deg, rgba(255,255,255,.9) 0%, rgba(255,255,255,.6) 45%, rgba(255,255,255,.55) 60%, rgba(255,255,255,.8) 100%);
   --fd-sheet-text: #26283a;
   --fd-sheet-text-dim: rgba(38,40,58,.62);
   --fd-tab: linear-gradient(135deg, rgba(255,255,255,.95), rgba(236,238,248,.8));
@@ -134,7 +138,6 @@ body.light-mode {
   inset: 0;
   border-radius: var(--fd-radius);
   opacity: var(--fd-alpha);
-  backface-visibility: hidden;
 }
 
 /* 背板：最裡面那片壓克力，被選中時染上紫→洋紅 */
@@ -176,6 +179,7 @@ body.light-mode {
   background: var(--fd-tab);
   border: 1px solid var(--fd-front-border);
   border-bottom: none;
+  backdrop-filter: none;
   color: var(--fd-text);
   font-size: 13px;
   font-weight: 800;
@@ -226,7 +230,7 @@ body.light-mode {
   height: var(--fd-depth);
   transform-origin: 50% 0;
   transform: rotateX(-90deg);
-  background: linear-gradient(180deg, rgba(255,255,255,.72), rgba(255,255,255,.3));
+  background: linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,.18));
   opacity: calc(var(--fd-alpha) * .95);
   border-radius: 2px;
   backface-visibility: hidden;
@@ -260,7 +264,7 @@ body.light-mode .sf-folder > .fd-top { background: linear-gradient(180deg, rgba(
 .sf-folder > .fd-front {
   transform: translateZ(0) scale(var(--fd-del-scale));
   background: var(--fd-front);
-  border: 1px solid var(--fd-front-border);
+  border: 1px solid var(--fd-front-border-soft);
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.55),
     inset 1px 0 0 rgba(255,255,255,.22),
@@ -282,8 +286,7 @@ body.light-mode .sf-folder > .fd-top { background: linear-gradient(180deg, rgba(
     radial-gradient(80% 60% at 0% 0%, rgba(255,255,255,.22), rgba(255,255,255,0) 60%);
   pointer-events: none;
 }
-.sf-folder.active > .fd-front,
-.sf-folder.fd-near.active > .fd-front { backdrop-filter: blur(16px) saturate(1.25); -webkit-backdrop-filter: blur(16px) saturate(1.25); }
+.sf-folder.active > .fd-front { background: var(--fd-active-front); backdrop-filter: blur(12px) saturate(1.2); -webkit-backdrop-filter: blur(12px) saturate(1.2); border-color: rgba(216,180,254,.55); }
 #page-student-files.sf-moving .sf-folder > .fd-front { backdrop-filter: none; -webkit-backdrop-filter: none; }
 
 /* 摘要：只有抽出來的那本看得到 (其餘資料夾被前一本蓋掉大半，改看右緣的側標) */
@@ -303,6 +306,10 @@ body.light-mode .sf-folder > .fd-top { background: linear-gradient(180deg, rgba(
   pointer-events: none;
 }
 .sf-folder.active .fd-rail-label { opacity: 0; }
+/* 露出來的是哪一邊，側標與房號標籤就放哪一邊 (fd-lefty = 左緣露出)；同一本只顯示一個標籤 */
+.sf-folder.fd-lefty .fd-rail-label { right: auto; left: 13px; }
+.sf-folder.fd-lefty > .fd-tab-r { opacity: 0; }
+.sf-folder:not(.active):not(.fd-lefty) > .fd-tab:not(.fd-tab-r) { opacity: 0; }
 .fd-name {
   font-size: 24px;
   font-weight: 800;
@@ -332,15 +339,17 @@ body.light-mode .sf-folder > .fd-top { background: linear-gradient(180deg, rgba(
   font-size: 11px;
   font-weight: 700;
   letter-spacing: .3px;
-  background: rgba(255,255,255,.55);
-  border: 1px solid rgba(255,255,255,.75);
+  background: rgba(255,255,255,.14);
+  border: 1px solid rgba(255,255,255,.45);
   color: var(--fd-text);
 }
-.fd-tag.fd-tag-foreign { background: rgba(196,181,253,.7); border-color: rgba(139,92,246,.45); color: #4c1d95; }
-.fd-tag.fd-tag-empty { background: rgba(255,255,255,.35); color: var(--fd-text-dim); }
+.fd-tag.fd-tag-foreign { background: rgba(168,85,247,.32); border-color: rgba(216,180,254,.6); color: #f3e8ff; }
+.fd-tag.fd-tag-empty { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.22); color: var(--fd-text-dim); }
 .fd-tag.fd-tag-remark { background: rgba(255,214,10,.18); border-color: rgba(255,214,10,.35); }
 body.light-mode .fd-tag { background: rgba(255,255,255,.7); border-color: rgba(120,130,170,.22); }
-body.light-mode .fd-tag.fd-tag-foreign { background: rgba(196,181,253,.55); border-color: rgba(139,92,246,.35); }
+body.light-mode .fd-tag.fd-tag-foreign { background: rgba(196,181,253,.55); border-color: rgba(139,92,246,.35); color: #5b21b6; }
+body.light-mode .fd-tag.fd-tag-empty { background: rgba(255,255,255,.5); border-color: rgba(120,130,170,.22); }
+body.light-mode .fd-tag.fd-tag-remark { background: rgba(255,214,10,.32); border-color: rgba(180,140,0,.45); }
 .fd-count {
   position: absolute;
   right: 0; bottom: 2px;
@@ -351,7 +360,6 @@ body.light-mode .fd-tag.fd-tag-foreign { background: rgba(196,181,253,.55); bord
   align-items: center;
   gap: 5px;
 }
-.fd-count svg { width: 14px; height: 14px; }
 
 /* 邊緣高光：比前板再往前 2px 的一圈細亮邊，光從左上來 */
 .sf-folder > .fd-edge {
@@ -496,7 +504,7 @@ body.light-mode .fd-sheet .sf-icon-btn { background: rgba(255,255,255,.8); borde
 .sf-folder.fd-dissolving > .fd-back { box-shadow: none; transition: box-shadow .12s ease-out; }
 .sf-folder.fd-dissolving > .fd-front,
 .sf-folder.fd-dissolving.is-open > .fd-sheet { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
-.sf-folder.fd-dissolving > .fd-front { background: linear-gradient(135deg, rgba(255,255,255,.62), rgba(255,255,255,.4) 45%, rgba(255,255,255,.34) 60%, rgba(255,255,255,.52)); }
+.sf-folder.fd-dissolving > .fd-front { background: linear-gradient(135deg, rgba(255,255,255,.26), rgba(255,255,255,.14) 45%, rgba(255,255,255,.12) 60%, rgba(255,255,255,.20)); }
 .sf-folder.fd-dissolving.is-open > .fd-sheet { background: rgba(34,34,48,.9); }
 body.light-mode .sf-folder.fd-dissolving > .fd-front { background: linear-gradient(135deg, rgba(255,255,255,.92), rgba(255,255,255,.7) 45%, rgba(255,255,255,.66) 60%, rgba(255,255,255,.86)); }
 body.light-mode .sf-folder.fd-dissolving.is-open > .fd-sheet { background: rgba(255,255,255,.94); }
