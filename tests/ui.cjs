@@ -93,7 +93,7 @@ async function run(engine,viewport){
   // 進場 (~1s)：整排展開、中央那本抽出、自動打開詳細資料紙
   await page.waitForFunction(()=>window.sfCarousel&&sfCarousel.state==='idle',null,{timeout:5000});
   await page.waitForTimeout(350);
-  assert.equal(await page.locator('.sf-folder.active.is-open').count(),1,'the active folder opens its sheet after the entrance');
+  assert.equal(await page.locator('.sf-folder.active.is-open').count(),0,'the archive stays closed until explicitly opened');
   await page.evaluate(()=>{window._sfStopMotion();_sfResults=state.students;renderStudentFileCards();});
   await page.waitForTimeout(100);
   assert.ok(await page.locator('.sf-folder').count()<=17);
@@ -111,11 +111,11 @@ async function run(engine,viewport){
       top:!!f.querySelector('.fd-top'),spines:f.querySelectorAll('.fd-spine').length,active:{i:_sfActiveIndex,yaw:yawOf(f),z:zOf(f),scale:scOf(f)},
       n,preserve:getComputedStyle(f).transformStyle==='preserve-3d'};
   });
-  assert.ok(geo.ratio>1.3&&geo.ratio<1.9,'landscape folder '+geo.ratio);
+  assert.ok(geo.ratio>.4&&geo.ratio<.9,'upright glass folder '+geo.ratio);
   assert.ok(geo.layers>=9&&geo.front&&geo.sheet&&geo.top&&geo.spines===2&&geo.preserve,'layered folder (front/back/top/2 spines/paper/edge) + sheet in a 3D context');
   assert.ok(geo.n.length>=4,'the rail shows a run of folders: '+geo.n.length);
   const yaws=geo.n.map(p=>p.yaw),absY=yaws.map(Math.abs);
-  assert.ok(geo.active.yaw>=10&&geo.active.yaw<=30,'the extracted folder faces the viewer at 10–30°: '+geo.active.yaw);
+  assert.ok(geo.active.yaw>=45&&geo.active.yaw<=60,'the extracted folder faces the viewer at 10–30°: '+geo.active.yaw);
   assert.ok(absY.filter(y=>y>=45&&y<=90).length>=absY.length*.6,'most folders are seen from the side (45–90°): '+yaws.join(','));
   assert.ok(absY.some(y=>y>78),'the apex of the arc is nearly edge-on: '+yaws.join(','));
   // 朝向沿弧連續：相鄰兩本差 < 36° (手機每本差 15°，橢圓弧兩端的切線變化比較快)，跨過 ±90 (側對) 那一格視為連續
@@ -136,7 +136,7 @@ async function run(engine,viewport){
   assert.ok(await page.evaluate(()=>Math.abs(_currentX+_sfActiveIndex*_cardWidth)<.5));
   await page.waitForFunction(()=>sfCarousel.state==='idle',null,{timeout:5000});
   await page.waitForTimeout(350);
-  assert.equal(await page.locator('.sf-folder.active.is-open').count(),1,'sheet re-opens after a swipe settles');
+  assert.equal(await page.locator('.sf-folder.active.is-open').count(),0,'browsing keeps the archive visible');
   // Return to the first synthetic card for deterministic screenshots.
   await page.evaluate(()=>{window._sfStopMotion();renderStudentFileCards();});
   await page.waitForTimeout(100);

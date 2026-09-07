@@ -543,3 +543,111 @@ body.power-save-mode .sf-card-area-2d::before { display: none; }
   .sf-scene-2d { height: clamp(520px, calc(100dvh - 280px), 640px); }
   .fd-name { font-size: 26px; }
 }
+/* Reference archive: silver glass on a quiet obsidian stage. Scoped to this page. */
+#page-student-files {
+  max-width: 1320px; padding: 24px 32px 110px; color: #ecefea;
+  --fd-radius: 12px; --fd-depth: 7px; --fd-text: #19201c; --fd-text-dim: #34453a;
+  --fd-front: linear-gradient(155deg,rgba(255,255,255,.58),rgba(234,241,236,.28) 46%,rgba(223,232,226,.15) 78%,rgba(255,255,255,.34));
+  --fd-back: linear-gradient(140deg,rgba(255,255,255,.28),rgba(210,221,214,.09));
+  --fd-paper: linear-gradient(160deg,rgba(252,255,253,.74),rgba(236,245,239,.3));
+  --fd-paper-line: rgba(71,84,76,.34); --fd-front-border-soft: rgba(255,255,255,.54);
+  --fd-back-border: rgba(255,255,255,.42); --fd-edge: rgba(255,255,255,.9);
+  --fd-accent: linear-gradient(145deg,rgba(14,246,107,.7),rgba(0,127,45,.58));
+  --fd-active-front: linear-gradient(145deg,rgba(70,255,145,.65),rgba(14,200,84,.38) 55%,rgba(0,91,32,.66));
+  --fd-accent-solid: #57e991; --fd-glow: 0 0 35px -10px #21f67b88;
+  --fd-floor: radial-gradient(ellipse at 26% 60%,#1cb15b13,transparent 60%);
+  --fd-sheet: rgba(23,32,27,.97); --fd-sheet-text: #eff6f1; --fd-sheet-text-dim: #b1c3b7;
+  --fd-input: #0e1812; --fd-input-border: #ffffff26; --fd-sheet-border: #a2d7b850;
+  background: #0c0f0d; border: 1px solid #ffffff12; border-radius: 24px;
+  overflow: clip;
+}
+.sf-archive-header {display:flex; align-items:center; gap:24px; padding-bottom:24px; border-bottom:1px solid #ffffff14;}
+#page-student-files .back-btn {margin:0; color:#c7d2ca; font-size:13px;}
+.sf-eyebrow {font-size:10px; letter-spacing:2.2px; color:#91a297; font-weight:500;}
+.sf-archive-status {margin-left:auto; color:#acbdb2; font-size:12px; display:flex; align-items:center; gap:8px;}
+.sf-archive-status i {width:5px;height:5px;border-radius:50%;background:#59e897;box-shadow:0 0 12px #59e89770;}
+.sf-archive-heading {display:flex; align-items:center; justify-content:space-between; gap:28px; padding:28px 0 6px;}
+.sf-archive-heading h1 {font-size:28px; font-weight:500;letter-spacing:2px;margin:10px 0;}
+.sf-archive-heading h1 span {display:block;font-size:12px;font-weight:400;letter-spacing:1px;color:#a1afa6;margin-top:10px;}
+#page-student-files .search-orb-container {width:300px;height:48px;margin:0;flex-shrink:0;filter:none;}
+#page-student-files .input-overlay {position:relative;inset:auto;width:100%;height:48px;background:#ffffff07;border:1px solid #ffffff24;border-radius:14px;display:flex;align-items:center;box-shadow:inset 0 1px #ffffff09;transition:border-color .22s,background .22s;}
+#page-student-files .input-overlay:focus-within {border-color:#69db95;background:#173421;}
+#page-student-files .search-icon-wrapper {position:static;transform:none;padding-left:16px;display:flex;}
+#page-student-files .search-icon {width:18px;height:18px;color:#a8baaf;}
+#page-student-files .modern-input {position:static;width:100%;height:100%;padding:0 12px;font-size:13px;color:#eff7f1;background:none;box-shadow:none;border:0;outline:none;transform:none;}
+#page-student-files .modern-input::placeholder {color:#a1afa6;}
+#page-student-files .sf-scene-2d {height:490px; margin-top:6px; isolation:isolate;}
+#page-student-files .sf-card-area-2d {width:calc(100% + 64px);flex-shrink:0;margin:0 -32px;}
+.sf-orbit {position:absolute;width:65%;height:330px;top:26px;left:24%;border:1px solid #a0b6a22b;border-bottom:0;border-radius:50% 50% 0 0;pointer-events:none;}
+.sf-orbit span {position:absolute;left:32%;top:-23px;border:1px solid #6cea9c46;border-radius:50%;width:46px;height:46px;display:grid;place-items:center;font-size:24px;color:#7ac291;background:#0d140f;box-shadow:0 0 22px #55dc8710;}
+.sf-selection {position:absolute;left:1.5%;top:55px;z-index:4; width:192px;text-align:left;padding:18px;border:1px solid #ffffff67;border-radius:20px;color:#1d3124;background:linear-gradient(125deg,#ffffffba,#e5ffeda3 65%,#70eea096);backdrop-filter:blur(18px);box-shadow:inset 0 1px #fff9,0 16px 44px #0003;transition:transform .3s var(--fd-ease),box-shadow .3s;cursor:pointer;}
+.sf-selection[hidden] {display:none;}
+.sf-selection:hover {transform:translateY(-4px);box-shadow:inset 0 1px #fff9,0 22px 44px #0005;}
+.sf-selection:active {transform:translateY(-1px) scale(.98);}
+.sf-selection span {font-size:11px;display:flex;justify-content:space-between;}
+.sf-selection strong {display:block;font-size:22px;font-weight:500;margin:12px 0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sf-selection small {font-size:10px;}
+.sf-selection i {position:absolute;right:19px;bottom:40px;width:6px;height:6px;border-radius:50%;background:#138d47;box-shadow:0 0 0 6px #30d67b30;}
+#page-student-files .sf-folder > .fd-front {top:37%;padding:18px;border-radius:12px;}
+#page-student-files .sf-folder.active > .fd-front {border-color:#91ffc3aa;backdrop-filter:blur(5px);color:#e7fff0;}
+#page-student-files .sf-folder > .fd-paper {inset:22px 20px 16px;padding:18px 15px;gap:12px;}
+#page-student-files .sf-folder > .fd-paper i {height:7px;}
+#page-student-files .sf-folder > .fd-paper i:first-child {height:20px;}
+#page-student-files .fd-rail-label {writing-mode:horizontal-tb;left:18px;right:18px;top:auto;bottom:17px;width:auto;font-size:15px;font-weight:500;justify-content:flex-start;}
+#page-student-files .fd-name {font-size:20px;font-weight:500;}
+#page-student-files .fd-class,#page-student-files .fd-count {color:#d8f9e4;font-weight:400;}
+#page-student-files .fd-count {position:static;margin-top:6px;font-size:11px;}
+#page-student-files .fd-tags {display:none;}
+#page-student-files .fd-tab {top:14px;left:18px;height:22px;font-size:11px;border:0;background:none;box-shadow:none;}
+#page-student-files .fd-tab-r {left:auto;right:18px;}
+#page-student-files .sf-folder.active .fd-tab {color:#ecfff1;background:none;}
+#page-student-files .sf-folder > .fd-sheet {width:300px;left:calc(50% - 150px);right:auto;box-sizing:border-box;}
+#page-student-files .fd-sheet .sf-card-badge-relative {color:#9bedb9;background:#265f3b;border-color:#69be8750;}
+#page-student-files .fd-sheet .sf-icon-btn {width:44px;height:44px;background:#ffffff12;color:#fff;}
+#page-student-files .fd-sheet .sf-save-action-btn {color:#113720;box-shadow:0 6px 24px #2be77b14;}
+#page-student-files .fd-sheet .sf-form-group label {font-size:12px;}
+#page-student-files .fd-sheet input:focus,#page-student-files .fd-sheet textarea:focus {border-color:#79e6a4;box-shadow:0 0 0 3px #5ee99c22;}
+.sf-archive-footer {display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid #ffffff16;padding-top:18px;font-size:11px;color:#a7b8ad;letter-spacing:1px;}
+.sf-rail-controls {display:flex;gap:8px;}
+.sf-rail-controls button {width:44px;height:44px;border:1px solid #ffffff26;border-radius:50%;background:#ffffff05;color:#c4d6ca;cursor:pointer;transition:background .2s,transform .2s;}
+.sf-rail-controls button:hover {background:#6bed9824;transform:translateY(-2px);}
+.sf-rail-controls button:active {transform:scale(.94);}
+.sf-rail-controls button:disabled {opacity:.3;cursor:default;}
+#page-student-files :focus-visible {outline:2px solid #8aefb0;outline-offset:4px;}
+#page-student-files .sf-empty-hint {color:#9fafA4;}
+#page-student-files .sf-empty-hint div {color:#bdcfc3!important;}
+#page-student-files .sf-search-mirror {background:#0b130fe8;backdrop-filter:blur(12px);border-radius:20px;}
+#page-student-files .sf-fake-train {display:none;}
+#page-student-files .search-found-pop {animation:sf-archive-reveal .35s ease both;}
+@keyframes sf-archive-reveal {from {opacity:.4} to {opacity:1}}
+@media(min-width:1024px) {#page-student-files {margin-top:20px;} }
+@media(max-width:639px) {
+  #page-student-files {padding:18px 16px 100px;border-radius:18px;}
+  .sf-archive-header {gap:12px;padding-bottom:16px;} .sf-archive-header>.sf-eyebrow {display:none;}
+  .sf-archive-heading {display:block;padding-top:18px;} .sf-archive-heading h1 {font-size:24px;}
+  #page-student-files .search-orb-container {width:100%;margin-top:22px;}
+  #page-student-files .sf-scene-2d {height:570px;}
+  #page-student-files .sf-card-area-2d {width:calc(100% + 32px);margin:0 -16px;}
+  .sf-selection {left:0;top:26px;width:166px;padding:14px;border-radius:16px;}
+  .sf-selection strong {font-size:19px;}.sf-selection small {font-size:10px;}
+  .sf-orbit {top:65px;left:26%;width:100%;height:340px;}
+  .sf-gesture-hint {max-width:130px;line-height:1.7;font-size:10px;}
+  .sf-archive-footer {gap:8px;letter-spacing:0;}
+}
+@media(prefers-reduced-motion:reduce) {#page-student-files *,#page-student-files *::before {animation:none!important;transition:none!important;}}
+#page-student-files .sf-archive-header .back-btn {position:static;transform:none;}
+#page-student-files .sf-folder.is-open {z-index:10;}
+#page-student-files .sf-scene-2d:has(.is-open) .sf-selection {opacity:0;pointer-events:none;transform:translateY(-8px);}
+#page-student-files .sf-folder.is-open > .fd-sheet {z-index:20;}
+#page-student-files .sf-scene-2d:has(.is-open) .sf-folder:not(.is-open) > * {opacity:calc(var(--fd-alpha) * .15);pointer-events:none;}
+#page-student-files .sf-folder.is-open > :not(.fd-sheet) {opacity:.12;pointer-events:none;}
+#page-student-files .sf-folder > .fd-sheet {bottom:auto;top:-15px;transform-origin:50% 50%;}
+#page-student-files .sf-folder.is-open > .fd-sheet {transform:translate3d(0,0,40px) scale(var(--fd-del-scale));}
+#page-student-files .sf-folder > .fd-sheet {transition:opacity .22s ease,visibility 0s linear .22s;}
+#page-student-files .sf-folder.is-open > .fd-sheet {transition:opacity .3s ease,visibility 0s;}
+#page-student-files {font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif;}
+#page-student-files button,#page-student-files input,#page-student-files textarea {font-family:inherit;}
+#page-student-files .sf-close-btn:hover {background:#69e89a24;border-color:#69e89a;}
+#page-student-files .sf-selection {transition:opacity .22s ease,transform .3s var(--fd-ease),box-shadow .3s;}
+#page-student-files .sf-folder > .fd-front,#page-student-files .sf-folder > .fd-back,#page-student-files .sf-folder > .fd-paper,#page-student-files .sf-folder > .fd-edge {transition:opacity .24s ease,box-shadow .3s ease;}
+@media(prefers-reduced-motion:reduce) {#page-student-files .sf-selection,#page-student-files .sf-folder > * {transition:none!important;}}

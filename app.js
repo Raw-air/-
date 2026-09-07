@@ -3921,23 +3921,24 @@ function sfCardHTML(s, draft) {
         <div class="sf-card-title">
           <span class="sf-title-text">${sfEsc(s.room)} ${sfEsc(s.bed)}</span>
           <div class="sf-card-badge-relative">${sfEsc(m.badge)}</div>
+          <button class="sf-icon-btn sf-close-btn" onclick="sfCarousel.dismiss()" aria-label="關閉檔案">×</button>
           <button class="sf-icon-btn sf-broom-btn" onclick="clearStudentData(this)" title="清空床位資料"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
         </div>
         <div class="sf-edit-form">
           <div style="display:flex; gap: 8px;">
               <div class="sf-form-group" style="flex: 1;">
                 <label>姓名</label>
-                <input type="text" class="sf-input-name styled-input" value="${sfEsc(name)}" placeholder="未登記">
+                <input type="text" aria-label="姓名" class="sf-input-name styled-input" value="${sfEsc(name)}" placeholder="未登記">
               </div>
               <div class="sf-form-group" style="flex: 1;">
                 <label>學號</label>
-                <input type="text" class="sf-input-id styled-input" value="${sfEsc(sid)}" placeholder="無">
+                <input type="text" aria-label="學號" class="sf-input-id styled-input" value="${sfEsc(sid)}" placeholder="無">
               </div>
           </div>
           <div style="display:flex; gap: 8px; align-items: flex-end;">
               <div class="sf-form-group" style="flex: 1;">
                 <label>班別</label>
-                <input type="text" class="sf-input-class styled-input" value="${sfEsc(cls)}" placeholder="無">
+                <input type="text" aria-label="班別" class="sf-input-class styled-input" value="${sfEsc(cls)}" placeholder="無">
               </div>
               <div class="sf-toggles" style="flex: 1;">
                 <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-foreign" ${isForeign ? 'checked' : ''}> 外籍</label>
@@ -3946,7 +3947,7 @@ function sfCardHTML(s, draft) {
           </div>
           <div class="sf-form-group">
             <label>備註 (情況註記)</label>
-            <textarea class="sf-input-remarks styled-input" style="resize: none; font-size: 13px; line-height: 1.4;" placeholder="住宿生備註欄">${sfEsc(remarks)}</textarea>
+            <textarea aria-label="備註" class="sf-input-remarks styled-input" style="resize: none; font-size: 13px; line-height: 1.4;" placeholder="住宿生備註欄">${sfEsc(remarks)}</textarea>
           </div>
           <button class="sf-save-action-btn" onclick="autoSaveStudentFile(this)"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg> 儲存修改</button>
         </div>
@@ -4063,7 +4064,7 @@ function onStudentFileSearch(query) {
     if (scene) scene.classList.remove('is-searching');
 
     if (_sfRandomDefaults.length === 0) {
-      _sfRandomDefaults = getRandomStudents(5);
+      _sfRandomDefaults = state.students.slice();
     }
     _sfResults = _sfRandomDefaults;
     renderStudentFileCards();
@@ -4101,12 +4102,15 @@ function onStudentFileSearch(query) {
       area.classList.add('search-found-pop');
       area.addEventListener('animationend', () => area.classList.remove('search-found-pop'), { once: true });   // 別讓 fill:forwards 的 filter 留在 3D 舞台上
     }
-  }, 1000);
+  }, 220);
 }
 
 function renderStudentFileCards(sweepIn = false) {
   const track = document.getElementById('sf-card-track');
   if (!track) return;
+  document.getElementById('sf-result-count').textContent = String(_sfResults.length).padStart(2, '0') + ' 份檔案';
+  document.querySelector('.sf-selection').hidden = !_sfResults.length;
+  document.querySelectorAll('.sf-rail-controls button').forEach(b => b.disabled = !_sfResults.length);
   if (window._sfAbortClear) window._sfAbortClear();   // 刪除動畫跑到一半就重新搜尋：先收掉那一場
 
   if (_sfResults.length === 0) {
