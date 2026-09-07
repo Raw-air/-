@@ -1,17 +1,6 @@
-// 住宿生檔案：透明壓克力資料夾的「弧形空間軌道」(curved spatial folder rail)
-// ─────────────────────────────────────────────────────────────────────────────
-// 不是輪播。一整排透明資料夾像抽屜裡的檔案，站在一段橢圓弧上 (圓心在鏡頭這一側，弧的頂點
-// 最靠近鏡頭)。每本的位置與朝向都來自同一條曲線：位置 = 弧上的點，朝向 = 弧的切線 + 90°
-// (資料夾正面跟軌道方向垂直)。所以頂點附近的資料夾幾乎側對鏡頭 (只看到壓克力邊緣與內頁、
-// 中間露出黑色空隙)，離頂點越遠正面露得越多；過了頂點的那些從另一側看到正面。
-// 大小交給 perspective + translateZ (弧的縱深)，manual scale 只有抽出時 ±3% 的脈衝。
-// 目前這本停在頂點左邊 (φA)，「抽出」= 離開弧往鏡頭 +200px、微微上移、往左一點，朝向從軌道給的
-// 側視角校正到 22°，看起來是從一整疊裡拉出來查看，不是中間那張放大。
-// 每本的姿態都是「離中心幾本 (d)」的連續函數，拖曳時逐幀直接寫 transform，放手用阻尼彈簧
-// 吸到最近一本；一個 rAF 迴圈推進全部子動畫，狀態機 idle / dragging / snapping /
-// extracting / entering / locked，不用 setTimeout 疊時間軸。
-// 輸入層：觸控用 Touch Events、桌面用 Mouse Events (iOS Safari 在可直向捲動的頁面做水平
-// 拖曳會發 pointercancel，w3c/pointerevents#303)，另加觸控板橫向捲動、滾輪與鍵盤。
+// Finite spatial archive. Ellipse positions and analytic tangent orientations share one rail.
+// A RAF state machine drives entrance, extraction, dragging, snap and the independent inspector.
+// The historical setup2DCarouselInteraction name remains as the app integration entry point.
 function setup2DCarouselInteraction() {
   const area = document.getElementById('sf-card-area'), track = document.getElementById('sf-card-track');
   const page = document.getElementById('page-student-files');
@@ -24,10 +13,7 @@ function setup2DCarouselInteraction() {
   const cfg = {};
   // 軌道是一段橢圓弧：φ 是弧上的角度，φ=0 是最靠近鏡頭的頂點，目前這本停在 φA (<0，頂點左邊)，
   //   x(φ) = cx + RX·sin φ,   z(φ) = zNear − RZ·(1 − cos φ)
-  // 切線 = (RX·cos φ, −RZ·sin φ)；資料夾正面跟軌道方向垂直，朝向取正面朝著鏡頭的那個解：
-  //   yaw = atan2(RX·cos φ, −RZ·sin φ)  → 頂點左邊是正角 (從右前方看到正面)，頂點 = 90° (側對)，
-  //   過了頂點是負角 (從左前方看到正面)。角度沿弧連續變化，頂點那一格的 ±90° 換面是刻意的
-  //   (正面永遠朝著鏡頭)，不是 sign(offset) 那種左右鏡像的固定角度。
+  // Tangent (RX cos φ, -RZ sin φ), yaw = atan2(dx,dz), continuous through the apex.
   const phiOf = d => cfg.phiA + d * cfg.dPhi;
   const R0 = {}, R1 = {};
   function rail(d, out) {
@@ -35,7 +21,7 @@ function setup2DCarouselInteraction() {
     out.x = cfg.cx + cfg.RX * s;
     out.z = cfg.zNear - cfg.RZ * (1 - co);
     let yaw = Math.atan2(cfg.RX * co, -cfg.RZ * s) / RAD;
-    if (yaw > 90) yaw -= 180;
+    // Keep the tangent unwrapped through 90°; transparent back faces remain visible.
     out.yaw = yaw;
     return out;
   }
@@ -48,20 +34,20 @@ function setup2DCarouselInteraction() {
     const W = area.clientWidth || innerWidth;
     const mobile = W < 640, tablet = W < 1024;
     cfg.mobile = mobile;
-    cfg.fw = mobile ? Math.max(256, Math.min(W - 96, 380)) : tablet ? 380 : 440;   // 橫式：寬 : 高 ≈ 1.55
+    cfg.fw = mobile ? Math.max(220, Math.min(W - 160, 300)) : tablet ? 360 : 400;   // 橫式：寬 : 高 ≈ 1.55
     cfg.fh = Math.round(cfg.fw / 1.55);
-    cfg.RX = mobile ? 250 : tablet ? 520 : 700;      // 弧的橫向半徑
-    cfg.RZ = mobile ? 200 : tablet ? 400 : 520;      // 弧的縱深半徑 (越大越有透視收斂，但近遠倍率差也越大)
+    cfg.RX = mobile ? 200 : tablet ? 520 : 700;      // 弧的橫向半徑
+    cfg.RZ = mobile ? 300 : tablet ? 400 : 520;      // 弧的縱深半徑
     cfg.zNear = 40;                                  // 頂點離鏡頭多近，其餘都在它後面
     cfg.phiA = mobile ? -40 : -42;                   // 目前這本停在弧的哪個角度
-    cfg.dPhi = mobile ? 15 : tablet ? 9 : 8;         // 每本差幾度 (越大間隙越明顯)
-    cfg.activeX = mobile ? .40 : .30;                // 抽出那本落在畫面寬度的幾成
-    cfg.pull = mobile ? 150 : tablet ? 180 : 200;    // 抽出：離開弧往鏡頭多少
+    cfg.dPhi = mobile ? 12 : tablet ? 9 : 8;         // 每本差幾度 (越大間隙越明顯)
+    cfg.activeX = mobile ? .46 : .42;                // 抽出那本落在畫面寬度的幾成
+    cfg.pull = mobile ? 280 : tablet ? 360 : 430;    // 抽出：離開弧往鏡頭多少
     cfg.side = mobile ? 14 : 30;                     // 抽出：再往左偏一點 (離開軌道)
     cfg.lift = mobile ? 14 : 20;                     // 抽出：上移
-    cfg.activeYaw = 22;                              // 抽出後的朝向 (軌道給的側視角只校正到這裡，不轉正)
+    cfg.activeYaw = 18;                              // 抽出後的朝向 (軌道給的側視角只校正到這裡，不轉正)
     cfg.part = .12;                                  // 鄰居沿弧讓開幾本
-    cfg.farVisible = mobile ? 5.4 : tablet ? 9 : 11.5;   // 深處看得到幾本 (超出舞台的就別畫了)
+    cfg.farVisible = mobile ? 8.4 : tablet ? 9 : 11.5;   // 深處看得到幾本
     cfg.fade = mobile ? 1.8 : 3.5;                       // 尾端幾本內淡到 0
     cfg.nearVisible = mobile ? 2.4 : 3.2;
     // 依深度切兩段模糊：門檻取弧上「真正到得了」的深度範圍 (近端 / 遠端誰更深就用誰) 的 45% 與 75%
@@ -91,7 +77,7 @@ function setup2DCarouselInteraction() {
   const snap = { active: false, target: 0, delta: 0, speed: 0, t0: 0 };
   let active = false, dragging = false, touchId = null, mouseActive = false;
   let startX = 0, startY = 0, startC = 0, lastX = 0, lastTime = 0, velocity = 0;
-  const wheel = { acc: 0, timer: 0, lastStep: 0 };
+  const wheel = { acc: 0, deadline: 0, lastStep: 0 };
   const count = () => _sfResults.length;
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -99,7 +85,7 @@ function setup2DCarouselInteraction() {
   function requestFrame() { if (!frame) frame = requestAnimationFrame(tick); }
   function stopFrame() { cancelAnimationFrame(frame); frame = 0; }
   // 打斷所有進行中的動畫 (拖曳開始、點鄰居、滾輪、方向鍵)
-  function interrupt() { stopFrame(); snap.active = false; ent = null; clearTimeout(sheet.timer); clearTimeout(wheel.timer); }
+  function interrupt() { stopFrame(); snap.active = false; ent = null; clearTimeout(sheet.timer); wheel.deadline = 0; }
 
   // ── 曲線 ───────────────────────────────────────────────────────────────
   const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
@@ -126,7 +112,8 @@ function setup2DCarouselInteraction() {
     out.x = r.x - cfg.side * k;
     out.y = -cfg.lift * k;
     out.z = r.z + cfg.pull * k;
-    out.rot = r.yaw + (cfg.activeYaw - r.yaw) * k;
+    const turn = smooth(clamp01((k - .12) / .88));
+    out.rot = r.yaw + (cfg.activeYaw - r.yaw) * turn;
     out.scale = 1 + (ext.pulse - 1) * bump;         // 大小交給透視；這裡只有抽出時 ±3% 的脈衝
     // 兩端都淡到 0 才離開視窗，回收換人時才不會在畫面上「跳出來」
     const near = d < -1 ? Math.max(0, 1 + (d + 1) / (cfg.nearVisible - 1)) : 1;
@@ -134,7 +121,7 @@ function setup2DCarouselInteraction() {
     out.alpha = Math.max(0, Math.min(near, far));
     out.near = d > -1.6 && d < 2.6;                 // 只有這些給 will-change
     out.blur = out.z < cfg.blur2 ? 2 : out.z < cfg.blur1 ? 1 : 0;
-    out.lefty = r.yaw > 0;                          // yaw>0 (頂點左邊) 左緣離鏡頭近、露在外面 → 側標與標籤放左邊；yaw<0 放右邊
+    out.lefty = r.yaw < 90;                          // yaw>0 (頂點左邊) 左緣離鏡頭近、露在外面 → 側標與標籤放左邊；yaw<0 放右邊
     return out;
   }
   // 進場前「整疊還沒攤開」的姿態：全部擠在目前這本附近、更深、透明
@@ -160,7 +147,7 @@ function setup2DCarouselInteraction() {
     const now = performance.now();
     for (const entry of _sfPool) {
       const el = entry.el, v = entry.vIndex;
-      if (v === null || !n) { el.classList.add('sf-far'); continue; }
+      if (v === null || !n || !entry.student) { el.classList.add('sf-far'); continue; }
       const d = v - c, ad = Math.abs(d);
       const p = pose(d, P0);
       const visible = p.alpha > .012;
@@ -168,6 +155,7 @@ function setup2DCarouselInteraction() {
       if (!visible) { el._tf = null; continue; }
       const isActive = v === _sfActiveIndex;
       el.classList.toggle('active', isActive);
+      el.classList.toggle('fd-back-facing', p.rot > 90);
       // 進場：從「整疊還沒攤開」的姿態依序沿軌道展開 (每本 380ms，離中心越遠越晚 30ms)
       if (ent && (!ent.only || ent.only === entry)) {
         const delay = ent.only ? 0 : .03 * Math.min(ad, 7);
@@ -179,7 +167,8 @@ function setup2DCarouselInteraction() {
         }
       }
       // 開紙時這本往下讓位
-      const y = p.y + (entry === sheet.entry && v === sheet.vIndex ? sheet.shift * sheet.amt : 0);   // 回收換人就不套
+      const y = p.y - (isActive ? (cfg.mobile ? 108 : 12) * sheet.amt : 0);
+      p.z += isActive ? 22 * sheet.amt : 0;   // 回收換人就不套
       put(el,
         `translate3d(${p.x.toFixed(1)}px,${y.toFixed(1)}px,${p.z.toFixed(1)}px) rotateY(${p.rot.toFixed(2)}deg) scale(${p.scale.toFixed(3)})`,
         p.alpha.toFixed(3), p.near, p.blur, p.lefty);
@@ -198,6 +187,14 @@ function setup2DCarouselInteraction() {
   function tick(now) {
     frame = 0;
     let more = false;
+    if (wheel.deadline) {
+      if (now < wheel.deadline) more = true;
+      else {
+        wheel.deadline = 0;
+        const base = Math.round(c);
+        settle(Math.max(base-2, Math.min(base+2, Math.round(c+wheel.acc/_cardWidth*.3))), -wheel.acc*8);
+      }
+    }
     // 彈簧吸附 (臨界阻尼 + 初速度，60/120Hz 都一樣)。公式以 px 計 (_currentX)，換算回索引
     if (snap.active) {
       const t = (now - snap.t0) / 1000, omega = 19;
@@ -215,9 +212,12 @@ function setup2DCarouselInteraction() {
       if (t < .68) more = true;
       else {
         ext.mode = 'none'; ext.ex = ext.part = ext.pulse = 1;
-        if (state === 'extracting') { state = 'idle'; scheduleOpen(); }
+        if (state === 'extracting') { state = 'idle'; prepareSelection(); }
         const cb = ext.done; ext.done = null; if (cb) cb();
       }
+    } else if (ext.mode === 'reflow') {
+      const t = clamp01((now-ext.t0)/300); ext.part=1-smooth(t);
+      if(t<1) more=true; else ext.mode='none';
     } else if (ext.mode === 'out') {
       const t = clamp01((now - ext.t0) / 160);
       const e = 1 - outCubic(t);
@@ -231,6 +231,11 @@ function setup2DCarouselInteraction() {
       if (t < (ent.only ? .38 : .56)) more = true;
       else ent = null;
     }
+    if (state === 'opening' && now - sheet.t0 >= 150) {
+      const editor = sfInspector(); editor.hidden = false; editor.classList.add('is-open');
+      state = 'editing';
+      editor.querySelector('input')?.focus({preventScroll:true});
+    }
     // 開紙讓位
     if (sheet.amt !== sheet.target) {
       const t = clamp01((now - sheet.t0) / (sheet.target ? 480 : 220));
@@ -243,7 +248,7 @@ function setup2DCarouselInteraction() {
 
   // ── 抽出動畫：鄰居讓開 (0-160ms) → 抽出 (60ms 起，彈簧衝過頭) → 收斂 (~680ms) ──
   function startExtraction(now) {
-    if (reduced()) { ext.mode = 'none'; ext.ex = ext.part = ext.pulse = 1; state = 'idle'; paint(); scheduleOpen(); const cb = ext.done; ext.done = null; if (cb) cb(); return; }
+    if (reduced()) { ext.mode = 'none'; ext.ex = ext.part = ext.pulse = 1; state = 'idle'; paint(); prepareSelection(); const cb = ext.done; ext.done = null; if (cb) cb(); return; }
     state = 'extracting';
     ext.mode = 'in'; ext.t0 = now || performance.now();
     ext.base = clamp01(ext.ex); ext.basePart = clamp01(ext.part);   // 從目前的位置接著抽，不跳回 0
@@ -260,62 +265,48 @@ function setup2DCarouselInteraction() {
   }
 
   // ── 詳細資料紙 (fd-sheet)：從資料夾頂端抽出來，資料夾往下讓位 ────────────
-  function sheetShift(entry) {
-    const s = entry.el.querySelector('.fd-sheet');
-    if (!s) return 0;
-    // 用透視投影算：資料夾根節點在 z=zActive、紙再往前 40px，兩者被放大的倍率不同，
-    // 透視原點在舞台 (50%, 44%)。要讓紙的頂端留 12px、資料夾底部也留 12px。
-    const sh = area.clientHeight || 560, fh = cfg.fh, h = s.offsetHeight;
-    const oy = sh * ORIGIN_Y, Ly = sh / 2 - fh / 2;
-    const zA = rail(0, R0).z + cfg.pull;                 // 抽出那本的深度
-    const Pz = PERSP / (PERSP - zA), Ps = PERSP / (PERSP - zA - 40);
-    let overlap = 74;                                   // 紙的下緣插進資料夾多深
-    const yActive = -cfg.lift;                           // pose() 給抽出那本的 y
-    let need = (12 - oy) / Ps + oy - Ly - overlap + h;   // 紙頂端不被切到，根節點至少要往下多少
-    const max = (sh - 12 - oy) / Pz + oy - Ly - fh;      // 資料夾底部不能掉出舞台
-    if (need > max) { overlap += need - max; need = max; }
-    let shift = need - yActive;
-    if (shift < 0) shift = 0;
-    entry.el.style.setProperty('--fd-overlap', overlap.toFixed(0) + 'px');
-    return shift;
-  }
   function openSheet() {
     const entry = sfActiveEntry();
-    clearTimeout(sheet.timer);
     if (!entry || state !== 'idle' || !entry.student) return;
-    if (entry.el.classList.contains('is-open')) return;
-    for (const e of _sfPool) if (e !== entry) e.el.classList.remove('is-open');
-    entry.el.classList.add('is-open');
+    if (!sfInspector().hidden) return;
+    sfMountInspector(entry);
     sheet.entry = entry; sheet.vIndex = entry.vIndex;
-    sheet.shift = sheetShift(entry);
     sheet.from = sheet.amt; sheet.target = 1; sheet.t0 = performance.now();
+    if (reduced()) {
+      sheet.amt = 1; state = 'editing';
+      sfInspector().hidden = false; sfInspector().classList.add('is-open');
+      sfInspector().querySelector('input')?.focus({preventScroll:true});
+      paint(); return;
+    }
+    state = 'opening';
     requestFrame();
   }
   function closeSheet(instant) {
-    clearTimeout(sheet.timer);
-    for (const e of _sfPool) e.el.classList.remove('is-open');
-    if (instant) { sheet.amt = sheet.target = 0; sheet.entry = null; paint(); return; }
-    if (sheet.amt) { sheet.from = sheet.amt; sheet.target = 0; sheet.t0 = performance.now(); requestFrame(); }
-    else sheet.entry = null;
+    sfStashInspector();
+    const editor = sfInspector();
+    if (editor) { editor.hidden = true; editor.classList.remove('is-open'); }
+    if (state === 'opening' || state === 'editing') state = 'idle';
+    if (instant || reduced()) { sheet.amt = sheet.target = 0; sheet.entry = null; paint(); return; }
+    sheet.from = sheet.amt; sheet.target = 0; sheet.t0 = performance.now();
+    requestFrame();
+    if (editor?.contains(document.activeElement)) area.focus({preventScroll:true});
   }
-  function scheduleOpen() {
-    clearTimeout(sheet.timer);
-    sheet.timer = setTimeout(() => { if (state === 'idle' && !active && !document.hidden && currentPage === 'student-files') openSheet(); }, 140);
+  function prepareSelection() {
+    // Browsing never opens the editor. Warm the selected folder's dust texture while idle.
+    window.sfDissolve?.prepare(sfActiveEntry()?.el);
   }
-  function toggleSheet() {
-    const entry = sfActiveEntry();
-    if (entry?.el.classList.contains('is-open')) closeSheet(false); else openSheet();
-  }
+  function toggleSheet() { if (!sfInspector().hidden) closeSheet(false); else openSheet(); }
 
   // ── 吸附到某一本 ─────────────────────────────────────────────────────────
   function settle(index, initialVelocity = 0) {
+    index = Math.max(0, Math.min(count()-1, index));
     clearTimeout(sheet.timer);
     _sfActiveIndex = index;
     snap.target = index;
     snap.delta = (index - c) * _cardWidth;               // 以 px 計的距離 (_currentX 座標系)
     if (Math.abs(snap.delta) < .5 && !initialVelocity) {
       c = index; snap.active = false; moving(false);
-      if (ext.ex >= 1 && ext.mode === 'none') { state = 'idle'; paint(); scheduleOpen(); }
+      if (ext.ex >= 1 && ext.mode === 'none') { state = 'idle'; paint(); prepareSelection(); }
       else startExtraction();
       return;
     }
@@ -353,21 +344,21 @@ function setup2DCarouselInteraction() {
       // 真的開始橫向拖曳才打斷動畫，並以此刻的位置為基準 (彈簧可能還在動)
       dragging = true; suppressClick = true; state = 'dragging';
       interrupt(); moving(true); closeSheet(false); pushBack();
-      startX = x; startC = c;
+      startX = x; startC = c; lastX = x; lastTime = now;
       if (document.activeElement?.closest('.sf-folder')) document.activeElement.blur();
       return true;
     }
     const dt = now - lastTime;
     if (dt > 0) velocity = .65 * ((x - lastX) / dt * 1000) + .35 * velocity;
     lastX = x; lastTime = now;
-    c = startC - dx / _cardWidth;          // 無限循環：兩端都不設限
+    c = Math.max(-.25, Math.min(count()-.75, startC - dx / _cardWidth));          // 無限循環：兩端都不設限
     requestFrame();
     return true;
   }
   function up(cancelled) {
     if (!active) return;
     active = false;
-    if (!dragging) { if (state === 'idle') scheduleOpen(); return; }
+    if (!dragging) { if (state === 'idle') prepareSelection(); return; }
     dragging = false;
     if (cancelled || performance.now() - lastTime > 100) velocity = 0;
     // velocity 是手指的 px/s (往右為正)；往右拖 = 索引變小
@@ -376,7 +367,7 @@ function setup2DCarouselInteraction() {
     let next = Math.round(projected);
     next = Math.max(current - 3, Math.min(current + 3, next));
     settle(next, velocity);
-    setTimeout(() => suppressClick = false, 0);
+    // The next pointer/touch down clears click suppression.
   }
   // ── 觸控 (iPhone / Android) ─────────────────────────────────────────────
   const findTouch = e => Array.from(e.changedTouches).find(t => t.identifier === touchId);
@@ -421,14 +412,9 @@ function setup2DCarouselInteraction() {
       e.preventDefault();
       if (state !== 'dragging') { interrupt(); state = 'dragging'; moving(true); closeSheet(false); pushBack(); wheel.acc = 0; }
       const px = e.deltaMode === 1 ? e.deltaX * 16 : e.deltaX;
-      c += px / _cardWidth; wheel.acc = .6 * px + .4 * wheel.acc;
+      c = Math.max(0, Math.min(count()-1, c + px / _cardWidth)); wheel.acc = .6 * px + .4 * wheel.acc;
       requestFrame();
-      clearTimeout(wheel.timer);
-      wheel.timer = setTimeout(() => {
-        const base = Math.round(c);
-        const target = Math.max(base - 2, Math.min(base + 2, Math.round(c + wheel.acc / _cardWidth * .3)));
-        settle(target, -wheel.acc * 8);
-      }, 120);
+      wheel.deadline = performance.now() + 120;
     } else if (ay > ax && (e.shiftKey || !pageScrollable())) {
       // 滑鼠滾輪：一格一本 (頁面本身不需要捲動時才接管，否則讓頁面捲)
       e.preventDefault();
@@ -447,19 +433,20 @@ function setup2DCarouselInteraction() {
     const entry = _sfPool.find(x => x.el === folder);
     if (!entry || entry.vIndex === null) return;
     if (entry.vIndex !== _sfActiveIndex) jumpTo(entry.vIndex);
-    else if (state === 'idle') toggleSheet();
+    else if (state === 'idle' || state === 'editing') toggleSheet();
   }, true);
+  sfInspector().addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); closeSheet(false); } });
   area.tabIndex = 0; area.setAttribute('aria-label', '住宿生資料夾，可左右滑動、使用方向鍵，Enter 展開');
   area.addEventListener('keydown', e => {
     if (state === 'locked' || e.target.closest('input,textarea,select,button,a')) return;   // 紙上的按鈕要吃得到 Enter/Space
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); jumpTo(_sfActiveIndex + (e.key === 'ArrowRight' ? 1 : -1)); }
-    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (state === 'idle') toggleSheet(); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (state === 'idle' || state === 'editing') toggleSheet(); }
     else if (e.key === 'Escape') closeSheet(false);
   });
   window.addEventListener('resize', () => {
     measure();
     for (const e of _sfPool) e.el._tf = null;
-    if (sheet.entry) sheet.shift = sheetShift(sheet.entry);
+    if (state === 'idle') prepareSelection();
     if (currentPage === 'student-files') paint();
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden) window._sfStopMotion(); });
@@ -473,7 +460,7 @@ function setup2DCarouselInteraction() {
       _sfActiveIndex = index; c = index; lastIndex = index;
       closeSheet(true);
       for (const e of _sfPool) e.el._tf = null;
-      if (reduced()) { ext.ex = ext.part = ext.pulse = 1; state = 'idle'; paint(); scheduleOpen(); return; }
+      if (reduced()) { ext.ex = ext.part = ext.pulse = 1; state = 'idle'; paint(); prepareSelection(); return; }
       ext.mode = 'none'; ext.ex = ext.part = 0; ext.pulse = 1;
       ent = { t0: performance.now(), only: null };
       state = 'entering';
@@ -487,7 +474,7 @@ function setup2DCarouselInteraction() {
       if (!entry) { paint(); return Promise.resolve(); }
       return new Promise(resolve => {
         ext.done = resolve;
-        if (reduced()) { ext.ex = ext.part = ext.pulse = 1; paint(); scheduleOpen(); const cb = ext.done; ext.done = null; cb(); return; }
+        if (reduced()) { ext.ex = ext.part = ext.pulse = 1; paint(); prepareSelection(); const cb = ext.done; ext.done = null; cb(); return; }
         ext.mode = 'none'; ext.ex = 0; ext.part = 1; ext.pulse = 1;
         ent = { t0: performance.now(), only: entry };
         state = 'entering';
@@ -498,13 +485,14 @@ function setup2DCarouselInteraction() {
     // 刪除中：鎖住所有輸入 (拖曳、滾輪、點擊、鍵盤)，畫面停在目前狀態
     lock() { stopAll(); resetInput(); state = 'locked'; ext.ex = ext.part = ext.pulse = 1; sheet.amt = sheet.target; paint(); },
     unlock() { if (state === 'locked') state = 'idle'; },
+    reflow() { ext.mode='reflow'; ext.t0=performance.now(); requestFrame(); },
     settle, openSheet, closeSheet, paint, measure,
     get state() { return state; },
     get center() { return c; },
     get cfg() { return cfg; }
   };
   window._sfDisable3D = () => closeSheet(false);
-  window._restart3DTimer = () => { if (state === 'idle') scheduleOpen(); };
+  window._restart3DTimer = () => { if (state === 'idle') prepareSelection(); };
   window._sfStopMotion = () => {
     stopAll(); resetInput();
     if (state !== 'locked') state = 'idle';

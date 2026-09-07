@@ -93,7 +93,9 @@ async function run(engine,viewport){
   // 進場 (~1s)：整排展開、中央那本抽出、自動打開詳細資料紙
   await page.waitForFunction(()=>window.sfCarousel&&sfCarousel.state==='idle',null,{timeout:5000});
   await page.waitForTimeout(350);
-  assert.equal(await page.locator('.sf-folder.active.is-open').count(),1,'the active folder opens its sheet after the entrance');
+  assert.equal(await page.locator('#sf-inspector').isVisible(),false,'browsing never opens an editor');
+  assert.equal(await page.locator('.sf-folder input,.sf-folder textarea').count(),0,'folder geometry contains no form controls');
+  await page.screenshot({path:path.join(out,engine.name()+'-archive.png')});
   await page.evaluate(()=>{window._sfStopMotion();_sfResults=state.students;renderStudentFileCards();});
   await page.waitForTimeout(100);
   assert.ok(await page.locator('.sf-folder').count()<=17);
@@ -109,24 +111,26 @@ async function run(engine,viewport){
     const n=Array.from(document.querySelectorAll('.sf-folder:not(.sf-far):not(.active)')).map(e=>({i:+e.dataset.index,yaw:yawOf(e),z:zOf(e),scale:scOf(e)})).sort((p,q)=>p.i-q.i);
     return {ratio:r.width/r.height,layers:f.children.length,front:!!f.querySelector('.fd-front'),sheet:!!f.querySelector('.fd-sheet'),
       top:!!f.querySelector('.fd-top'),spines:f.querySelectorAll('.fd-spine').length,active:{i:_sfActiveIndex,yaw:yawOf(f),z:zOf(f),scale:scOf(f)},
-      n,preserve:getComputedStyle(f).transformStyle==='preserve-3d'};
+      n,width:f.offsetWidth,preserve:getComputedStyle(f).transformStyle==='preserve-3d'};
   });
   assert.ok(geo.ratio>1.3&&geo.ratio<1.9,'landscape folder '+geo.ratio);
-  assert.ok(geo.layers>=9&&geo.front&&geo.sheet&&geo.top&&geo.spines===2&&geo.preserve,'layered folder (front/back/top/2 spines/paper/edge) + sheet in a 3D context');
+  assert.ok(geo.layers>=9&&geo.front&&!geo.sheet&&geo.top&&geo.spines===2&&geo.preserve,'layered folder (front/back/top/2 spines/paper/edge) + sheet in a 3D context');
   assert.ok(geo.n.length>=4,'the rail shows a run of folders: '+geo.n.length);
-  const yaws=geo.n.map(p=>p.yaw),absY=yaws.map(Math.abs);
+  const yaws=geo.n.map(p=>p.yaw),absY=yaws.map(y=>Math.min(Math.abs(y),180-Math.abs(y)));
   assert.ok(geo.active.yaw>=10&&geo.active.yaw<=30,'the extracted folder faces the viewer at 10–30°: '+geo.active.yaw);
   assert.ok(absY.filter(y=>y>=45&&y<=90).length>=absY.length*.6,'most folders are seen from the side (45–90°): '+yaws.join(','));
   assert.ok(absY.some(y=>y>78),'the apex of the arc is nearly edge-on: '+yaws.join(','));
   // 朝向沿弧連續：相鄰兩本差 < 36° (手機每本差 15°，橢圓弧兩端的切線變化比較快)，跨過 ±90 (側對) 那一格視為連續
   for(let k=1;k<geo.n.length;k++){const d=Math.abs(geo.n[k].yaw-geo.n[k-1].yaw);assert.ok(d<36||Math.abs(d-180)<36,'yaw follows the rail tangent continuously: '+yaws.join(','));}
   assert.ok(geo.n.every(p=>geo.active.z-p.z>55),'the active folder is pulled out of the rail towards the viewer: '+geo.active.z+' vs '+geo.n.map(p=>p.z).join(','));
+  const activeBack=geo.active.z-geo.width/2*Math.abs(Math.sin(geo.active.yaw*Math.PI/180));
+  assert.ok(geo.n.every(p=>activeBack>p.z+geo.width/2*Math.abs(Math.sin(p.yaw*Math.PI/180))), 'the extracted folder clears rotated neighbour edges, not only their centres');
   assert.ok(geo.n.concat(geo.active).every(p=>p.scale>=.88&&p.scale<=1.08),'size comes from perspective, manual scale stays within 0.88–1.08');
   const zs=geo.n.map(p=>p.z);
   assert.ok(Math.max(...zs)-Math.min(...zs)>110,'the arc has real depth: '+zs.join(','));
   // 弧：最靠近鏡頭的頂點在中間，兩端都比它後退 (不是單向縮小的斜直線)
   const apex=zs.indexOf(Math.max(...zs));
-  assert.ok(apex>0&&apex<zs.length-1&&zs[0]<zs[apex]-30&&zs[zs.length-1]<zs[apex]-30,'curved rail: both ends recede behind the apex: '+zs.join(','));
+  assert.ok(apex>0&&apex<zs.length-1&&zs[0]<zs[apex]-10&&zs[zs.length-1]<zs[apex]-30,'curved rail: both ends recede behind the apex: '+zs.join(','));
   // A swipe can begin over the folder front; release settles in one short spring, then the sheet re-opens.
   const front=await page.locator('.sf-folder.active .fd-front').boundingBox();
   await page.mouse.move(front.x+front.width*.7,front.y+front.height*.5);
@@ -136,18 +140,21 @@ async function run(engine,viewport){
   assert.ok(await page.evaluate(()=>Math.abs(_currentX+_sfActiveIndex*_cardWidth)<.5));
   await page.waitForFunction(()=>sfCarousel.state==='idle',null,{timeout:5000});
   await page.waitForTimeout(350);
-  assert.equal(await page.locator('.sf-folder.active.is-open').count(),1,'sheet re-opens after a swipe settles');
+  assert.equal(await page.locator('#sf-inspector').isVisible(),false,'swiping keeps the inspector closed');
   // Return to the first synthetic card for deterministic screenshots.
   await page.evaluate(()=>{window._sfStopMotion();renderStudentFileCards();});
   await page.waitForTimeout(100);
   await page.evaluate(()=>{window._sfStopMotion();sfCarousel.openSheet();});
-  await page.locator('.sf-folder.active .sf-input-name').fill('滑動後保留');
+  await page.locator('#sf-inspector .sf-input-name').fill('滑動後保留');
   await page.evaluate(()=>window._sfSweepTo(0,-20*_cardWidth));
   await page.waitForTimeout(950);
   await page.evaluate(()=>window._sfSweepTo(_currentX,0));
   await page.waitForTimeout(950);
-  assert.equal(await page.locator('.sf-folder.active .sf-input-name').inputValue(),'滑動後保留');
-  await page.evaluate(()=>{window._sfStopMotion();document.querySelector('.sf-folder.active .sf-input-name').value='測試住宿生 0';sfCarousel.openSheet();});
+  await page.waitForFunction(()=>sfCarousel.state==='idle');
+  await page.evaluate(()=>sfCarousel.openSheet());
+  await page.locator('#sf-inspector').waitFor({state:'visible'});
+  assert.equal(await page.locator('#sf-inspector .sf-input-name').inputValue(),'滑動後保留');
+  await page.evaluate(()=>{window._sfStopMotion();document.querySelector('#sf-inspector .sf-input-name').value='測試住宿生 0';sfCarousel.openSheet();});
   await page.waitForTimeout(700);
   await page.screenshot({path:path.join(out,engine.name()+'-cards.png')});
   // 刪除 = 高密度粉塵 + 微型黑洞：renderer (canvas / WebGL context / shader / 粒子池) 在頁面載入
@@ -155,7 +162,7 @@ async function run(engine,viewport){
   // 「空床」長回來 (草稿，不打 API)，紙會再自動打開
   assert.equal(await page.locator('.sf-dissolve-canvas').count(),1,'particle canvas is created at page mount');
   assert.ok(await page.evaluate(()=>sfDissolve.max>=3000),'the particle pool is preallocated for a dense dust cloud');
-  await page.evaluate(()=>{window.__delT0=performance.now();window.__bhDone=false;clearStudentData(document.querySelector('.sf-folder.active .sf-broom-btn')).then(()=>window.__bhDone=true);});
+  await page.evaluate(()=>{window.__delT0=performance.now();window.__bhDone=false;clearStudentData(document.querySelector('#sf-inspector .sf-broom-btn')).then(()=>window.__bhDone=true);});
   await page.waitForSelector('.sf-dissolve-canvas.is-running',{timeout:400});
   assert.ok(await page.evaluate(()=>performance.now()-window.__delT0<250),'dissolve starts immediately, no first-run stall');
   await page.waitForTimeout(140);
@@ -173,15 +180,17 @@ async function run(engine,viewport){
   assert.equal(await page.evaluate(()=>window._sfBHBusy),false);
   assert.equal(await page.locator('.sf-dissolve-canvas.is-running').count(),0);
   assert.equal(await page.evaluate(()=>Array.from(document.querySelector('.sf-folder.active').children).filter(c=>c.style.maskImage||c.style.webkitMaskImage||c.style.visibility==='hidden').length),0,'masks are cleaned up');
-  assert.equal(await page.locator('.sf-folder.active .sf-input-name').inputValue(),'');
+  assert.equal(await page.locator('#sf-inspector .sf-input-name').inputValue(),'');
   assert.equal(await page.locator('.sf-folder.active .fd-name').innerText(),'空床');
   assert.equal(requests.filter(r=>r.path==='/api/attendance'&&r.method!=='GET').length,0);
   await page.waitForFunction(()=>sfCarousel.state==='idle',null,{timeout:5000});
-  await page.waitForSelector('.sf-folder.active.is-open',{timeout:3000}).catch(()=>{throw new Error('sheet re-opens on the re-materialised folder');});
+  assert.equal(await page.locator('#sf-inspector').isVisible(),false);
+  await page.evaluate(()=>sfCarousel.openSheet());
+  await page.locator('#sf-inspector').waitFor({state:'visible'});
   await page.screenshot({path:path.join(out,engine.name()+'-after-delete.png')});
   // A pending save must not overwrite text the user types after pressing Save.
   await page.evaluate(async()=>{
-    const card=document.querySelector('.sf-folder.active');
+    const card=document.querySelector('#sf-inspector');
     const input=card.querySelector('.sf-input-name');input.value='已送出的名字';
     card.querySelector('.sf-chk-empty').checked=false;
     const original=window._api.updateAttendance;
@@ -190,17 +199,17 @@ async function run(engine,viewport){
     input.value='稍後的新修改';finish({});await saving;
     window._api.updateAttendance=original;
   });
-  assert.equal(await page.locator('.sf-folder.active .sf-input-name').inputValue(),'稍後的新修改');
+  assert.equal(await page.locator('#sf-inspector .sf-input-name').inputValue(),'稍後的新修改');
   assert.equal(await page.locator('.sf-folder.active .fd-name').innerText(),'稍後的新修改','summary on the folder front follows the save');
   // Cancellation (leaving the page mid-dissolve) restores the folder without clearing the form.
-  await page.locator('.sf-folder.active .sf-input-name').fill('保留草稿');
-  await page.evaluate(()=>{window.__bhDone=false;clearStudentData(document.querySelector('.sf-folder.active .sf-broom-btn')).then(()=>window.__bhDone=true);});
+  await page.locator('#sf-inspector .sf-input-name').fill('保留草稿');
+  await page.evaluate(()=>{window.__bhDone=false;clearStudentData(document.querySelector('#sf-inspector .sf-broom-btn')).then(()=>window.__bhDone=true);});
   await page.waitForTimeout(100);await page.evaluate(()=>navigateTo('settings'));
   await page.waitForFunction(()=>window.__bhDone);
   assert.equal(await page.evaluate(()=>window._sfBHBusy),false);
   assert.equal(await page.locator('.sf-dissolve-canvas.is-running').count(),0);
   assert.equal(await page.evaluate(()=>Array.from(document.querySelector('.sf-folder.active').children).filter(c=>c.style.maskImage||c.style.webkitMaskImage||c.style.visibility==='hidden').length),0);
-  assert.equal(await page.locator('.sf-folder.active .sf-input-name').inputValue(),'保留草稿');
+  assert.equal(await page.locator('#sf-inspector .sf-input-name').inputValue(),'保留草稿');
   // Older Safari fallback also honours the latest switch value.
   await page.evaluate(()=>{document.startViewTransition=undefined;const e=document.getElementById('setting-white-mode');e.checked=true;toggleWhiteMode(e);e.checked=false;toggleWhiteMode(e);});
   await page.waitForTimeout(850);

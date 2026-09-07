@@ -3842,10 +3842,7 @@ function getRandomStudents(count) {
 }
 
 function sfStudentAt(vIndex) {
-  // 無限循環：虛擬索引可正可負，取模對應名單，滑到底會自動接回第一張
-  const n = _sfResults.length;
-  if (!n) return null;
-  return _sfResults[((vIndex % n) + n) % n];
+  return _sfResults[vIndex] || null;
 }
 
 function sfEsc(v) {
@@ -3893,13 +3890,6 @@ function sfUpdateSummary(el, s, draft) {
 
 // 資料夾 DOM：6 層真正有 Z 深度的殼 (背板+標籤 / 左右側邊 / 內頁 / 前板玻璃+摘要 / 邊緣高光) + 抽出來的詳細資料紙
 function sfCardHTML(s, draft) {
-  const d = draft || {};
-  const name = d.name !== undefined ? d.name : (s.name || '');
-  const sid = d.studentId !== undefined ? d.studentId : (s.studentId || '');
-  const cls = d.class !== undefined ? d.class : (s.class || '');
-  const remarks = d.remarks !== undefined ? d.remarks : (s.remarks || '');
-  const isForeign = d.isForeign !== undefined ? d.isForeign : !!s.isForeign;
-  const isEmpty = d.isEmpty !== undefined ? d.isEmpty : (s.isEmpty || !s.name);
   const m = sfSummary(s, draft);
   return `
       <div class="fd-back"></div>
@@ -3917,8 +3907,22 @@ function sfCardHTML(s, draft) {
         </div>
       </div>
       <div class="fd-edge"></div>
-      <div class="fd-sheet">
+    `;
+}
+
+function sfEditorHTML(s, draft) {
+  const d = draft || {};
+  const name = d.name !== undefined ? d.name : (s.name || '');
+  const sid = d.studentId !== undefined ? d.studentId : (s.studentId || '');
+  const cls = d.class !== undefined ? d.class : (s.class || '');
+  const remarks = d.remarks !== undefined ? d.remarks : (s.remarks || '');
+  const isForeign = d.isForeign !== undefined ? d.isForeign : !!s.isForeign;
+  const isEmpty = d.isEmpty !== undefined ? d.isEmpty : (s.isEmpty || !s.name);
+  const m = sfSummary(s, draft);
+  return `
+      <div class="sf-inspector-content">
         <div class="sf-card-title">
+          <button class="sf-icon-btn" onclick="sfCarousel.closeSheet(false)" aria-label="關閉詳細資料">×</button>
           <span class="sf-title-text">${sfEsc(s.room)} ${sfEsc(s.bed)}</span>
           <div class="sf-card-badge-relative">${sfEsc(m.badge)}</div>
           <button class="sf-icon-btn sf-broom-btn" onclick="clearStudentData(this)" title="清空床位資料"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
@@ -3926,18 +3930,18 @@ function sfCardHTML(s, draft) {
         <div class="sf-edit-form">
           <div style="display:flex; gap: 8px;">
               <div class="sf-form-group" style="flex: 1;">
-                <label>姓名</label>
-                <input type="text" class="sf-input-name styled-input" value="${sfEsc(name)}" placeholder="未登記">
+                <label for="sf-edit-name">姓名</label>
+                <input type="text" id="sf-edit-name" class="sf-input-name styled-input" value="${sfEsc(name)}" placeholder="未登記">
               </div>
               <div class="sf-form-group" style="flex: 1;">
-                <label>學號</label>
-                <input type="text" class="sf-input-id styled-input" value="${sfEsc(sid)}" placeholder="無">
+                <label for="sf-edit-id">學號</label>
+                <input type="text" id="sf-edit-id" class="sf-input-id styled-input" value="${sfEsc(sid)}" placeholder="無">
               </div>
           </div>
           <div style="display:flex; gap: 8px; align-items: flex-end;">
               <div class="sf-form-group" style="flex: 1;">
-                <label>班別</label>
-                <input type="text" class="sf-input-class styled-input" value="${sfEsc(cls)}" placeholder="無">
+                <label for="sf-edit-class">班別</label>
+                <input type="text" id="sf-edit-class" class="sf-input-class styled-input" value="${sfEsc(cls)}" placeholder="無">
               </div>
               <div class="sf-toggles" style="flex: 1;">
                 <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-foreign" ${isForeign ? 'checked' : ''}> 外籍</label>
@@ -3945,13 +3949,32 @@ function sfCardHTML(s, draft) {
               </div>
           </div>
           <div class="sf-form-group">
-            <label>備註 (情況註記)</label>
-            <textarea class="sf-input-remarks styled-input" style="resize: none; font-size: 13px; line-height: 1.4;" placeholder="住宿生備註欄">${sfEsc(remarks)}</textarea>
+            <label for="sf-edit-remarks">備註 (情況註記)</label>
+            <textarea id="sf-edit-remarks" class="sf-input-remarks styled-input" style="resize: none; font-size: 13px; line-height: 1.4;" placeholder="住宿生備註欄">${sfEsc(remarks)}</textarea>
           </div>
           <button class="sf-save-action-btn" onclick="autoSaveStudentFile(this)"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg> 儲存修改</button>
         </div>
       </div>
     `;
+}
+
+// One 2D inspector owns editing. Folder shells contain summary geometry only.
+function sfInspector() { return document.getElementById('sf-inspector'); }
+function sfStashInspector() {
+  const el = sfInspector(), owner = _sfRenderMap.get(el);
+  if (owner) sfSaveDraft({el, student: owner});
+}
+function sfMountInspector(entry) {
+  const el = sfInspector();
+  sfStashInspector();
+  el.innerHTML = sfEditorHTML(entry.student, _sfDrafts.get(entry.student.id));
+  _sfRenderMap.set(el, entry.student);
+  el.oninput = () => {
+    sfStashInspector();
+    for (const e of _sfPool) if (e.student?.id === entry.student.id)
+      sfUpdateSummary(e.el, entry.student, _sfDrafts.get(entry.student.id));
+    window.sfDissolve?.prepare(entry.el);
+  };
 }
 
 // 讀出一張卡目前的欄位內容，並判斷是否跟原始資料相同
@@ -4056,16 +4079,15 @@ function sfRebindAll() {
 
 function onStudentFileSearch(query) {
   clearTimeout(_sfSearchTimer);
+  window.sfCarousel?.closeSheet(true);
+  if (window._sfAbortClear) window._sfAbortClear();
   const scene = document.getElementById('sf-scene');
   const mirror = document.getElementById('sf-search-mirror');
   if (!query || query.trim().length === 0) {
     if (mirror) mirror.style.display = 'none';
     if (scene) scene.classList.remove('is-searching');
 
-    if (_sfRandomDefaults.length === 0) {
-      _sfRandomDefaults = getRandomStudents(5);
-    }
-    _sfResults = _sfRandomDefaults;
+    _sfResults = state.students;
     renderStudentFileCards();
     return;
   }
@@ -4122,6 +4144,7 @@ function renderStudentFileCards(sweepIn = false) {
     return;
   }
 
+  window.sfCarousel?.closeSheet(true);
   sfEnsurePool(track);
   sfRebindAll();
   setup2DCarouselInteraction();
@@ -4154,7 +4177,7 @@ window.debouncedAutoSave = function (elem) {
 
 const _sfSaving = new Set();
 window.autoSaveStudentFile = async function (elem) {
-  const activeCard = elem.closest('.sf-folder');
+  const activeCard = elem.closest('.sf-editor');
   if (!activeCard) return;
 
   const studentObj = _sfRenderMap.get(activeCard);
@@ -4162,7 +4185,7 @@ window.autoSaveStudentFile = async function (elem) {
   if (_sfSaving.has(studentObj.id)) return;
   _sfSaving.add(studentObj.id);
   const fingerprint = c => JSON.stringify(Array.from(c.querySelectorAll('input,textarea'), e => e.type === 'checkbox' ? e.checked : e.value));
-  const beforeViews = new Map(Array.from(document.querySelectorAll('.sf-folder'))
+  const beforeViews = new Map(Array.from(document.querySelectorAll('.sf-folder,.sf-editor'))
     .filter(c => _sfRenderMap.get(c)?.id === studentObj.id).map(c => [c, fingerprint(c)]));
   const beforeDraft = JSON.stringify(_sfDrafts.get(studentObj.id));
 
@@ -4212,10 +4235,10 @@ window.autoSaveStudentFile = async function (elem) {
     if (JSON.stringify(_sfDrafts.get(studentObj.id)) === beforeDraft) _sfDrafts.delete(studentObj.id);
 
     // 同步更新畫面上所有複製人的顯示內容
-    const cards = document.querySelectorAll('.sf-folder');
+    const cards = document.querySelectorAll('.sf-folder,.sf-editor');
     cards.forEach(c => {
       const obj = _sfRenderMap.get(c);
-      if (obj?.id === studentObj.id && beforeViews.get(c) === fingerprint(c)) {
+      if (obj?.id === studentObj.id && c.querySelector('.sf-input-name') && beforeViews.get(c) === fingerprint(c)) {
         c.querySelector('.sf-input-name').value = studentObj.name;
         c.querySelector('.sf-input-id').value = studentObj.studentId;
         c.querySelector('.sf-input-class').value = studentObj.class;
@@ -4227,7 +4250,7 @@ window.autoSaveStudentFile = async function (elem) {
         sfSaveDraft({el:c, student:studentObj});
       }
       // 前板玻璃上的摘要 (名字 / 標籤) 跟著更新
-      if (obj?.id === studentObj.id) sfUpdateSummary(c, studentObj, sfReadCard(c, studentObj)?.draft);
+      if (obj?.id === studentObj.id) sfUpdateSummary(c, studentObj, _sfDrafts.get(studentObj.id) || sfReadCard(activeCard, studentObj)?.draft);
     });
 
     localStorage.setItem('biyuan_temp_students_update', JSON.stringify(state.students));
