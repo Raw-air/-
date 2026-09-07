@@ -1,7 +1,19 @@
-// Prewarmed WebGL dust and black hole, with a Canvas 2D fallback.
-// Selected-folder raster pixels supply both the noise-threshold mask and particle colors.
-// The shared RAF timeline dissolves at 80–500ms, closes the gap at 580ms, then absorbs the dust.
-// Bed data is cleared only after completion; cancellation restores the original surface.
+// 刪除動畫：Telegram 式高密度粉塵 + 微型黑洞吸入 (WebGL Points，Canvas 2D 備援)
+// ─────────────────────────────────────────────────────────────────────────────
+// 時間軸 (連續，沒有任何等待階段)：
+//   0ms      資料夾 scale 1 → .985、邊緣微亮
+//   50ms     黑洞淡入 (只是改 uniform，renderer 在頁面載入時就備妥了)
+//   80ms     不規則的崩解邊界從資料夾右緣 (垃圾桶那一側) 開始往左掃
+//   80-520   邊界掃過哪裡，那裡的 DOM 就被 mask 吃掉，同一位置生出粉塵 (顏色取自該區塊)
+//   180-700  粉塵先照原本方向飄 30-60ms，再被黑洞引力拉彎，切向分量讓它繞成螺旋
+//   350ms    資料夾以「空床」長回來、鄰居補位 (跟還在飛的粉塵重疊)
+//   650-850  最後的粉塵進入事件視界：亮一下 → 縮到 0
+//   750-950  黑洞 scale 1 → .15、淡出
+//   ~950ms   結束
+//
+// 效能：canvas / WebGL context / 兩支 shader / VBO / 4000 顆的 typed-array 粒子池
+// 全部在頁面載入時就建好並試畫一次 (暖機)，按下垃圾桶只是改 uniform 與開始寫 buffer。
+// 每幀零配置：粒子狀態放在 Float32Array，只 bufferSubData 存活的那一段。
 (() => {
   const MAX = 4000;                       // 粒子池上限 (typed array 預先配好，不會 new 物件)
   const FLOATS = 8;                       // 每顆送進 GPU 的資料：x, y, size, r, g, b, a, 保留
@@ -119,12 +131,6 @@
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);   // 預乘 alpha：粉塵疊起來會變密但不會爆白
     } else {
       ctx2d = canvas.getContext('2d');
-      // A canvas that already created a failed WebGL context cannot switch context type.
-      if (!ctx2d) {
-        const fallback = canvas.cloneNode(false);
-        canvas.replaceWith(fallback); canvas = fallback;
-        ctx2d = canvas.getContext('2d');
-      }
     }
     resize();
     warmUp();
@@ -136,7 +142,6 @@
       drawHole(6, 6, 8, 0, 0.001);
       buf[0] = 6; buf[1] = 6; buf[2] = 2; buf[3] = buf[4] = buf[5] = 1; buf[6] = 0.004;
       drawDots(1);
-      gl.flush();
       gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
     } else if (ctx2d) {
       ctx2d.fillStyle = '#fff'; ctx2d.fillRect(0, 0, 4, 4); ctx2d.clearRect(0, 0, canvas.width, canvas.height);
@@ -181,133 +186,128 @@
   }
 
   // ── 顏色：依區塊取樣資料夾原本的視覺 (玻璃白、銀、薰衣草、紫、文字、內頁) ──
+  function palette() {
+    return isLight() ? [
+      [.62, .62, .70], [.66, .58, .92], [.55, .30, .88], [.80, .38, .84], [.22, .23, .32], [.46, .47, .58], [.52, .50, .66]
+    ] : [
+      [.92, .93, 1.0], [.78, .72, .99], [.66, .33, .97], [.91, .36, .86], [.97, .97, 1.0], [.42, .42, .58], [.98, .98, 1.0]
+    ];
+  }
+  function sampler(root) {
+    const R = (el, kind) => {
+      if (!el) return null;
+      const cs = getComputedStyle(el);
+      if (cs.visibility === 'hidden' || parseFloat(cs.opacity) < .05) return null;   // 看不見的 (收起的摘要、側標) 不算
+      const r = el.getBoundingClientRect();
+      return r.width > 0 ? { l: r.left, t: r.top, r: r.right, b: r.bottom, kind } : null;
+    };
+    const list = [];
+    const sheet = root.classList.contains('is-open') ? root.querySelector('.fd-sheet') : null;
+    if (sheet) {
+      for (const el of sheet.querySelectorAll('input[type="text"],textarea')) list.push(R(el, 'input'));
+      for (const el of sheet.querySelectorAll('.sf-save-action-btn')) list.push(R(el, 'accent'));
+      for (const el of sheet.querySelectorAll('.sf-card-badge-relative,.sf-icon-btn')) list.push(R(el, 'lav'));
+      for (const el of sheet.querySelectorAll('.sf-title-text,label')) list.push(R(el, 'text'));
+      list.push(R(sheet, 'glass'));
+    }
+    for (const el of root.querySelectorAll('.fd-name,.fd-class,.fd-rail-label')) list.push(R(el, 'text'));
+    for (const el of root.querySelectorAll('.fd-tag,.fd-tab')) list.push(R(el, 'lav'));
+    list.push(R(root.querySelector('.fd-paper'), 'paper'));
+    list.push(R(root.querySelector('.fd-front'), 'glass'));
+    list.push(R(root.querySelector('.fd-back'), 'glass'));
+    const rects = list.filter(Boolean);
+    return (x, y, rnd) => {
+      for (const q of rects) {
+        if (x < q.l || x > q.r || y < q.t || y > q.b) continue;
+        switch (q.kind) {
+          case 'input': return rnd < .2 ? 4 : 5;
+          case 'accent': return rnd < .5 ? 2 : 3;
+          case 'lav': return rnd < .6 ? 1 : 2;
+          case 'text': if (rnd < .55) return 4; continue;        // 文字不是整塊，一半機率落到下層
+          case 'paper': return rnd < .78 ? 6 : 0;
+          default: return rnd < .74 ? 0 : rnd < .92 ? 1 : 2;     // 玻璃：白銀為主，少數紫
+        }
+      }
+      return -1;
+    };
+  }
   // 便宜的 2D 值雜訊 (-1 ~ 1)：讓崩解鋒面不是一條直線
   function noise(x, y) {
     return (Math.sin(x * .031 + 1.7) * Math.cos(y * .027 - .4) + Math.sin((x + y) * .017) * .6 + Math.sin(x * .071 - y * .053) * .35) / 1.95;
   }
   const easeInOut = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
-  // Capture the browser-styled folder while selected, before a delete interaction.
-  // The same raster is displayed by the dissolve surface and sampled by the dust.
-  const textures = new WeakMap();
-  const birth = new Float32Array(MAX);
-  const thresholds = new Float32Array(1024 * 768);
-  const erased = new Uint8Array(thresholds.length);
-  const surface = document.createElement('canvas');
-  surface.className = 'fd-dust-surface';
-  surface.setAttribute('aria-hidden', 'true');
-  let surfacePixels = null;
-  const surfaceCtx = surface.getContext('2d', {willReadFrequently:true});
-  function prepare(root) {
-    if (!root) return Promise.resolve(null);
-    const key = root.textContent + root.offsetWidth + document.body.className;
-    const cached = textures.get(root);
-    if (cached?.key === key) return cached.promise;
-    const width = root.offsetWidth + 40, height = root.offsetHeight + 52;
-    const copy = root.cloneNode(true);
-    const originals = [root, ...root.querySelectorAll('*')];
-    const clones = [copy, ...copy.querySelectorAll('*')];
-    originals.forEach((el,i) => {
-      const style = getComputedStyle(el), target = clones[i];
-      target.removeAttribute('id'); target.removeAttribute('onclick');
-      target.style.cssText = Array.from(style, k => k + ':' + style.getPropertyValue(k) + ';').join('');
-      target.style.animation = 'none'; target.style.transition = 'none';
-      target.style.filter = 'none'; target.style.backdropFilter = 'none';
-      target.style.transform = 'none';
-      for (const prop of ['inset-block','inset-inline','inset-block-start','inset-block-end','inset-inline-start','inset-inline-end']) target.style.removeProperty(prop);
-      if (el.classList.contains('fd-spine')) target.style.width='1px';
-      if (el.classList.contains('fd-top')) target.style.height='1px';
-    });
-    copy.querySelectorAll('.fd-dust-surface').forEach(e=>e.remove());
-    Object.assign(copy.style, {position:'absolute',left:'20px',top:'26px',right:'auto',bottom:'auto',margin:'0',visibility:'visible',opacity:'1'});
-    copy.setAttribute('xmlns','http://www.w3.org/1999/xhtml');
-    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+'"><foreignObject width="100%" height="100%">'+new XMLSerializer().serializeToString(copy)+'</foreignObject></svg>';
-    const record = {key, promise:null, value:null};
-    record.promise = new Promise(resolve => {
-      const img = new Image();
-      img.onload = () => {
-        const c = document.createElement('canvas'); c.width=width; c.height=height;
-        const ctx=c.getContext('2d',{willReadFrequently:true}); ctx.drawImage(img,0,0);
-        try { record.value={canvas:c,pixels:ctx.getImageData(0,0,width,height),width,height}; }
-        catch (e) { console.warn('[Dissolve] texture capture',e); }
-        if (record.value && !running && (surface.width!==width || surface.height!==height)) {
-          surface.width=width;surface.height=height;
-          surfacePixels=surfaceCtx.createImageData(width,height);
-        }
-        resolve(record.value);
-      };
-      img.onerror = () => resolve(null);
-      img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
-    });
-    textures.set(root,record);
-    return record.promise;
-  }
-  function projection(root) {
-    const area=document.getElementById('sf-card-area'), rect=area.getBoundingClientRect();
-    const style=getComputedStyle(area), origins=style.perspectiveOrigin.split(' ').map(parseFloat);
-    const perspective=parseFloat(style.perspective), matrix=new DOMMatrix(getComputedStyle(root).transform);
-    const cx=root.offsetWidth/2, cy=root.offsetHeight/2;
-    return (x,y,out) => {
-      const point=new DOMPoint(x-20-cx,y-26-cy,2).matrixTransform(matrix);
-      const k=perspective/(perspective-point.z);
-      out.x=rect.left+origins[0]+(root.offsetLeft+cx+point.x-origins[0])*k;
-      out.y=rect.top+origins[1]+(root.offsetTop+cy+point.y-origins[1])*k;
-    };
-  }
-  // ── Main RAF timeline ─────────────────────────────────────────────────
+  // ── 主流程 ─────────────────────────────────────────────────────────────
   function run(root, opts = {}) {
-    if (!canvas) throw new Error("Dissolve renderer has not mounted");
+    init();
     if (running) running.cancel();
     quality = Math.min(1, quality + .12);          // 上次掉幀降過的密度慢慢還回來
-    const texture = textures.get(root)?.value;
-    if (!texture) throw new Error('Folder texture unavailable');
-    const layers = Array.from(root.children);
-    const rect=root.getBoundingClientRect();
-    const box={l:rect.left,t:rect.top,r:rect.right,b:rect.bottom};
-    const bw=rect.width,bh=rect.height,mobile=innerWidth<640;
-    const hx=clamp(box.r+(mobile?bw*.16:bw*.26),56,innerWidth-54);
-    const hy=clamp(box.t+bh*.1,64,innerHeight-120);
-    const holeR=clamp(bw*.12,20,52),horizon=holeR*.9;
-    const target=mobile ? (navigator.hardwareConcurrency<=4 ? 1000 : 1300) : 2400;
-    const {width:tw,height:th,pixels}=texture;
-    if (!surfacePixels || surface.width!==tw || surface.height!==th) {
-      surface.width=tw; surface.height=th; surfacePixels=surfaceCtx.createImageData(tw,th);
-    }
-    surfacePixels.data.set(pixels.data);
-    surface.style.width=tw+'px'; surface.style.height=th+'px';
-    surface.style.left='-20px'; surface.style.top='-26px';
-    surfaceCtx.drawImage(texture.canvas,0,0);
-    const threshold=(x,y)=>(tw-x)/tw+noise(x,y)*.09;
-    let seed=37;
-    const rand=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
-    const project=projection(root), point={x:0,y:0};
-    let n=0;
-    for(let attempt=0;n<target && attempt<target*30;attempt++) {
-      const x=rand()*tw|0,y=rand()*th|0,o=(y*tw+x)*4;
-      if(pixels.data[o+3]<12) continue;
-      const i=n++; project(x,y,point);
-      px[i]=point.x;py[i]=point.y;age[i]=-1;eaten[i]=0;
-      // A cell's threshold both erases that texture cell and releases its particles.
-      birth[i]=threshold(Math.floor(x/2)*2+1,Math.floor(y/2)*2+1);
-      const roll=rand();
-      sz0[i]=roll<.7?1+rand():roll<.9?2+rand():roll<.98?3+rand():4+rand();
-      cr[i]=pixels.data[o]/255;cg[i]=pixels.data[o+1]/255;cb[i]=pixels.data[o+2]/255;
-      ca[i]=.65+rand()*.35;life[i]=1000;delay[i]=12+rand()*15;
-      tang[i]=(rand()<.5?-1:1)*(.7+rand()*.9);
-      vx[i]=(rand()-.5)*26;vy[i]=-3-rand()*12;
-    }
-    const tileCols=Math.ceil(tw/2),tileRows=Math.ceil(th/2);
-    // The texture mask is reused for the entire animation; no per-frame ImageData allocation.
-    const tileCount=tileCols*tileRows;
-    erased.fill(0,0,tileCount);
-    for(let y=0;y<tileRows;y++) for(let x=0;x<tileCols;x++) thresholds[y*tileCols+x]=threshold(x*2+1,y*2+1);
+    const layers = Array.from(root.children).filter(el => !el.classList.contains('fd-spine') && !el.classList.contains('fd-top'));
+    const rigid = Array.from(root.querySelectorAll('.fd-spine, .fd-top'));   // 轉過的平面，遮罩座標對不上，直接藏
+    const rr = root.getBoundingClientRect();
+    const box = layers.reduce((b, el) => {
+      if (getComputedStyle(el).visibility === 'hidden') return b;
+      const r = el.getBoundingClientRect();
+      if (!r.width) return b;
+      return { l: Math.min(b.l, r.left), t: Math.min(b.t, r.top), r: Math.max(b.r, r.right), b: Math.max(b.b, r.bottom) };
+    }, { l: rr.left, t: rr.top, r: rr.right, b: rr.bottom });
+    const bw = box.r - box.l, bh = box.b - box.t;
+    const mobile = innerWidth < 640;
+    // 崩解鋒面：從右緣往左掃。DOM 遮罩與粒子誕生共用同一個門檻 —
+    //   threshold(x, y) = 離右緣的比例 + noise(x, y)；progress 掃過門檻，該格的 DOM 消失、同一位置生出粉塵。
+    //   DOM 端做不到逐像素雜訊，所以用一條 FEATHER 寬的漸層過渡帶，粒子 (帶雜訊) 就密集出生在這條帶裡 → ▓▒░
+    const FEATHER = Math.max(44, bw * .1);
+    // 黑洞在資料夾右上方外側：粉塵要有一段看得見的流線，不能一生出來就被吃掉
+    const hx = clamp(box.r + (mobile ? bw * .16 : bw * .26), 56, innerWidth - 54);
+    const hy = clamp(box.t + bh * (mobile ? .10 : .16), 64, innerHeight - 120);
+    const holeR = clamp(bw * .12, 20, 52);          // 資料夾寬度的 12% (UI 尺度的微型黑洞)
+    const horizon = holeR * .9;                     // 事件視界：進去就開始被吞
 
-    const WIPE_T0 = 80, WIPE_T1 = 500, REFLOW = 580, OVER = 1.14;   // progress 掃過 1 之後再多一點，雜訊最高的格子才會全剝離
+    // ── 生成：整本切成細格，每顆粉塵就出生在自己那一格 (一定在資料夾矩形內)，顏色取自該格所在的區塊 ──
+    const target = Math.round((mobile ? 1300 : innerWidth < 1024 ? 1800 : 2400) * quality);   // 桌機 1500-3000、手機 700-1400 (掉幀會再打折)
+    let rnd = .137;
+    const rand = () => (rnd = (rnd * 9301 + 49297) % 233280) / 233280;
+    const sample = sampler(root);
+    // 三成五的格子會多一顆，所以格距要把 1.35 倍算進去，總數才會落在目標附近 (桌機 ~2400、手機 ~1100)
+    const step = Math.max(2.2, Math.sqrt(bw * bh * 1.35 / Math.min(target, MAX)));
+    const cells = [];
+    for (let y = box.t + step / 2; y < box.b; y += step) {
+      for (let x = box.l + step / 2; x < box.r; x += step) {
+        const reps = rand() < .35 ? 2 : 1;           // 三成五的格子多一顆：密度不平均，才像粉塵不像網點
+        for (let k = 0; k < reps; k++) {
+          const jx = x + (rand() - .5) * step, jy = y + (rand() - .5) * step;
+          const p = sample(jx, jy, rand());
+          if (p < 0) continue;
+          cells.push({ x: jx, y: jy, p, d: (box.r - jx) / bw + noise(jx, jy) * .09 + (rand() - .5) * .025 });
+        }
+      }
+    }
+    cells.sort((a, b) => a.d - b.d);
+    const n = Math.min(MAX, cells.length);
+    const cols = palette();
+    for (let i = 0; i < n; i++) {
+      const c = cells[i];
+      px[i] = c.x; py[i] = c.y; age[i] = -1; eaten[i] = 0;
+      const roll = rand();
+      // 七成 1-2px 極細粉塵、兩成 2-3px、8% 3-4px、2% 4-5px 亮碎片
+      sz0[i] = roll < .7 ? 1 + rand() : roll < .9 ? 2 + rand() : roll < .98 ? 3 + rand() : 4 + rand();
+      const col = cols[c.p], bright = roll >= .98 ? 1.3 : roll >= .9 ? 1.1 : 1;
+      cr[i] = Math.min(1, col[0] * bright); cg[i] = Math.min(1, col[1] * bright); cb[i] = Math.min(1, col[2] * bright);
+      ca[i] = roll < .7 ? .5 + rand() * .32 : roll < .98 ? .72 + rand() * .25 : 1;
+      life[i] = 2000 + rand() * 600;                 // 只是保險；正常死法是進事件視界
+      delay[i] = 20 + rand() * 40;                   // 剝離後先留在原位這麼久，才受引力影響
+      tang[i] = (rand() < .5 ? -1 : 1) * (.7 + rand() * .9);
+      // 初速：幾乎不動，只有一點點雜訊 (剛剝離時要看得出是從資料夾本體長出來的)
+      vx[i] = (rand() - .5) * 26;
+      vy[i] = -(3 + rand() * 12) + (rand() - .5) * 16;
+    }
+
+    const WIPE_T0 = 80, WIPE_T1 = 560, REFLOW = 350, OVER = 1.14;   // progress 掃過 1 之後再多一點，雜訊最高的格子才會全剝離
     // 引力：a = GM/(d²+soft)。最遠的粉塵離黑洞 ~600px，要在 450ms 內被拉過去，所以 GM 要夠大；
     // 加速度與速度都設上限，才不會在近距離爆掉 / 一幀衝過視界
     const GM = 1.8e9, SOFT = 100 * 100, AMAX = 14000, VMAX = 2600;
     let emit = 0, alive = 0, frame = 0, t0 = 0, lastNow = 0, slow = 0;
-    let released = false, finished = false, cancelled = false, holeFade = 0, shrinkAt = -1;
+    let hidden = false, released = false, finished = false, cancelled = false, holeFade = 0, shrinkAt = -1;
     let resolveDone, resolveReflow, reflowed = false;
     const done = new Promise(r => resolveDone = r);
     const reflow = new Promise(r => resolveReflow = r);
@@ -315,13 +315,21 @@
     stats.spawned = 0; stats.peak = 0; stats.frames = 0; stats.ms = 0; stats.masked = false;
     root.classList.add('fd-dissolving');
     canvas.classList.add('is-running');
-    const masks=layers.map(el=>({el,visibility:el.style.visibility}));
-    for(const m of masks) m.el.style.visibility='hidden';
-    root.appendChild(surface);
+    const masks = layers.map(el => {                 // 在 fd-dissolving (scale .985) 套上之後才量，遮罩才對得準
+      const r = el.getBoundingClientRect();
+      return { el, k: r.width && el.offsetWidth ? r.width / el.offsetWidth : 1, right: r.right };
+    });
+    // 遮罩：to left 的 0px 在右緣。鋒面右邊全透明、左邊保留，中間 FEATHER 寬的漸層就是正在崩解的那一帶
+    function setMask(m, frontX) {
+      stats.masked = true;
+      const dRight = (m.right - frontX) / m.k;
+      const v = `linear-gradient(to left, transparent ${Math.max(0, dRight - FEATHER * .5).toFixed(1)}px, #000 ${(dRight + FEATHER * .5).toFixed(1)}px)`;
+      m.el.style.webkitMaskImage = v; m.el.style.maskImage = v;
+    }
     function restore() {
-      released=true;
-      surface.remove();
-      for(const m of masks) m.el.style.visibility=m.visibility;
+      released = true;                        // 補位之後就別再寫遮罩了 (資料夾已經長回來)
+      for (const m of masks) { m.el.style.webkitMaskImage = ''; m.el.style.maskImage = ''; m.el.style.visibility = ''; }
+      for (const s of rigid) { s.style.visibility = ''; s.style.opacity = ''; }
       root.classList.remove('fd-dissolving');
     }
     function finish(ok) {
@@ -342,21 +350,22 @@
       if (!t0) { t0 = now; lastNow = now; }
       const t = now - t0, dtms = Math.min(48, now - lastNow); lastNow = now;
       const dt = dtms / 1000;
-      // Reduce turbulence work under load; preserve the visible dust population.
-      if(dtms>22) { if(++slow>=3) {quality=Math.max(.6,quality*.8);slow=0;} } else slow=0;
-      const prog=t<WIPE_T0?-.2:easeInOut(clamp((t-WIPE_T0)/(WIPE_T1-WIPE_T0),0,1))*OVER;
-      for(let i=0;i<n;i++) if(age[i]===-1 && t>=WIPE_T0 && birth[i]<=prog) {
-        age[i]=0;stats.spawned++;emit++;
+      // 自適應密度：連續兩幀掉到 45fps 以下就少生一些 (已經生出來的不動，不然畫面會突然變稀)
+      if (dtms > 22) { if (++slow >= 2) { quality = Math.max(.5, quality * (dtms > 28 ? .65 : .8)); slow = 0; } } else slow = 0;
+
+      // ── 崩解鋒面：DOM 遮罩與粒子誕生同步 ──
+      const prog = t < WIPE_T0 ? 0 : easeInOut(clamp((t - WIPE_T0) / (WIPE_T1 - WIPE_T0), 0, 1)) * OVER;
+      // 粒子跟 DOM 遮罩同一個時鐘：鋒面 80ms 才開始，粒子也 80ms 才開始生
+      while (t >= WIPE_T0 && emit < n && cells[emit].d <= prog) {
+        if (quality >= .999 || ((emit * .618034) % 1) < quality) { age[emit] = 0; stats.spawned++; }   // 保留比例 = quality
+        emit++;
       }
-      if(!released && t>=WIPE_T0) {
-        stats.masked=true;
-        for(let i=0;i<tileCount;i++) if(!erased[i] && thresholds[i]<=prog) {
-          erased[i]=1;
-          const x=i%tileCols*2,y=Math.floor(i/tileCols)*2;
-          for(let yy=y;yy<Math.min(y+2,th);yy++) for(let xx=x;xx<Math.min(x+2,tw);xx++) surfacePixels.data[(yy*tw+xx)*4+3]=0;
-        }
+      if (!released) {
+        const frontX = box.r - prog * bw;
+        if (t >= WIPE_T0 && !hidden) for (const m of masks) setMask(m, frontX);
+        for (const s of rigid) s.style.opacity = String(Math.max(0, 1 - prog * 1.6));
+        if (prog >= OVER && !hidden) { hidden = true; for (const m of masks) m.el.style.visibility = 'hidden'; }
       }
-      if (!released && t>=WIPE_T0) surfaceCtx.putImageData(surfacePixels,0,0);
       // 補位：粉塵還在飛的時候，資料夾就開始長回來
       if (!reflowed && t >= REFLOW) { reflowed = true; resolveReflow(true); }
 
@@ -364,7 +373,7 @@
       alive = 0;
       let w = 0;
       const fadeOut = shrinkAt >= 0 ? Math.max(0, 1 - (t - shrinkAt) / 240) : 1;   // 黑洞收掉時還沒進去的也一起收
-      for (let i = 0; i < n; i++) {
+      for (let i = 0; i < emit; i++) {
         if (age[i] < 0) continue;
         age[i] += dtms;
         if (age[i] >= life[i]) { age[i] = -2; continue; }
@@ -373,7 +382,7 @@
           const d2 = dx * dx + dy * dy, d = Math.sqrt(d2) || 1;
           const a = Math.min(AMAX, GM / (d2 + SOFT));
           const nx = dx / d, ny = dy / d;
-          const sw = quality > .7 ? tang[i] * 30000 / (d + 70) : tang[i] * 100;          // 切向分量：繞成弧線 / 螺旋，不是直線射向中心
+          const sw = tang[i] * 30000 / (d + 70);          // 切向分量：繞成弧線 / 螺旋，不是直線射向中心
           vx[i] += (nx * a - ny * sw) * dt;
           vy[i] += (ny * a + nx * sw) * dt;
           const drag = Math.exp(-.6 * dt);
@@ -406,7 +415,7 @@
         w++;
       }
       // 黑洞：50ms 淡入；粉塵幾乎都吃完 (或超時) 才開始收
-      if (shrinkAt < 0 && emit >= n && (alive <= Math.max(6, stats.spawned * .03) || t >= 730)) shrinkAt = t;
+      if (shrinkAt < 0 && emit >= n && (alive <= Math.max(6, stats.spawned * .03) || t > 1500)) shrinkAt = t;
       holeFade = t < 50 ? 0 : shrinkAt < 0 ? Math.min(1, (t - 50) / 180) : Math.max(0, 1 - (t - shrinkAt) / 220);
       const holeScale = shrinkAt < 0 ? 1 : Math.max(.15, 1 - (t - shrinkAt) / 220 * .85);
 
@@ -435,7 +444,7 @@
         ctx2d.globalAlpha = 1;
       }
       stats.frames++; stats.ms = t; if (alive > stats.peak) stats.peak = alive;
-      if ((t < 750 || emit < n || alive > 0 || holeFade > 0) && t < 980) { frame = requestAnimationFrame(tick); return; }
+      if ((emit < n || alive > 0 || holeFade > 0) && t < 2600) { frame = requestAnimationFrame(tick); return; }
       finish(true);
     }
     frame = requestAnimationFrame(tick);
@@ -443,13 +452,13 @@
     return running;
   }
 
-  window.sfDissolve = { init, prepare, run, stats, get quality() { return quality; }, get webgl() { return !!gl; }, get max() { return MAX; }, get running() { return !!running; } };
+  window.sfDissolve = { init, run, stats, get quality() { return quality; }, get webgl() { return !!gl; }, get max() { return MAX; }, get running() { return !!running; } };
 
   // ── 垃圾桶：清空這一床的資料 ──────────────────────────────────────────
   // 床位本身不會從房間裡消失，所以粉塵被吸走的同時，同一本資料夾會以「空床」重新長回來；
   // 清空跟以前一樣是草稿，要按「儲存修改」才會同步 (誤按可以直接改回來)。
   window.clearStudentData = async function (btn) {
-    const folder = document.querySelector('.sf-folder.active');
+    const folder = btn?.closest('.sf-folder') || document.querySelector('.sf-folder.active');
     if (!folder || window._sfBHBusy) return;
     const owner = _sfRenderMap.get(folder);
     if (!owner) return;
@@ -465,7 +474,7 @@
       const draft = { name: '', studentId: '', class: '', remarks: '', isForeign: false, isEmpty: true };
       _sfDrafts.set(owner.id, draft);          // 清空是草稿，跟「儲存修改」同一套流程
       // 名單少於回收池時同一床會出現在好幾本上，每一本都要清，否則另一本被回收時會把草稿還原
-      for (const f of document.querySelectorAll('.sf-folder,.sf-editor')) {
+      for (const f of document.querySelectorAll('.sf-folder')) {
         if (_sfRenderMap.get(f) !== owner) continue;
         for (const cls of ['name', 'id', 'class', 'remarks']) { const el = f.querySelector('.sf-input-' + cls); if (el) el.value = ''; }
         const cf = f.querySelector('.sf-chk-foreign'), ce = f.querySelector('.sf-chk-empty');
@@ -476,8 +485,6 @@
       }
     };
     try {
-      sfStashInspector();
-      window.sfCarousel?.closeSheet(true);
       window.sfCarousel?.lock();
       window._sfAbortClear = abort;             // 搜尋框在舞台外面，重新渲染名單前要先把這一場收掉
       if (sceneEl) sceneEl.inert = true;
@@ -485,24 +492,20 @@
       window.addEventListener('app:navigate', onNavigation);
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) { haptic('medium'); resetFields(); showToast('床位已清空，按「儲存修改」同步', 'info'); return; }
       haptic('medium');
-      const texture = await prepare(folder);
-      if(cancelled) return;
-      if(!texture) { showToast('無法準備資料夾動畫，請重試', 'error'); return; }
       handle = run(folder);
       // 粉塵大約飛到一半 (350ms) 就開始補位：清空欄位、資料夾以空床長回來，兩段動畫重疊
       const ok = await handle.reflow;
       if (!ok || cancelled) return;
-      // Begin closing the gap without recycling or restoring the disappearing DOM.
-      window.sfCarousel?.reflow();
-      if (!await handle.done || cancelled) return;
       resetFields();
-      handle.restore();
+      haptic('light');
       showToast('床位已清空，按「儲存修改」同步', 'info');
-      window.sfCarousel?.unlock();
-      await window.sfCarousel?.materialize(folder);
+      handle.restore();
+      window.sfCarousel?.closeSheet(true);      // 先把紙收回去，長回來、抽出之後會再自動打開
+      window.sfCarousel?.materialize(folder);   // 不 await：跟還在飛的粉塵同時進行
+      await handle.done;
     } catch (err) {
       console.warn('[Dissolve]', err);
-      if (!cancelled) showToast('清空未完成，資料已保留', 'error');
+      if (!cancelled) resetFields();
     } finally {
       handle?.restore();
       window._sfAbortClear = null;
