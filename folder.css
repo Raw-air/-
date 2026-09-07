@@ -651,3 +651,5 @@ body.power-save-mode .sf-card-area-2d::before { display: none; }
 #page-student-files .sf-selection {transition:opacity .22s ease,transform .3s var(--fd-ease),box-shadow .3s;}
 #page-student-files .sf-folder > .fd-front,#page-student-files .sf-folder > .fd-back,#page-student-files .sf-folder > .fd-paper,#page-student-files .sf-folder > .fd-edge {transition:opacity .24s ease,box-shadow .3s ease;}
 @media(prefers-reduced-motion:reduce) {#page-student-files .sf-selection,#page-student-files .sf-folder > * {transition:none!important;}}
+/* Isolate the reading plane so Chromium cannot interleave rail surfaces over form fields. */
+#page-student-files .sf-card-track:has(.is-open) {transform-style:flat;}
