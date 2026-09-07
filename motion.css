@@ -23,9 +23,4 @@ html.theme-shrink::view-transition-old(root){
   from{clip-path:circle(var(--theme-radius,150%) at var(--theme-x,50%) var(--theme-y,50%));}
   to{clip-path:circle(0px at var(--theme-x,50%) var(--theme-y,50%));}
 }
-.sf-card-area-2d {touch-action:pan-y pinch-zoom;}
-.sf-card-area-2d:focus-visible {outline:2px solid var(--blue);outline-offset:-8px;}
-#page-student-files.sf-moving .sf-student-card-2d,
-#page-student-files.sf-moving .sf-student-card-2d * {transition:none!important;}
-.sf-student-card-2d.is-3d-active::after {box-shadow:var(--neu-out),0 12px 30px rgba(0,0,0,.15);}
 

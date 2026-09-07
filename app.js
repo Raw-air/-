@@ -3851,6 +3851,45 @@ function sfEsc(v) {
   return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
+// 一本資料夾的摘要：名字、班別、標籤、學號 (顯示在前板玻璃上；草稿優先)
+function sfSummary(s, draft) {
+  const d = draft || {};
+  const name = d.name !== undefined ? d.name : (s.name || '');
+  const sid = d.studentId !== undefined ? d.studentId : (s.studentId || '');
+  const cls = d.class !== undefined ? d.class : (s.class || s.squad || '');
+  const remarks = d.remarks !== undefined ? d.remarks : (s.remarks || '');
+  const isForeign = d.isForeign !== undefined ? d.isForeign : !!s.isForeign;
+  const isEmpty = d.isEmpty !== undefined ? d.isEmpty : (s.isEmpty || !s.name);
+  const tags = [];
+  if (isEmpty) tags.push('<span class="fd-tag fd-tag-empty">空床</span>');
+  if (isForeign) tags.push('<span class="fd-tag fd-tag-foreign">外籍</span>');
+  if (!isEmpty && s.squad) tags.push('<span class="fd-tag">' + sfEsc(s.squad) + '</span>');
+  if (remarks) tags.push('<span class="fd-tag fd-tag-remark">備註</span>');
+  return {
+    name: isEmpty || !name ? '空床' : name,
+    nameEmpty: isEmpty || !name,
+    cls: isEmpty ? '' : cls,
+    sid: isEmpty ? '' : sid,
+    tags: tags.join(''),
+    dot: isEmpty ? 'is-empty' : isForeign ? 'is-foreign' : '',
+    badge: isForeign ? '外籍生' : (isEmpty ? '空床' : (s.squad || '無班級'))
+  };
+}
+
+// 把摘要寫回一本已經存在的資料夾 (儲存、清空之後用)
+function sfUpdateSummary(el, s, draft) {
+  if (!el || !s) return;
+  const m = sfSummary(s, draft);
+  const q = sel => el.querySelector(sel);
+  const name = q('.fd-name'); if (name) { name.textContent = m.name; name.classList.toggle('is-empty', m.nameEmpty); }
+  const cls = q('.fd-class'); if (cls) cls.textContent = m.cls;
+  const sid = q('.fd-count'); if (sid) sid.textContent = m.sid;
+  const tags = q('.fd-tags'); if (tags) tags.innerHTML = m.tags;
+  for (const dot of el.querySelectorAll('.fd-tab i')) dot.className = m.dot;
+  const badge = q('.sf-card-badge-relative'); if (badge) badge.textContent = m.badge;
+}
+
+// 資料夾 DOM：6 層真正有 Z 深度的殼 (背板+標籤 / 左右側邊 / 內頁 / 前板玻璃+摘要 / 邊緣高光) + 抽出來的詳細資料紙
 function sfCardHTML(s, draft) {
   const d = draft || {};
   const name = d.name !== undefined ? d.name : (s.name || '');
@@ -3859,40 +3898,54 @@ function sfCardHTML(s, draft) {
   const remarks = d.remarks !== undefined ? d.remarks : (s.remarks || '');
   const isForeign = d.isForeign !== undefined ? d.isForeign : !!s.isForeign;
   const isEmpty = d.isEmpty !== undefined ? d.isEmpty : (s.isEmpty || !s.name);
-  const badge = isForeign ? '外籍生' : (isEmpty ? '空床' : (s.squad || '無班級'));
+  const m = sfSummary(s, draft);
   return `
-      <div class="sf-card-title" style="display: flex; align-items: flex-start; position: relative;">
-        <span class="sf-title-text" style="flex:1;">${sfEsc(s.room)} ${sfEsc(s.bed)}</span>
-        <button class="sf-icon-btn sf-broom-btn" onclick="clearStudentData(this)" title="清空床位資料" style="margin-top: 2px; margin-right: 6px;"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
-        <div class="sf-card-badge-relative" style="margin-top: 4px; margin-right: 4px; transform-origin: center right;">${sfEsc(badge)}</div>
+      <div class="fd-back"></div>
+      <div class="fd-tab"><span>${sfEsc(s.room)}</span><b>${sfEsc(s.bed)}</b><i class="${m.dot}"></i></div><div class="fd-tab fd-tab-r"><span>${sfEsc(s.room)}</span><b>${sfEsc(s.bed)}</b><i class="${m.dot}"></i></div>
+      <div class="fd-spine"></div><div class="fd-spine fd-spine-r"></div>
+      <div class="fd-paper"><i></i><i></i><i></i><i></i></div>
+      <div class="fd-front">
+        <div class="fd-summary">
+          <div class="fd-name${m.nameEmpty ? ' is-empty' : ''}">${sfEsc(m.name)}</div>
+          <div class="fd-class">${sfEsc(m.cls)}</div>
+          <div class="fd-tags">${m.tags}</div>
+          <div class="fd-count">${sfEsc(m.sid)}</div>
+        </div>
       </div>
-
-      <div class="sf-edit-form">
-        <div style="display:flex; gap: 8px; transform-style: preserve-3d;">
-            <div class="sf-form-group" style="flex: 1;">
-              <label>姓名</label>
-              <input type="text" class="sf-input-name styled-input" value="${sfEsc(name)}" placeholder="未登記">
-            </div>
-            <div class="sf-form-group" style="flex: 1;">
-              <label>學號</label>
-              <input type="text" class="sf-input-id styled-input" value="${sfEsc(sid)}" placeholder="無">
-            </div>
+      <div class="fd-edge"></div>
+      <div class="fd-sheet">
+        <div class="sf-card-title">
+          <span class="sf-title-text">${sfEsc(s.room)} ${sfEsc(s.bed)}</span>
+          <div class="sf-card-badge-relative">${sfEsc(m.badge)}</div>
+          <button class="sf-icon-btn sf-broom-btn" onclick="clearStudentData(this)" title="清空床位資料"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
         </div>
-        <div style="display:flex; gap: 8px; align-items: flex-end; transform-style: preserve-3d;">
-            <div class="sf-form-group" style="flex: 1;">
-              <label>班別</label>
-              <input type="text" class="sf-input-class styled-input" value="${sfEsc(cls)}" placeholder="無">
-            </div>
-            <div class="sf-toggles" style="flex: 1; padding-bottom: 6px; padding-left: 8px; gap: 8px;">
-              <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-foreign" ${isForeign ? 'checked' : ''}> 外籍</label>
-              <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-empty" ${isEmpty ? 'checked' : ''}> 空床</label>
-            </div>
+        <div class="sf-edit-form">
+          <div style="display:flex; gap: 8px;">
+              <div class="sf-form-group" style="flex: 1;">
+                <label>姓名</label>
+                <input type="text" class="sf-input-name styled-input" value="${sfEsc(name)}" placeholder="未登記">
+              </div>
+              <div class="sf-form-group" style="flex: 1;">
+                <label>學號</label>
+                <input type="text" class="sf-input-id styled-input" value="${sfEsc(sid)}" placeholder="無">
+              </div>
+          </div>
+          <div style="display:flex; gap: 8px; align-items: flex-end;">
+              <div class="sf-form-group" style="flex: 1;">
+                <label>班別</label>
+                <input type="text" class="sf-input-class styled-input" value="${sfEsc(cls)}" placeholder="無">
+              </div>
+              <div class="sf-toggles" style="flex: 1;">
+                <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-foreign" ${isForeign ? 'checked' : ''}> 外籍</label>
+                <label class="sf-toggle-item"><input type="checkbox" class="sf-chk-empty" ${isEmpty ? 'checked' : ''}> 空床</label>
+              </div>
+          </div>
+          <div class="sf-form-group">
+            <label>備註 (情況註記)</label>
+            <textarea class="sf-input-remarks styled-input" style="resize: none; font-size: 13px; line-height: 1.4;" placeholder="住宿生備註欄">${sfEsc(remarks)}</textarea>
+          </div>
+          <button class="sf-save-action-btn" onclick="autoSaveStudentFile(this)"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg> 儲存修改</button>
         </div>
-        <div class="sf-form-group" style="flex: 1; margin-top: 8px;">
-          <label>備註 (情況註記)</label>
-          <textarea class="sf-input-remarks styled-input" style="flex: 1; resize: none; font-size: 13px; line-height: 1.4; padding: 10px;" placeholder="住宿生備註欄">${sfEsc(remarks)}</textarea>
-        </div>
-        <button class="sf-save-action-btn" onclick="autoSaveStudentFile(this)" style="margin-top: 16px;"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg> 儲存修改</button>
       </div>
     `;
 }
@@ -3937,16 +3990,12 @@ function sfBindCard(entry, vIndex) {
   entry.vIndex = vIndex;
   entry.student = s;
   el.dataset.index = vIndex;
-  el.className = 'sf-student-card-2d';
-  el.dataset.was3d = 'false';
-  el.dataset.wasAway = 'false';
+  el.className = 'sf-folder';
   el.style.transform = '';
-  el.style.transition = 'none';
-  el.style.opacity = '';
-  el.style.zIndex = '';
   el.style.visibility = '';
-  el._tf = el._op = el._z = el._tr = null; el._bl = 0; el._sh = false;   // 卡片換人時清掉 carousel.js 的樣式快取
-  el.style.left = `calc(50% - 150px + ${vIndex * _cardWidth}px)`;
+  el.style.webkitMaskImage = ''; el.style.maskImage = '';
+  el.style.removeProperty('--fd-alpha'); el.style.removeProperty('--fd-overlap');
+  el._tf = el._op = el._nr = null; el._bl = 0;   // 資料夾換人時清掉 carousel.js 的樣式快取
   if (vIndex === _sfActiveIndex) el.classList.add('active');
   if (s) {
     el.innerHTML = sfCardHTML(s, _sfDrafts.get(s.id) || sfLiveDraft(s.id, el));
@@ -3963,7 +4012,7 @@ function sfEnsurePool(track) {
   _sfPool = [];
   for (let i = 0; i < SF_POOL_SIZE; i++) {
     const el = document.createElement('div');
-    el.className = 'sf-student-card-2d';
+    el.className = 'sf-folder';
     track.appendChild(el);
     _sfPool.push({ el, vIndex: null, student: null });
   }
@@ -4046,6 +4095,7 @@ function onStudentFileSearch(query) {
       area.classList.remove('search-found-pop');
       void area.offsetWidth;
       area.classList.add('search-found-pop');
+      area.addEventListener('animationend', () => area.classList.remove('search-found-pop'), { once: true });   // 別讓 fill:forwards 的 filter 留在 3D 舞台上
     }
   }, 1000);
 }
@@ -4053,15 +4103,18 @@ function onStudentFileSearch(query) {
 function renderStudentFileCards(sweepIn = false) {
   const track = document.getElementById('sf-card-track');
   if (!track) return;
+  if (window._sfAbortClear) window._sfAbortClear();   // 刪除動畫跑到一半就重新搜尋：先收掉那一場
 
   if (_sfResults.length === 0) {
+    // 池子要整個丟掉：先把還沒儲存的輸入存成草稿
+    window._sfStopMotion?.();
+    for (const entry of _sfPool) if (entry.vIndex !== null) sfSaveDraft(entry);
     _sfPool = [];
     _sfWindowStart = null;
     track.innerHTML = `<div class="sf-empty-hint">
       <div style="font-size:48px; margin-bottom:12px;"><svg class="ui-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
       <div style="color:var(--dim); font-size:14px;">找不到符合的住宿生或床位</div>
     </div>`;
-    track.style.transform = 'translateX(0px)';
     return;
   }
 
@@ -4071,125 +4124,22 @@ function renderStudentFileCards(sweepIn = false) {
 
   _sfActiveIndex = 0;
   _currentX = 0;
-  track.style.transition = 'none';
-
-  if (sweepIn && window._sfSweepTo) {
-    // 從右側 8 張卡外高速滑入到目標
-    window._sfSweepTo(-((_sfActiveIndex - 8) * _cardWidth), _currentX);
-  } else {
-    track.style.transform = `translateX(${_currentX}px)`;
-    if (window._updateContinuousScale) window._updateContinuousScale(_currentX);
-  }
-
-  if (window._restart3DTimer) window._restart3DTimer();
+  // 進場：整排資料夾先擠在中央再依序展開，中央那本最後抽出 (carousel.js)
+  if (window.sfCarousel) window.sfCarousel.enter(0);
 }
 
 let _currentX = 0;
-let _cardWidth = 308; // 300(card) + 8(gap)
+let _cardWidth = 320; // 拖一個虛擬索引要拖幾 px，carousel.js 依畫面寬度重算
 let _carouselAttached = false;
 
 // Carousel interactions are defined in carousel.js.
 
 window.initStudentFiles = function () {
+  if (window.sfDissolve) window.sfDissolve.init();   // 刪除用的粒子 canvas 現在就建好，按垃圾桶不用等
   _sfRandomDefaults = [];
   document.getElementById('sf-search-input').value = '';
   onStudentFileSearch('');
-  // 先把「把卡片拍成貼圖」的工具偷偷載好，按垃圾桶時才不用等
-  if (typeof sfPrefetchHtml2Canvas === 'function') sfPrefetchHtml2Canvas();
 };
-
-
-// ═════════════════════════════════════════════════════════════════════════════
-// 黑洞吞噬動畫 (three.js + 光線追蹤 shader)
-// 做法：先把住宿生卡片「拍成一張貼圖」，然後整個畫面交給 GPU：
-//   每個像素射出一道光，光經過黑洞會被重力彎曲 (真正的重力透鏡)，彎曲後打到卡片就顯示卡片的顏色、
-//   穿過吸積盤就疊上發光的盤面、掉進事件視界就是純黑。卡片同時被拉向黑洞、拉長、旋轉、扭曲。
-// ═════════════════════════════════════════════════════════════════════════════
-function sfPrefetchHtml2Canvas() {
-  if (window.html2canvas) return Promise.resolve();
-  if (window._h2cLoading) return window._h2cLoading;
-  window._h2cLoading = new Promise(resolve => {
-    const s = document.createElement('script');
-    const finish = () => { clearTimeout(timer); resolve(); };
-    const timer = setTimeout(finish, 2000);
-    s.src = './vendor/html2canvas.1.4.1.min.js';
-    s.async = true;
-    s.onload = finish;
-    s.onerror = () => { window._h2cLoading = null; finish(); };
-    document.head.appendChild(s);
-  });
-  return window._h2cLoading;
-}
-
-// 備援：沒有 html2canvas (離線/被擋) 時，自己用 2D canvas 把卡片畫出來
-function sfDrawCardFallback(card) {
-  const cr = card.getBoundingClientRect();
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const cv = document.createElement('canvas');
-  cv.width = Math.max(2, Math.round(cr.width * dpr));
-  cv.height = Math.max(2, Math.round(cr.height * dpr));
-  const ctx = cv.getContext('2d');
-  ctx.scale(dpr, dpr);
-  const W = cr.width, H = cr.height, R = 32;
-  const isLight = document.body.classList.contains('light-mode');
-  const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); };
-  rr(0, 0, W, H, R);
-  ctx.fillStyle = isLight ? 'rgba(255,255,255,0.96)' : 'rgba(38,38,44,0.97)';
-  ctx.fill();
-  ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)';
-  ctx.stroke();
-  ctx.save(); rr(0, 0, W, H, R); ctx.clip();
-  const g = ctx.createLinearGradient(0, 0, W, 0);
-  g.addColorStop(0, '#6366f1'); g.addColorStop(0.5, '#d946ef'); g.addColorStop(1, '#8b5cf6');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, 4);
-  ctx.restore();
-  const textCol = isLight ? '#1a1a2e' : '#eeeef2';
-  const dimCol = isLight ? '#666' : '#8a8a96';
-  const inputBg = isLight ? 'rgba(0,0,0,0.05)' : 'rgba(0,0,0,0.3)';
-  const font = '-apple-system, BlinkMacSystemFont, "Noto Sans TC", sans-serif';
-  card.querySelectorAll('.sf-title-text, .sf-card-badge-relative, label, input[type="text"], textarea, .sf-save-action-btn').forEach(el => {
-    const r = el.getBoundingClientRect();
-    const x = r.left - cr.left, y = r.top - cr.top, w = r.width, h = r.height;
-    if (el.matches('input, textarea')) {
-      rr(x, y, w, h, 12); ctx.fillStyle = inputBg; ctx.fill();
-      ctx.fillStyle = textCol; ctx.font = `600 15px ${font}`; ctx.textBaseline = 'top';
-      ctx.fillText((el.value || '').slice(0, 24), x + 12, y + 10);
-    } else if (el.matches('.sf-save-action-btn, .sf-card-badge-relative')) {
-      rr(x, y, w, h, 12); ctx.fillStyle = el.matches('.sf-save-action-btn') ? inputBg : 'rgba(99,102,241,0.18)'; ctx.fill();
-      ctx.fillStyle = el.matches('.sf-save-action-btn') ? dimCol : '#818cf8'; ctx.font = `700 ${el.matches('.sf-save-action-btn') ? 14 : 11}px ${font}`;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(el.textContent.trim(), x + w / 2, y + h / 2); ctx.textAlign = 'left';
-    } else if (el.matches('.sf-title-text')) {
-      ctx.fillStyle = textCol; ctx.font = `800 20px ${font}`; ctx.textBaseline = 'top';
-      ctx.fillText(el.textContent.trim(), x, y);
-    } else {
-      ctx.fillStyle = dimCol; ctx.font = `600 11px ${font}`; ctx.textBaseline = 'top';
-      ctx.fillText(el.textContent.trim(), x, y);
-    }
-  });
-  return cv;
-}
-
-async function sfCaptureCard(card) {
-  if (window.html2canvas) {
-    try {
-      const cv = await Promise.race([
-        window.html2canvas(card, {
-          backgroundColor: null,
-          scale: Math.min(window.devicePixelRatio || 1, 2),
-          useCORS: true,
-          logging: false,
-          removeContainer: true
-        }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('capture timeout')), 1800))
-      ]);
-      if (cv && cv.width > 2 && cv.height > 2) return cv;
-    } catch (e) { console.warn('[BlackHole] html2canvas 失敗，改用備援繪製', e.message); }
-  }
-  return sfDrawCardFallback(card);
-}
-
-// Black-hole renderer and deletion animation: black-hole.js
 
 window.debouncedAutoSave = function (elem) {
   if (elem.dataset.timeout) clearTimeout(elem.dataset.timeout);
@@ -4200,7 +4150,7 @@ window.debouncedAutoSave = function (elem) {
 
 const _sfSaving = new Set();
 window.autoSaveStudentFile = async function (elem) {
-  const activeCard = elem.closest('.sf-student-card-2d');
+  const activeCard = elem.closest('.sf-folder');
   if (!activeCard) return;
 
   const studentObj = _sfRenderMap.get(activeCard);
@@ -4208,7 +4158,7 @@ window.autoSaveStudentFile = async function (elem) {
   if (_sfSaving.has(studentObj.id)) return;
   _sfSaving.add(studentObj.id);
   const fingerprint = c => JSON.stringify(Array.from(c.querySelectorAll('input,textarea'), e => e.type === 'checkbox' ? e.checked : e.value));
-  const beforeViews = new Map(Array.from(document.querySelectorAll('.sf-student-card-2d'))
+  const beforeViews = new Map(Array.from(document.querySelectorAll('.sf-folder'))
     .filter(c => _sfRenderMap.get(c)?.id === studentObj.id).map(c => [c, fingerprint(c)]));
   const beforeDraft = JSON.stringify(_sfDrafts.get(studentObj.id));
 
@@ -4258,7 +4208,7 @@ window.autoSaveStudentFile = async function (elem) {
     if (JSON.stringify(_sfDrafts.get(studentObj.id)) === beforeDraft) _sfDrafts.delete(studentObj.id);
 
     // 同步更新畫面上所有複製人的顯示內容
-    const cards = document.querySelectorAll('.sf-student-card-2d');
+    const cards = document.querySelectorAll('.sf-folder');
     cards.forEach(c => {
       const obj = _sfRenderMap.get(c);
       if (obj?.id === studentObj.id && beforeViews.get(c) === fingerprint(c)) {
@@ -4272,6 +4222,8 @@ window.autoSaveStudentFile = async function (elem) {
         // Keep edits entered while the request was running (including recycled cards).
         sfSaveDraft({el:c, student:studentObj});
       }
+      // 前板玻璃上的摘要 (名字 / 標籤) 跟著更新
+      if (obj?.id === studentObj.id) sfUpdateSummary(c, studentObj, sfReadCard(c, studentObj)?.draft);
     });
 
     localStorage.setItem('biyuan_temp_students_update', JSON.stringify(state.students));

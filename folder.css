@@ -1,0 +1,504 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   住宿生檔案：透明壓克力資料夾陣列 (folder archive)
+   一個 .sf-folder = 6 層真正有 Z 深度的 DOM：
+     .fd-back (背板+標籤) → .fd-spine (左右側邊厚度) → .fd-paper (夾在裡面的文件)
+     → .fd-front (前板玻璃+摘要) → .fd-edge (壓克力邊緣高光) → .fd-sheet (抽出來的詳細資料紙)
+   排列、旋轉、抽出全部由 carousel.js 逐幀寫 transform，這裡只管材質與靜態幾何。
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --fd-w: 440px;
+  --fd-h: 284px;
+  --fd-depth: 14px;                 /* 前板到背板的厚度 */
+  --fd-radius: 22px;
+  --fd-ease: cubic-bezier(.16, 1, .3, 1);
+  /* 深色主題：白/銀色透明壓克力 */
+  --fd-front: linear-gradient(135deg, rgba(255,255,255,.36) 0%, rgba(255,255,255,.16) 42%, rgba(255,255,255,.12) 60%, rgba(255,255,255,.26) 100%);
+  --fd-front-border: rgba(255,255,255,.42);
+  --fd-back: linear-gradient(160deg, rgba(232,234,246,.46) 0%, rgba(208,212,232,.28) 55%, rgba(226,228,244,.38) 100%);
+  --fd-back-border: rgba(255,255,255,.30);
+  --fd-paper: rgba(250,250,255,.90);
+  --fd-paper-line: rgba(118,118,146,.35);
+  --fd-spine: linear-gradient(180deg, rgba(255,255,255,.62), rgba(255,255,255,.22) 50%, rgba(255,255,255,.48));
+  --fd-edge: rgba(255,255,255,.72);
+  --fd-edge-soft: rgba(255,255,255,.18);
+  --fd-text: #24253a;
+  --fd-text-dim: rgba(36,37,58,.62);
+  --fd-sheet-text: #f4f4f8;
+  --fd-sheet-text-dim: rgba(244,244,248,.66);
+  --fd-tab: linear-gradient(135deg, rgba(255,255,255,.86), rgba(226,228,242,.7));
+  --fd-shadow: 0 30px 60px -28px rgba(0,0,0,.75), 0 12px 24px -16px rgba(0,0,0,.55);
+  --fd-glow: 0 34px 90px -30px rgba(168,85,247,.55), 0 0 0 1px rgba(216,180,254,.25);
+  --fd-accent: linear-gradient(135deg, rgba(139,92,246,.55) 0%, rgba(192,72,232,.42) 55%, rgba(236,72,153,.34) 100%);
+  --fd-accent-solid: linear-gradient(90deg, #8b5cf6, #d946ef 55%, #ec4899);
+  --fd-sheet: rgba(255,255,255,.11);
+  --fd-sheet-border: rgba(255,255,255,.34);
+  --fd-input: rgba(8,8,16,.38);
+  --fd-input-border: rgba(255,255,255,.10);
+  --fd-floor: radial-gradient(ellipse 62% 30% at 50% 50%, rgba(168,85,247,.16), rgba(168,85,247,0) 70%);
+}
+body.light-mode {
+  --fd-front: linear-gradient(135deg, rgba(255,255,255,.78) 0%, rgba(255,255,255,.42) 42%, rgba(255,255,255,.34) 60%, rgba(255,255,255,.62) 100%);
+  --fd-front-border: rgba(255,255,255,.95);
+  --fd-back: linear-gradient(160deg, rgba(255,255,255,.72) 0%, rgba(228,231,242,.6) 55%, rgba(244,245,252,.7) 100%);
+  --fd-back-border: rgba(120,130,170,.22);
+  --fd-paper: rgba(255,255,255,.96);
+  --fd-paper-line: rgba(140,146,178,.42);
+  --fd-spine: linear-gradient(180deg, rgba(255,255,255,1), rgba(214,218,236,.9) 50%, rgba(255,255,255,1));
+  --fd-edge: rgba(255,255,255,1);
+  --fd-edge-soft: rgba(120,130,170,.18);
+  --fd-text: #26283a;
+  --fd-text-dim: rgba(38,40,58,.62);
+  --fd-sheet-text: #26283a;
+  --fd-sheet-text-dim: rgba(38,40,58,.62);
+  --fd-tab: linear-gradient(135deg, rgba(255,255,255,.95), rgba(236,238,248,.8));
+  --fd-shadow: 0 30px 60px -28px rgba(96,104,140,.55), 0 12px 24px -16px rgba(96,104,140,.35);
+  --fd-glow: 0 34px 90px -30px rgba(168,85,247,.45), 0 0 0 1px rgba(192,132,252,.35);
+  --fd-accent: linear-gradient(135deg, rgba(167,139,250,.55) 0%, rgba(217,70,239,.36) 55%, rgba(244,114,182,.30) 100%);
+  --fd-sheet: rgba(255,255,255,.66);
+  --fd-sheet-border: rgba(255,255,255,1);
+  --fd-input: rgba(255,255,255,.85);
+  --fd-input-border: rgba(120,130,170,.18);
+  --fd-floor: radial-gradient(ellipse 62% 30% at 50% 50%, rgba(139,92,246,.14), rgba(139,92,246,0) 70%);
+}
+
+/* ─── 舞台 ─────────────────────────────────────────────────────────────── */
+.sf-scene-2d {
+  position: relative;
+  width: 100%;
+  height: clamp(500px, calc(100dvh - 290px), 620px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sf-card-area-2d {
+  position: relative;
+  /* 滿版出血：讓兩側資料夾一路排到螢幕邊緣 */
+  width: 100vw;
+  margin: 0 calc(50% - 50vw);
+  height: 100%;
+  overflow: hidden;
+  touch-action: pan-y pinch-zoom;
+  perspective: 1500px;
+  perspective-origin: 50% 44%;
+  contain: layout paint;
+  cursor: grab;
+  outline: none;
+}
+.sf-card-area-2d.is-dragging { cursor: grabbing; }
+.sf-card-area-2d:focus-visible { box-shadow: inset 0 0 0 2px var(--blue); }
+/* 地板上的一抹微光，讓整排資料夾像放在桌面上 */
+.sf-card-area-2d::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  top: 50%;
+  height: 60%;
+  transform: translateY(-20%);
+  background: var(--fd-floor);
+  pointer-events: none;
+}
+.sf-card-track {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+
+/* ─── 資料夾本體 ───────────────────────────────────────────────────────── */
+.sf-folder {
+  position: absolute;
+  left: calc(50% - var(--fd-w) / 2);
+  top: calc(50% - var(--fd-h) / 2);
+  width: var(--fd-w);
+  height: var(--fd-h);
+  transform-style: preserve-3d;
+  transform-origin: 50% 50%;
+  /* 不設 opacity / filter / overflow：那會把 6 層壓平，厚度就不見了。透明度由各層自己吃 --fd-alpha */
+  --fd-alpha: 1;
+  --fd-del-scale: 1;
+  pointer-events: auto;
+}
+.sf-folder.sf-far {
+  visibility: hidden;
+  content-visibility: hidden;
+}
+.sf-folder.fd-near { will-change: transform; }
+.sf-folder.fd-near > .fd-front,
+.sf-folder.fd-near > .fd-back { will-change: transform, opacity; }
+
+.sf-folder > .fd-back,
+.sf-folder > .fd-paper,
+.sf-folder > .fd-front,
+.sf-folder > .fd-edge {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--fd-radius);
+  opacity: var(--fd-alpha);
+  backface-visibility: hidden;
+}
+
+/* 背板：最裡面那片壓克力，被選中時染上紫→洋紅 */
+.sf-folder > .fd-back {
+  transform: translateZ(calc(-1 * var(--fd-depth)));
+  background: var(--fd-back);
+  border: 1px solid var(--fd-back-border);
+  box-shadow: var(--fd-shadow);
+  transition: box-shadow .5s ease;
+}
+.sf-folder > .fd-back::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: var(--fd-accent);
+  opacity: 0;
+  transition: opacity .45s var(--fd-ease);
+}
+.sf-folder.active > .fd-back::after { opacity: 1; }
+.sf-folder.active > .fd-back { box-shadow: var(--fd-shadow), var(--fd-glow); }
+
+/* 標籤：貼在背板頂端左側，像真的資料夾耳朵 (跟背板同一個深度，自己是一層才能跟著遮罩消散) */
+.sf-folder > .fd-tab {
+  transform: translateZ(calc(-1 * var(--fd-depth)));
+  opacity: var(--fd-alpha);
+  backface-visibility: hidden;
+}
+.fd-tab {
+  position: absolute;
+  left: 22px;
+  top: -24px;
+  height: 27px;
+  padding: 0 14px 0 13px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 11px 11px 0 0;
+  background: var(--fd-tab);
+  border: 1px solid var(--fd-front-border);
+  border-bottom: none;
+  color: var(--fd-text);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .4px;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.55);
+}
+.fd-tab b { font-weight: 900; }
+.fd-tab i {
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  margin-left: 3px;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+}
+.fd-tab i.is-empty { background: var(--dim); box-shadow: none; }
+.fd-tab i.is-foreign { background: var(--purple); box-shadow: 0 0 6px var(--purple); }
+.sf-folder.active .fd-tab { background: var(--fd-accent-solid); color: #fff; border-color: rgba(255,255,255,.55); }
+/* 右側那排只露出右邊一條，所以右上角再放一個小標籤；抽出來的那本不需要 */
+.fd-tab.fd-tab-r { left: auto; right: 22px; transition: opacity .3s ease; }
+.sf-folder.active .fd-tab-r { opacity: 0; }
+
+/* 側邊厚度：左右各一片，轉側時露出來就是壓克力的邊 */
+.sf-folder > .fd-spine {
+  position: absolute;
+  top: 5px; bottom: 5px;
+  left: 0;
+  width: var(--fd-depth);
+  background: var(--fd-spine);
+  opacity: calc(var(--fd-alpha) * .9);
+  transform-origin: left center;
+  transform: translateZ(calc(-1 * var(--fd-depth))) rotateY(-90deg);   /* 先退到背板深度再轉，厚度才填在前板與背板之間 */
+  border-radius: 3px;
+  backface-visibility: hidden;
+}
+.sf-folder > .fd-spine.fd-spine-r {
+  left: auto; right: 0;
+  transform-origin: right center;
+  transform: translateZ(calc(-1 * var(--fd-depth))) rotateY(90deg);
+}
+
+/* 夾在裡面的文件 */
+.sf-folder > .fd-paper {
+  inset: 14px 16px 12px 16px;
+  border-radius: 10px;
+  transform: translateZ(calc(-1 * var(--fd-depth) / 2));
+  background: var(--fd-paper);
+  box-shadow: 0 2px 6px rgba(0,0,0,.12);
+  padding: 22px 20px 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+.sf-folder > .fd-paper i {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--fd-paper-line);
+}
+.sf-folder > .fd-paper i:nth-child(1) { width: 46%; }
+.sf-folder > .fd-paper i:nth-child(2) { width: 74%; }
+.sf-folder > .fd-paper i:nth-child(3) { width: 62%; }
+.sf-folder > .fd-paper i:nth-child(4) { width: 38%; opacity: .7; }
+
+/* 前板玻璃：真正的透明面，摘要文字就在上面 */
+.sf-folder > .fd-front {
+  transform: translateZ(0) scale(var(--fd-del-scale));
+  background: var(--fd-front);
+  border: 1px solid var(--fd-front-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.55),
+    inset 1px 0 0 rgba(255,255,255,.22),
+    inset 0 -1px 0 rgba(255,255,255,.10);
+  padding: 22px 24px 20px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  color: var(--fd-text);
+  overflow: hidden;
+}
+/* 玻璃的斜向反光 */
+.sf-folder > .fd-front::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(112deg, rgba(255,255,255,0) 38%, rgba(255,255,255,.22) 46%, rgba(255,255,255,.05) 52%, rgba(255,255,255,0) 60%),
+    radial-gradient(80% 60% at 0% 0%, rgba(255,255,255,.22), rgba(255,255,255,0) 60%);
+  pointer-events: none;
+}
+.sf-folder.active > .fd-front,
+.sf-folder.fd-near.active > .fd-front { backdrop-filter: blur(16px) saturate(1.25); -webkit-backdrop-filter: blur(16px) saturate(1.25); }
+#page-student-files.sf-moving .sf-folder > .fd-front { backdrop-filter: none; -webkit-backdrop-filter: none; }
+
+/* 摘要 */
+.fd-summary { position: relative; display: flex; flex-direction: column; gap: 4px; }
+.fd-name {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: .3px;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fd-name.is-empty { color: var(--fd-text-dim); font-weight: 600; }
+.fd-class {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fd-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 16px;
+}
+.fd-tags { display: flex; gap: 6px; margin-top: 6px; min-height: 20px; flex-wrap: wrap; }
+.fd-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 9px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  background: rgba(255,255,255,.55);
+  border: 1px solid rgba(255,255,255,.75);
+  color: var(--fd-text);
+}
+.fd-tag.fd-tag-foreign { background: rgba(196,181,253,.7); border-color: rgba(139,92,246,.45); color: #4c1d95; }
+.fd-tag.fd-tag-empty { background: rgba(255,255,255,.35); color: var(--fd-text-dim); }
+.fd-tag.fd-tag-remark { background: rgba(255,214,10,.18); border-color: rgba(255,214,10,.35); }
+body.light-mode .fd-tag { background: rgba(255,255,255,.7); border-color: rgba(120,130,170,.22); }
+body.light-mode .fd-tag.fd-tag-foreign { background: rgba(196,181,253,.55); border-color: rgba(139,92,246,.35); }
+.fd-count {
+  position: absolute;
+  right: 0; bottom: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--fd-text-dim);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.fd-count svg { width: 14px; height: 14px; }
+
+/* 邊緣高光：比前板再往前 2px 的一圈細亮邊，光從左上來 */
+.sf-folder > .fd-edge {
+  transform: translateZ(2px);
+  border: 1.5px solid;
+  border-color: var(--fd-edge) var(--fd-edge-soft) var(--fd-edge-soft) var(--fd-edge);
+  pointer-events: none;
+  opacity: calc(var(--fd-alpha) * .8);
+}
+
+/* 遠處：兩段固定模糊 (切 class，不逐幀寫 filter)。filter 套在根節點會把 preserve-3d 壓平 (到第 3 本會跳一下)，
+   所以套在看得到的三層上 */
+.sf-folder.fd-blur1 > .fd-front, .sf-folder.fd-blur1 > .fd-paper, .sf-folder.fd-blur1 > .fd-back { filter: blur(1.2px) saturate(.92); }
+.sf-folder.fd-blur2 > .fd-front, .sf-folder.fd-blur2 > .fd-paper, .sf-folder.fd-blur2 > .fd-back { filter: blur(2.6px) saturate(.85) brightness(.9); }
+body.power-save-mode .sf-folder.fd-blur1 > *,
+body.power-save-mode .sf-folder.fd-blur2 > * { filter: none; }
+
+/* ─── 抽出來的詳細資料紙 (.fd-sheet) ─────────────────────────────────── */
+.sf-folder > .fd-sheet {
+  position: absolute;
+  left: 14px; right: 14px;
+  bottom: calc(100% - var(--fd-overlap, 74px));
+  transform: translate3d(0, 46px, 6px) rotateY(6deg) scale(.96);   /* 資料夾本身 yaw -6°，紙反轉回來正對使用者 */
+  transform-origin: 50% 100%;
+  opacity: 0;
+  visibility: hidden;   /* 不用 content-visibility：它不能過渡，關紙會在一幀內塌掉 */
+  border-radius: 18px;
+  padding: 16px 18px 18px;
+  background: var(--fd-sheet);
+  border: 1px solid var(--fd-sheet-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.5),
+    0 24px 50px -22px rgba(0,0,0,.6);
+  color: var(--fd-sheet-text);
+  display: flex;
+  flex-direction: column;
+  transition: transform .52s var(--fd-ease), opacity .3s ease, visibility 0s linear .32s;
+  pointer-events: none;
+}
+.sf-folder.is-open > .fd-sheet {
+  transform: translate3d(0, 0, 40px) rotateY(6deg) scale(var(--fd-del-scale));
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  backdrop-filter: blur(22px) saturate(1.3);
+  -webkit-backdrop-filter: blur(22px) saturate(1.3);
+  transition: transform .52s var(--fd-ease), opacity .22s ease, visibility 0s;
+}
+#page-student-files.sf-moving .sf-folder > .fd-sheet { transition: none; }
+/* 紙張底部插進資料夾的那一段：一條淡淡的摺線 */
+.sf-folder > .fd-sheet::after {
+  content: '';
+  position: absolute;
+  left: 14px; right: 14px; bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.4), transparent);
+}
+.fd-sheet .sf-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 19px;
+  color: var(--fd-sheet-text);
+}
+.fd-sheet .sf-title-text { flex: 1; }
+.fd-sheet .sf-card-badge-relative {
+  background: rgba(168,85,247,.24);
+  color: #e9d5ff;
+  border: 1px solid rgba(216,180,254,.4);
+}
+body.light-mode .fd-sheet .sf-card-badge-relative { background: rgba(196,181,253,.45); color: #6d28d9; border-color: rgba(139,92,246,.3); }
+.fd-sheet .sf-icon-btn {
+  width: 32px; height: 32px;
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.22);
+  box-shadow: none;
+  color: var(--fd-sheet-text);
+  transition: transform .2s ease, background .2s ease, border-color .2s ease;
+}
+.fd-sheet .sf-icon-btn:hover { background: rgba(255,69,58,.22); border-color: rgba(255,69,58,.55); transform: scale(1.08); }
+.fd-sheet .sf-icon-btn:active { transform: scale(.94); box-shadow: none; }
+body.light-mode .fd-sheet .sf-icon-btn { background: rgba(255,255,255,.8); border-color: rgba(120,130,170,.25); }
+.fd-sheet .sf-edit-form { gap: 9px; margin-top: 2px; transform-style: flat; }
+.fd-sheet .sf-form-group { gap: 3px; transform-style: flat; }
+.fd-sheet .sf-form-group label { color: var(--fd-sheet-text-dim); font-size: 10.5px; letter-spacing: .5px; }
+.fd-sheet .sf-form-group input[type="text"],
+.fd-sheet .sf-form-group textarea {
+  background: var(--fd-input);
+  border: 1px solid var(--fd-input-border);
+  color: var(--fd-sheet-text);
+  border-radius: 11px;
+  padding: 9px 12px;
+  font-size: 15px;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.18);
+  transition: box-shadow .25s ease, border-color .25s ease, transform .25s ease;
+}
+.fd-sheet .sf-form-group input[type="text"]:focus,
+.fd-sheet .sf-form-group textarea:focus {
+  transform: none;
+  border-color: rgba(192,132,252,.7);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.18), 0 0 0 3px rgba(168,85,247,.28);
+}
+.fd-sheet .sf-form-group textarea { height: 66px; }
+.fd-sheet .sf-toggles { flex: 0 0 auto !important; padding: 0 0 6px 4px; margin: 0; gap: 10px; transform-style: flat; }
+.fd-sheet .sf-toggle-item { color: var(--fd-sheet-text); font-size: 13.5px; white-space: nowrap; gap: 6px; }
+.fd-sheet .sf-save-action-btn {
+  margin-top: 10px;
+  padding: 11px;
+  border-radius: 12px;
+  background: var(--fd-accent-solid);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.35);
+  box-shadow: 0 10px 24px -12px rgba(168,85,247,.7);
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: transform .2s ease, box-shadow .2s ease, filter .2s ease;
+}
+.fd-sheet .sf-save-action-btn:hover { background: var(--fd-accent-solid); color: #fff; border-color: rgba(255,255,255,.5); filter: brightness(1.08); box-shadow: 0 14px 30px -12px rgba(168,85,247,.85); }
+.fd-sheet .sf-save-action-btn:active { transform: scale(.97); box-shadow: 0 6px 16px -10px rgba(168,85,247,.7); }
+.fd-sheet .sf-save-action-btn[disabled] { opacity: .75; }
+
+/* ─── 刪除：粒子消散 (dissolve.js) ────────────────────────────────────── */
+.sf-dissolve-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 60;
+  opacity: 0;
+}
+.sf-dissolve-canvas.is-running { opacity: 1; }
+/* 前 70ms：物件微縮、邊緣微亮，像準備消失。消散期間每幀都在改遮罩，所以把毛玻璃換成較實的底色
+   (視覺幾乎一樣，但省掉每幀重算 backdrop-filter)，也不用 filter (會多一層合成) */
+.sf-folder.fd-dissolving { --fd-del-scale: .985; }
+.sf-folder.fd-dissolving > .fd-front,
+.sf-folder.fd-dissolving > .fd-sheet { transition: transform .07s ease-out; }
+.sf-folder.fd-dissolving > .fd-edge { opacity: 1; border-color: #fff rgba(255,255,255,.5) rgba(255,255,255,.5) #fff; }
+/* 光暈與大片投影每幀跟著遮罩重算很貴，準備消失時先收掉 (也像物件失去光澤) */
+.sf-folder.fd-dissolving > .fd-back { box-shadow: none; transition: box-shadow .12s ease-out; }
+.sf-folder.fd-dissolving > .fd-front,
+.sf-folder.fd-dissolving.is-open > .fd-sheet { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+.sf-folder.fd-dissolving > .fd-front { background: linear-gradient(135deg, rgba(255,255,255,.62), rgba(255,255,255,.4) 45%, rgba(255,255,255,.34) 60%, rgba(255,255,255,.52)); }
+.sf-folder.fd-dissolving.is-open > .fd-sheet { background: rgba(34,34,48,.9); }
+body.light-mode .sf-folder.fd-dissolving > .fd-front { background: linear-gradient(135deg, rgba(255,255,255,.92), rgba(255,255,255,.7) 45%, rgba(255,255,255,.66) 60%, rgba(255,255,255,.86)); }
+body.light-mode .sf-folder.fd-dissolving.is-open > .fd-sheet { background: rgba(255,255,255,.94); }
+.sf-folder.fd-dissolving > * { pointer-events: none; }
+
+/* ─── 搜尋中的假資料夾列車 (沿用 style.css 的動畫，只換成橫式玻璃) ─── */
+.sf-fake-card {
+  flex: 0 0 300px;
+  height: 190px;
+  border-radius: 20px;
+  background: var(--fd-front);
+  border: 1px solid var(--fd-front-border);
+  box-shadow: var(--fd-shadow);
+}
+
+/* ─── 動態：拖曳期間關掉所有過渡 ─────────────────────────────────────── */
+#page-student-files.sf-moving .sf-folder,
+#page-student-files.sf-moving .sf-folder > * { transition: none !important; }
+#page-student-files.sf-moving .sf-folder > .fd-back::after { transition: none !important; }
+
+/* ─── 主題切換快照期間：拿掉毛玻璃讓截圖便宜 ─────────────────────────── */
+html.vt-active .sf-folder > .fd-front,
+html.vt-active .sf-folder > .fd-sheet { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+
+/* ─── 省電 / 減少動態 ────────────────────────────────────────────────── */
+body.power-save-mode .sf-folder > .fd-front,
+body.power-save-mode .sf-folder > .fd-sheet { backdrop-filter: none; -webkit-backdrop-filter: none; }
+body.power-save-mode .sf-card-area-2d::before { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .sf-folder > .fd-sheet { transition: opacity .2s ease, visibility 0s linear .2s; }
+  .sf-folder.is-open > .fd-sheet { transition: opacity .2s ease, visibility 0s; }
+}
+
+/* ─── 桌機 / 平板 ───────────────────────────────────────────────────── */
+@media (min-width: 640px) {
+  .sf-scene-2d { height: clamp(520px, calc(100dvh - 280px), 640px); }
+  .fd-name { font-size: 26px; }
+}

@@ -90,54 +90,73 @@ async function run(engine,viewport){
   await page.locator('#cfg-total-beds').fill('100');await page.evaluate(()=>saveDormSettings());
   assert.equal(requests.filter(r=>r.path==='/api/config'&&r.method==='POST').length,before+1);
   await page.evaluate(()=>{navigateTo('student-files');_sfResults=state.students;renderStudentFileCards();});
-  await page.waitForTimeout(1400);
+  // 進場 (~1s)：整排展開、中央那本抽出、自動打開詳細資料紙
+  await page.waitForFunction(()=>window.sfCarousel&&sfCarousel.state==='idle',null,{timeout:5000});
+  await page.waitForTimeout(350);
+  assert.equal(await page.locator('.sf-folder.active.is-open').count(),1,'the active folder opens its sheet after the entrance');
   await page.evaluate(()=>{window._sfStopMotion();_sfResults=state.students;renderStudentFileCards();});
   await page.waitForTimeout(100);
-  assert.ok(await page.locator('.sf-student-card-2d').count()<=13);
+  assert.ok(await page.locator('.sf-folder').count()<=13);
   await page.evaluate(()=>{window._sfStopMotion();});
-  // A swipe can begin over an unfocused input; release settles in one short spring.
-  const field=await page.locator('.sf-student-card-2d.active .sf-input-name').boundingBox();
-  await page.mouse.move(field.x+field.width*.8,field.y+field.height*.5);
-  await page.mouse.down();await page.mouse.move(field.x-120,field.y+field.height*.5,{steps:12});await page.mouse.up();
+  // 橫式資料夾、六層殼 (背板 / 兩片側邊 / 內頁 / 前板 / 邊緣) + 資料紙，兩側鄰居是側轉的
+  const geo=await page.evaluate(()=>{
+    const f=document.querySelector('.sf-folder.active'),r=f.getBoundingClientRect();
+    const n=Array.from(document.querySelectorAll('.sf-folder:not(.sf-far):not(.active)'));
+    return {ratio:r.width/r.height,layers:f.children.length,front:!!f.querySelector('.fd-front'),sheet:!!f.querySelector('.fd-sheet'),
+      neighbours:n.length,yaws:n.map(e=>parseFloat((e.style.transform.match(/rotateY\((-?[\d.]+)deg\)/)||[])[1])),
+      preserve:getComputedStyle(f).transformStyle==='preserve-3d',active:f.style.transform};
+  });
+  assert.ok(geo.ratio>1.4&&geo.ratio<1.8,'landscape folder '+geo.ratio);
+  assert.ok(geo.layers>=7&&geo.front&&geo.sheet&&geo.preserve,'6-layer folder + sheet in a 3D context');
+  assert.ok(geo.neighbours>=2&&geo.yaws.every(y=>y<=-6&&y>=-14),'every folder shares the same yaw (no mirrored fan): '+geo.yaws.join(','));
+  assert.ok(/translate3d\(0px, -12px, (92|120)px\)/.test(geo.active),'active folder is pulled out towards the viewer: '+geo.active);
+  // A swipe can begin over the folder front; release settles in one short spring, then the sheet re-opens.
+  const front=await page.locator('.sf-folder.active .fd-front').boundingBox();
+  await page.mouse.move(front.x+front.width*.7,front.y+front.height*.5);
+  await page.mouse.down();await page.mouse.move(front.x+front.width*.7-180,front.y+front.height*.5,{steps:12});await page.mouse.up();
   await page.waitForTimeout(950);
   assert.ok(await page.evaluate(()=>_sfActiveIndex>0));
   assert.ok(await page.evaluate(()=>Math.abs(_currentX+_sfActiveIndex*_cardWidth)<.5));
+  await page.waitForFunction(()=>sfCarousel.state==='idle',null,{timeout:5000});
+  await page.waitForTimeout(350);
+  assert.equal(await page.locator('.sf-folder.active.is-open').count(),1,'sheet re-opens after a swipe settles');
   // Return to the first synthetic card for deterministic screenshots.
   await page.evaluate(()=>{window._sfStopMotion();renderStudentFileCards();});
   await page.waitForTimeout(100);
-  await page.locator('.sf-student-card-2d.active .sf-input-name').fill('滑動後保留');
+  await page.evaluate(()=>{window._sfStopMotion();sfCarousel.openSheet();});
+  await page.locator('.sf-folder.active .sf-input-name').fill('滑動後保留');
   await page.evaluate(()=>window._sfSweepTo(0,-20*_cardWidth));
   await page.waitForTimeout(950);
   await page.evaluate(()=>window._sfSweepTo(_currentX,0));
   await page.waitForTimeout(950);
-  assert.equal(await page.locator('.sf-student-card-2d.active .sf-input-name').inputValue(),'滑動後保留');
-  await page.evaluate(()=>{window._sfStopMotion();document.querySelector('.sf-student-card-2d.active .sf-input-name').value='測試住宿生 0';});
+  assert.equal(await page.locator('.sf-folder.active .sf-input-name').inputValue(),'滑動後保留');
+  await page.evaluate(()=>{window._sfStopMotion();document.querySelector('.sf-folder.active .sf-input-name').value='測試住宿生 0';sfCarousel.openSheet();});
+  await page.waitForTimeout(700);
   await page.screenshot({path:path.join(out,engine.name()+'-cards.png')});
-  await page.evaluate(()=>{
-    const capture=captureGravityScene;
-    window.captureGravityScene=async(...args)=>{
-      const result=await capture(...args);window.__gravityBackground=result.background.toDataURL();
-      const cv=result.background,data=cv.getContext('2d').getImageData(0,0,cv.width,cv.height).data,colors=new Set();
-      for(let y=0;y<cv.height;y+=31)for(let x=0;x<cv.width;x+=29){const i=(y*cv.width+x)*4;colors.add(data[i]+','+data[i+1]+','+data[i+2]);}
-      window.__backgroundColors=colors.size;return result;
-    };
-    window.__bhDone=false;clearStudentData(document.querySelector('.sf-student-card-2d.active .sf-broom-btn')).then(()=>window.__bhDone=true);
-  });
-  await page.waitForSelector('.bh-webgl-layer',{timeout:8000});
-  assert.ok(await page.evaluate(()=>window.__backgroundColors>10),'The background capture must contain page content, not an empty colour');
-  fs.writeFileSync(path.join(out,engine.name()+'-background.png'),Buffer.from((await page.evaluate(()=>window.__gravityBackground)).split(',')[1],'base64'));
-  await page.waitForTimeout(1100);
-  await page.screenshot({path:path.join(out,engine.name()+'-black-hole.png')});
-  await page.waitForSelector('.bh-final-star',{timeout:7000});
-  await page.screenshot({path:path.join(out,engine.name()+'-star.png')});
-  await page.waitForFunction(()=>window.__bhDone);
+  // 刪除 = 粒子消散：canvas 在頁面載入就存在，按下去 200ms 內就開始畫，DOM 用遮罩同步消失，
+  // 結束後同一本以「空床」長回來 (草稿，不打 API)，紙會再自動打開
+  assert.equal(await page.locator('.sf-dissolve-canvas').count(),1,'particle canvas is created at page mount');
+  await page.evaluate(()=>{window.__delT0=performance.now();window.__bhDone=false;clearStudentData(document.querySelector('.sf-folder.active .sf-broom-btn')).then(()=>window.__bhDone=true);});
+  await page.waitForSelector('.sf-dissolve-canvas.is-running',{timeout:400});
+  assert.ok(await page.evaluate(()=>performance.now()-window.__delT0<250),'dissolve starts immediately, no first-run stall');
+  await page.waitForFunction(()=>{const f=document.querySelector('.sf-folder.active .fd-front');return !!(f.style.maskImage||f.style.webkitMaskImage);},null,{timeout:900}).catch(()=>{throw new Error('the folder itself must dissolve with the particles');});
+  await page.waitForTimeout(60);
+  await page.screenshot({path:path.join(out,engine.name()+'-dissolve.png')});
+  await page.waitForFunction(()=>window.__bhDone,{timeout:5000});
+  const delT=await page.evaluate(()=>performance.now()-window.__delT0);
+  assert.ok(delT<4000,'delete + re-materialise finishes in time: '+delT);
   assert.equal(await page.evaluate(()=>window._sfBHBusy),false);
-  assert.equal(await page.locator('.bh-webgl-layer,.bh-atmo').count(),0);
-  assert.equal(await page.locator('.sf-student-card-2d.active .sf-input-name').inputValue(),'');
+  assert.equal(await page.locator('.sf-dissolve-canvas.is-running').count(),0);
+  assert.equal(await page.evaluate(()=>Array.from(document.querySelector('.sf-folder.active').children).filter(c=>c.style.maskImage||c.style.webkitMaskImage||c.style.visibility==='hidden').length),0,'masks are cleaned up');
+  assert.equal(await page.locator('.sf-folder.active .sf-input-name').inputValue(),'');
+  assert.equal(await page.locator('.sf-folder.active .fd-name').innerText(),'空床');
   assert.equal(requests.filter(r=>r.path==='/api/attendance'&&r.method!=='GET').length,0);
+  await page.waitForTimeout(400);
+  assert.equal(await page.locator('.sf-folder.active.is-open').count(),1,'sheet re-opens on the re-materialised folder');
+  await page.screenshot({path:path.join(out,engine.name()+'-after-delete.png')});
   // A pending save must not overwrite text the user types after pressing Save.
   await page.evaluate(async()=>{
-    const card=document.querySelector('.sf-student-card-2d.active');
+    const card=document.querySelector('.sf-folder.active');
     const input=card.querySelector('.sf-input-name');input.value='已送出的名字';
     card.querySelector('.sf-chk-empty').checked=false;
     const original=window._api.updateAttendance;
@@ -146,14 +165,17 @@ async function run(engine,viewport){
     input.value='稍後的新修改';finish({});await saving;
     window._api.updateAttendance=original;
   });
-  assert.equal(await page.locator('.sf-student-card-2d.active .sf-input-name').inputValue(),'稍後的新修改');
-  // Cancellation restores the form without clearing unrelated data.
-  await page.locator('.sf-student-card-2d.active .sf-input-name').fill('保留草稿');
-  await page.evaluate(()=>{window.__bhDone=false;clearStudentData(document.querySelector('.sf-student-card-2d.active .sf-broom-btn')).then(()=>window.__bhDone=true);});
+  assert.equal(await page.locator('.sf-folder.active .sf-input-name').inputValue(),'稍後的新修改');
+  assert.equal(await page.locator('.sf-folder.active .fd-name').innerText(),'稍後的新修改','summary on the folder front follows the save');
+  // Cancellation (leaving the page mid-dissolve) restores the folder without clearing the form.
+  await page.locator('.sf-folder.active .sf-input-name').fill('保留草稿');
+  await page.evaluate(()=>{window.__bhDone=false;clearStudentData(document.querySelector('.sf-folder.active .sf-broom-btn')).then(()=>window.__bhDone=true);});
   await page.waitForTimeout(100);await page.evaluate(()=>navigateTo('settings'));
   await page.waitForFunction(()=>window.__bhDone);
   assert.equal(await page.evaluate(()=>window._sfBHBusy),false);
-  assert.equal(await page.locator('.bh-webgl-layer,.bh-atmo').count(),0);
+  assert.equal(await page.locator('.sf-dissolve-canvas.is-running').count(),0);
+  assert.equal(await page.evaluate(()=>Array.from(document.querySelector('.sf-folder.active').children).filter(c=>c.style.maskImage||c.style.webkitMaskImage||c.style.visibility==='hidden').length),0);
+  assert.equal(await page.locator('.sf-folder.active .sf-input-name').inputValue(),'保留草稿');
   // Older Safari fallback also honours the latest switch value.
   await page.evaluate(()=>{document.startViewTransition=undefined;const e=document.getElementById('setting-white-mode');e.checked=true;toggleWhiteMode(e);e.checked=false;toggleWhiteMode(e);});
   await page.waitForTimeout(850);
@@ -187,8 +209,8 @@ async function run(engine,viewport){
   // ── Excel 匯入 (import.js)：設定卡片、精靈開關、_importRows 管線 (更新 / 略過相同 / 找不到床位 / 清空) ──
   await page.evaluate(()=>navigateTo('settings'));await page.waitForTimeout(300);
   assert.equal(await page.locator('.imp-open-btn').count(),1);
-  await page.evaluate(()=>window.openImportWizard());await page.waitForTimeout(200);
-  assert.equal(await page.locator('#imp-modal.visible').count(),1);
+  await page.evaluate(()=>window.openImportWizard());
+  await page.waitForSelector('#imp-modal.visible',{timeout:4000});   // WebKit 忙碌時固定等 200ms 不夠
   await page.evaluate(()=>window._impClose());await page.waitForTimeout(200);
   const impRows=[[1,'101','1','匯入班','S9001','新生甲','','0911000001','','台北市'],[2,'101','2','','','','','','',''],[3,'101','3','測試班','TEST2','測試住宿生 2','','','',''],[4,'999','1','x','S9','無法比對','','','','']];
   const impMap={room:1,bed:2,class:3,studentId:4,name:5,phone:7,address:9};
@@ -209,7 +231,7 @@ async function run(engine,viewport){
   assert.ok(await page.evaluate(()=>document.body.classList.contains('light-mode')));
   await page.screenshot({path:path.join(out,engine.name()+'-light-navigation.png')});
   assert.deepEqual(errors,[]);
-  console.log(engine.name()+' '+viewport.width+'x'+viewport.height+': settings, theme race, reel race, validation, virtual cards, lens/star, cancellation PASS');
+  console.log(engine.name()+' '+viewport.width+'x'+viewport.height+': settings, theme race, reel race, validation, folder archive, swipe/extraction, particle dissolve, cancellation PASS');
   await browser.close();
 }
 async function offline(){
@@ -219,12 +241,13 @@ async function offline(){
   await page.goto('http://127.0.0.1:'+server.address().port);
   await page.evaluate(()=>navigator.serviceWorker.ready);
   await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
-  assert.ok(await page.evaluate(async()=>(await caches.keys()).includes('biyuan-v57')));
+  const cacheName=fs.readFileSync(path.join(root,'sw.js'),'utf8').match(/CACHE_NAME\s*=\s*'([^']+)'/)[1];
+  assert.ok(await page.evaluate(async name=>(await caches.keys()).includes(name),cacheName));
   await context.setOffline(true);
   await page.reload({waitUntil:'domcontentloaded'});
-  assert.ok(await page.evaluate(()=>typeof clearStudentData==='function' && typeof THREE==='object'));
-  assert.ok(await page.evaluate(async()=>{const r=await fetch('./vendor/html2canvas.1.4.1.min.js');return r.ok;}));
-  console.log('Offline shell, versioned assets and local black-hole dependencies PASS');
+  assert.ok(await page.evaluate(()=>typeof clearStudentData==='function' && typeof sfDissolve==='object' && typeof setup2DCarouselInteraction==='function'));
+  assert.equal(await page.evaluate(()=>typeof THREE),'undefined','three.js is gone');
+  console.log('Offline shell, versioned assets and particle-dissolve dependencies PASS');
   await browser.close();
 }
 (async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));try{if(process.env.TEST_OFFLINE)await offline();else await run(process.env.TEST_WEBKIT?webkit:chromium,process.env.TEST_DESKTOP?{width:1440,height:1000}:{width:390,height:844});}finally{server.close();}})().catch(e=>{console.error(e);process.exit(1);});

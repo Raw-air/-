@@ -145,7 +145,6 @@ body.light-mode .liquid-nav .nav-item.active .nav-icon,body.light-mode .liquid-n
 .liquid-nav .nav-item:focus-visible {outline:2px solid #b5e9ff;outline-offset:3px;}
 .liquid-nav .nav-item:active {transform:scale(.93);}
 .liquid-nav.is-dragging .nav-item:active {transform:none;}
-body.gravity-running .liquid-nav {z-index:10010;}
 /* 沒有 @property 的舊瀏覽器：退回逐元素 transition (遮罩洞會直接跳，不會動畫) */
 .liquid-nav.no-prop {transition:none;}
 .liquid-nav.no-prop .liquid-lens,.liquid-nav.no-prop::after {transition:transform var(--lens-time) var(--lens-ease);}
