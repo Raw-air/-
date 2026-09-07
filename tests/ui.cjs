@@ -96,20 +96,31 @@ async function run(engine,viewport){
   assert.equal(await page.locator('.sf-folder.active.is-open').count(),1,'the active folder opens its sheet after the entrance');
   await page.evaluate(()=>{window._sfStopMotion();_sfResults=state.students;renderStudentFileCards();});
   await page.waitForTimeout(100);
-  assert.ok(await page.locator('.sf-folder').count()<=13);
+  assert.ok(await page.locator('.sf-folder').count()<=17);
   await page.evaluate(()=>{window._sfStopMotion();});
-  // 橫式資料夾、六層殼 (背板 / 兩片側邊 / 內頁 / 前板 / 邊緣) + 資料紙，兩側鄰居是側轉的
+  // 斜向空間軌道：橫式資料夾、多層殼 + 資料紙；整排同一個 yaw、只有 X/Z 不同；深度差要夠大
   const geo=await page.evaluate(()=>{
+    const num=(el,re)=>parseFloat((el.style.transform.match(re)||[])[1]);
+    const zOf=el=>num(el,/translate3d\([^,]+,[^,]+,\s*(-?[\d.]+)px\)/);
+    const xOf=el=>num(el,/translate3d\(\s*(-?[\d.]+)px/);
+    const yawOf=el=>num(el,/rotateY\((-?[\d.]+)deg\)/);
     const f=document.querySelector('.sf-folder.active'),r=f.getBoundingClientRect();
     const n=Array.from(document.querySelectorAll('.sf-folder:not(.sf-far):not(.active)'));
+    const far=n.filter(e=>parseFloat(e.dataset.index)>_sfActiveIndex);
     return {ratio:r.width/r.height,layers:f.children.length,front:!!f.querySelector('.fd-front'),sheet:!!f.querySelector('.fd-sheet'),
-      neighbours:n.length,yaws:n.map(e=>parseFloat((e.style.transform.match(/rotateY\((-?[\d.]+)deg\)/)||[])[1])),
-      preserve:getComputedStyle(f).transformStyle==='preserve-3d',active:f.style.transform};
+      top:!!f.querySelector('.fd-top'),spines:f.querySelectorAll('.fd-spine').length,
+      neighbours:n.length,yaws:n.map(yawOf),activeYaw:yawOf(f),activeZ:zOf(f),zs:n.map(zOf),
+      farZ:far.map(zOf),farX:far.map(xOf),preserve:getComputedStyle(f).transformStyle==='preserve-3d'};
   });
-  assert.ok(geo.ratio>1.4&&geo.ratio<1.8,'landscape folder '+geo.ratio);
-  assert.ok(geo.layers>=7&&geo.front&&geo.sheet&&geo.preserve,'6-layer folder + sheet in a 3D context');
-  assert.ok(geo.neighbours>=2&&geo.yaws.every(y=>y<=-6&&y>=-14),'every folder shares the same yaw (no mirrored fan): '+geo.yaws.join(','));
-  assert.ok(/translate3d\(0px, -12px, (92|120)px\)/.test(geo.active),'active folder is pulled out towards the viewer: '+geo.active);
+  assert.ok(geo.ratio>1.3&&geo.ratio<1.9,'landscape folder '+geo.ratio);
+  assert.ok(geo.layers>=9&&geo.front&&geo.sheet&&geo.top&&geo.spines===2&&geo.preserve,'layered folder (front/back/top/2 spines/paper/edge) + sheet in a 3D context');
+  assert.ok(geo.neighbours>=4,'the rail shows a run of folders: '+geo.neighbours);
+  assert.ok(geo.yaws.concat(geo.activeYaw).every(y=>y<=-13&&y>=-31),'every folder shares one yaw, no mirrored fan: '+geo.yaws.join(','));
+  assert.ok(geo.zs.every(z=>geo.activeZ-z>55),'the active folder is pulled out of the rail: '+geo.activeZ+' vs '+geo.zs.join(','));
+  assert.ok(Math.max(...geo.zs)-Math.min(...geo.zs)>500,'the rail really recedes into the distance: '+geo.zs.join(','));
+  // 往深處那一段：index 越大 → X 越右、Z 越後 (斜向軌道，不是水平平鋪)
+  const farPairs=geo.farX.map((x,i)=>[x,geo.farZ[i]]).sort((p,q)=>p[0]-q[0]);
+  assert.ok(farPairs.length>=3&&farPairs.every((p,i)=>i===0||p[1]<farPairs[i-1][1]),'往右的同時往後退 (斜向軌道): '+JSON.stringify(farPairs));
   // A swipe can begin over the folder front; release settles in one short spring, then the sheet re-opens.
   const front=await page.locator('.sf-folder.active .fd-front').boundingBox();
   await page.mouse.move(front.x+front.width*.7,front.y+front.height*.5);
@@ -133,18 +144,26 @@ async function run(engine,viewport){
   await page.evaluate(()=>{window._sfStopMotion();document.querySelector('.sf-folder.active .sf-input-name').value='測試住宿生 0';sfCarousel.openSheet();});
   await page.waitForTimeout(700);
   await page.screenshot({path:path.join(out,engine.name()+'-cards.png')});
-  // 刪除 = 粒子消散：canvas 在頁面載入就存在，按下去 200ms 內就開始畫，DOM 用遮罩同步消失，
-  // 結束後同一本以「空床」長回來 (草稿，不打 API)，紙會再自動打開
+  // 刪除 = 高密度粉塵 + 微型黑洞：renderer (canvas / WebGL context / shader / 粒子池) 在頁面載入
+  // 就備妥，按下去 250ms 內就開始畫，DOM 用遮罩與粉塵同步消失；粉塵還在飛的時候資料夾就以
+  // 「空床」長回來 (草稿，不打 API)，紙會再自動打開
   assert.equal(await page.locator('.sf-dissolve-canvas').count(),1,'particle canvas is created at page mount');
+  assert.ok(await page.evaluate(()=>sfDissolve.max>=3000),'the particle pool is preallocated for a dense dust cloud');
   await page.evaluate(()=>{window.__delT0=performance.now();window.__bhDone=false;clearStudentData(document.querySelector('.sf-folder.active .sf-broom-btn')).then(()=>window.__bhDone=true);});
   await page.waitForSelector('.sf-dissolve-canvas.is-running',{timeout:400});
   assert.ok(await page.evaluate(()=>performance.now()-window.__delT0<250),'dissolve starts immediately, no first-run stall');
-  await page.waitForFunction(()=>{const f=document.querySelector('.sf-folder.active .fd-front');return !!(f.style.maskImage||f.style.webkitMaskImage);},null,{timeout:900}).catch(()=>{throw new Error('the folder itself must dissolve with the particles');});
-  await page.waitForTimeout(60);
+  await page.waitForTimeout(140);
   await page.screenshot({path:path.join(out,engine.name()+'-dissolve.png')});
   await page.waitForFunction(()=>window.__bhDone,{timeout:5000});
   const delT=await page.evaluate(()=>performance.now()-window.__delT0);
-  assert.ok(delT<4000,'delete + re-materialise finishes in time: '+delT);
+  assert.ok(delT<4000,'delete + black-hole suction finishes in time: '+delT);
+  // 資料夾本身跟著粉塵一起消失 (DOM 遮罩)，而且粉塵是「一大片」不是幾十顆
+  const dust=await page.evaluate(()=>({...sfDissolve.stats,webgl:sfDissolve.webgl,max:sfDissolve.max}));
+  assert.ok(dust.masked,'the folder itself dissolves with the particles (DOM mask follows the frontier)');
+  assert.ok(dust.max>=3000,'the particle pool is preallocated for a dense dust cloud: '+dust.max);
+  assert.ok(dust.spawned>400,'a dense dust cloud, not a handful of specks: '+JSON.stringify(dust));
+  assert.ok(dust.peak>150,'many particles are alive at once: '+JSON.stringify(dust));
+  console.log('  dust:',JSON.stringify(dust));
   assert.equal(await page.evaluate(()=>window._sfBHBusy),false);
   assert.equal(await page.locator('.sf-dissolve-canvas.is-running').count(),0);
   assert.equal(await page.evaluate(()=>Array.from(document.querySelector('.sf-folder.active').children).filter(c=>c.style.maskImage||c.style.webkitMaskImage||c.style.visibility==='hidden').length),0,'masks are cleaned up');

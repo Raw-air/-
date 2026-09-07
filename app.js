@@ -3828,8 +3828,9 @@ let _sfRandomDefaults = [];
 // ─── 虛擬化輪播：DOM 永遠只有 13 張卡片，滑到哪就把跑出畫面的卡片回收、換上新內容 ───
 // 以前是把搜尋結果複製 5~60 次全部塞進 DOM (常常 60~500 張卡)，每張又有毛玻璃與上千個硬體圖層，
 // 這就是 iPhone 左右滑會卡的主因。現在 DOM 固定 13 張，滑再多也不會變重。
-const SF_POOL_SIZE = 13;
-const SF_HALF = 6;
+// 軌道往右後方延伸，所以視窗是不對稱的：近端只留 3 本，深處留 13 本
+const SF_POOL_SIZE = 17;
+const SF_HALF = 3;
 let _sfPool = [];              // [{ el, vIndex, student }]
 let _sfDrafts = new Map();     // student.id -> 尚未儲存的草稿 (卡片被回收時暫存，回來時還原)
 let _sfWindowStart = null;
@@ -3882,6 +3883,7 @@ function sfUpdateSummary(el, s, draft) {
   const m = sfSummary(s, draft);
   const q = sel => el.querySelector(sel);
   const name = q('.fd-name'); if (name) { name.textContent = m.name; name.classList.toggle('is-empty', m.nameEmpty); }
+  const rail = q('.fd-rail-label'); if (rail) rail.textContent = m.name;
   const cls = q('.fd-class'); if (cls) cls.textContent = m.cls;
   const sid = q('.fd-count'); if (sid) sid.textContent = m.sid;
   const tags = q('.fd-tags'); if (tags) tags.innerHTML = m.tags;
@@ -3903,8 +3905,10 @@ function sfCardHTML(s, draft) {
       <div class="fd-back"></div>
       <div class="fd-tab"><span>${sfEsc(s.room)}</span><b>${sfEsc(s.bed)}</b><i class="${m.dot}"></i></div><div class="fd-tab fd-tab-r"><span>${sfEsc(s.room)}</span><b>${sfEsc(s.bed)}</b><i class="${m.dot}"></i></div>
       <div class="fd-spine"></div><div class="fd-spine fd-spine-r"></div>
+      <div class="fd-top"></div>
       <div class="fd-paper"><i></i><i></i><i></i><i></i></div>
       <div class="fd-front">
+        <div class="fd-rail-label">${sfEsc(m.name)}</div>
         <div class="fd-summary">
           <div class="fd-name${m.nameEmpty ? ' is-empty' : ''}">${sfEsc(m.name)}</div>
           <div class="fd-class">${sfEsc(m.cls)}</div>
@@ -3964,7 +3968,7 @@ function sfReadCard(el, s) {
   return { draft, same };
 }
 
-// 名單少於回收池 (13 張) 時，同一個人會同時出現在好幾張卡上；找出另一張還在畫面上、已經被改過的卡
+// 名單少於回收池 (17 本) 時，同一個人會同時出現在好幾張卡上；找出另一張還在畫面上、已經被改過的卡
 function sfLiveDraft(id, exceptEl) {
   for (const e of _sfPool) {
     if (!e.student || e.student.id !== id || e.el === exceptEl || e.vIndex === null) continue;

@@ -8,7 +8,7 @@
 :root {
   --fd-w: 440px;
   --fd-h: 284px;
-  --fd-depth: 14px;                 /* 前板到背板的厚度 */
+  --fd-depth: 18px;                 /* 前板到背板的厚度 (側轉 24° 時投影約 7px，看得出是實體) */
   --fd-radius: 22px;
   --fd-ease: cubic-bezier(.16, 1, .3, 1);
   /* 深色主題：白/銀色透明壓克力 */
@@ -79,7 +79,8 @@ body.light-mode {
   overflow: hidden;
   touch-action: pan-y pinch-zoom;
   perspective: 1500px;
-  perspective-origin: 50% 44%;
+  /* 鏡頭在左前方偏上：整條軌道往右後方收斂，遠端資料夾自然往這個點縮 */
+  perspective-origin: 34% 40%;
   contain: layout paint;
   cursor: grab;
   outline: none;
@@ -205,7 +206,8 @@ body.light-mode {
   left: 0;
   width: var(--fd-depth);
   background: var(--fd-spine);
-  opacity: calc(var(--fd-alpha) * .9);
+  opacity: var(--fd-alpha);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.35);
   transform-origin: left center;
   transform: translateZ(calc(-1 * var(--fd-depth))) rotateY(-90deg);   /* 先退到背板深度再轉，厚度才填在前板與背板之間 */
   border-radius: 3px;
@@ -216,6 +218,20 @@ body.light-mode {
   transform-origin: right center;
   transform: translateZ(calc(-1 * var(--fd-depth))) rotateY(90deg);
 }
+
+/* 頂面：把前板與背板之間那 18px 補起來，鏡頭在上方所以看得到 (從下方看時 backface 自動隱藏) */
+.sf-folder > .fd-top {
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: var(--fd-depth);
+  transform-origin: 50% 0;
+  transform: rotateX(-90deg);
+  background: linear-gradient(180deg, rgba(255,255,255,.72), rgba(255,255,255,.3));
+  opacity: calc(var(--fd-alpha) * .95);
+  border-radius: 2px;
+  backface-visibility: hidden;
+}
+body.light-mode .sf-folder > .fd-top { background: linear-gradient(180deg, rgba(255,255,255,1), rgba(216,220,238,.85)); }
 
 /* 夾在裡面的文件 */
 .sf-folder > .fd-paper {
@@ -270,8 +286,23 @@ body.light-mode {
 .sf-folder.fd-near.active > .fd-front { backdrop-filter: blur(16px) saturate(1.25); -webkit-backdrop-filter: blur(16px) saturate(1.25); }
 #page-student-files.sf-moving .sf-folder > .fd-front { backdrop-filter: none; -webkit-backdrop-filter: none; }
 
-/* 摘要 */
-.fd-summary { position: relative; display: flex; flex-direction: column; gap: 4px; }
+/* 摘要：只有抽出來的那本看得到 (其餘資料夾被前一本蓋掉大半，改看右緣的側標) */
+.fd-summary { position: relative; display: flex; flex-direction: column; gap: 4px; opacity: 0; transition: opacity .3s ease; }
+.sf-folder.active .fd-summary { opacity: 1; }
+/* 軌道側標：像檔案背脊上的標籤，寫在右緣那條露出來的地方 */
+.fd-rail-label {
+  position: absolute;
+  top: 15px; bottom: 13px; right: 13px;
+  width: 24px;
+  writing-mode: vertical-rl;
+  display: flex; align-items: flex-start; justify-content: center;
+  font-size: 15px; font-weight: 800; letter-spacing: .6px;
+  color: var(--fd-text);
+  white-space: nowrap; overflow: hidden;
+  opacity: 1; transition: opacity .28s ease;
+  pointer-events: none;
+}
+.sf-folder.active .fd-rail-label { opacity: 0; }
 .fd-name {
   font-size: 24px;
   font-weight: 800;
@@ -343,7 +374,7 @@ body.power-save-mode .sf-folder.fd-blur2 > * { filter: none; }
   position: absolute;
   left: 14px; right: 14px;
   bottom: calc(100% - var(--fd-overlap, 74px));
-  transform: translate3d(0, 46px, 6px) rotateY(6deg) scale(.96);   /* 資料夾本身 yaw -6°，紙反轉回來正對使用者 */
+  transform: translate3d(0, 46px, 6px) rotateY(var(--fd-counter-yaw, 16deg)) scale(.96);   /* 資料夾是斜的，紙反轉回來正對使用者 */
   transform-origin: 50% 100%;
   opacity: 0;
   visibility: hidden;   /* 不用 content-visibility：它不能過渡，關紙會在一幀內塌掉 */
@@ -361,7 +392,7 @@ body.power-save-mode .sf-folder.fd-blur2 > * { filter: none; }
   pointer-events: none;
 }
 .sf-folder.is-open > .fd-sheet {
-  transform: translate3d(0, 0, 40px) rotateY(6deg) scale(var(--fd-del-scale));
+  transform: translate3d(0, 0, 40px) rotateY(var(--fd-counter-yaw, 16deg)) scale(var(--fd-del-scale));
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
@@ -443,6 +474,7 @@ body.light-mode .fd-sheet .sf-icon-btn { background: rgba(255,255,255,.8); borde
 .fd-sheet .sf-save-action-btn[disabled] { opacity: .75; }
 
 /* ─── 刪除：粒子消散 (dissolve.js) ────────────────────────────────────── */
+/* 粉塵 + 微型黑洞的畫布：頁面載入就建好 (WebGL context 與 shader 都已備妥)，平常透明不吃事件 */
 .sf-dissolve-canvas {
   position: fixed;
   inset: 0;
@@ -451,6 +483,7 @@ body.light-mode .fd-sheet .sf-icon-btn { background: rgba(255,255,255,.8); borde
   pointer-events: none;
   z-index: 60;
   opacity: 0;
+  contain: strict;
 }
 .sf-dissolve-canvas.is-running { opacity: 1; }
 /* 前 70ms：物件微縮、邊緣微亮，像準備消失。消散期間每幀都在改遮罩，所以把毛玻璃換成較實的底色
