@@ -59,8 +59,8 @@ function setup2DCarouselInteraction() {
     cfg.pull = mobile ? 150 : tablet ? 180 : 200;    // 抽出：離開弧往鏡頭多少
     cfg.side = 0;                                    // 抽出時仍維持置中
     cfg.lift = mobile ? 14 : 20;                     // 抽出：上移
-    cfg.railYaw = mobile ? 58 : 62;                  // 檔案列同向側立，避免跨中心時鏡像翻面
-    cfg.yawStep = mobile ? .7 : .45;
+    cfg.railYaw = mobile ? 85 : 86;                  // 未選取檔案近乎側立，呈現文件套的 U 形剖面
+    cfg.yawStep = mobile ? .16 : .10;
     cfg.activeYaw = mobile ? 20 : 24;                // 選取檔案朝向使用者，仍看得到實體厚度
     cfg.part = .12;                                  // 鄰居沿弧讓開幾本
     cfg.farVisible = mobile ? 5.4 : tablet ? 12 : 16;   // 深處看得到幾本 (超出舞台的就別畫了)

@@ -1,8 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    住宿生檔案：透明壓克力資料夾陣列 (folder archive)
-   一個 .sf-folder = 6 層真正有 Z 深度的 DOM：
-     .fd-back (背板+標籤) → .fd-spine (左右側邊厚度) → .fd-paper (夾在裡面的文件)
-     → .fd-front (前板玻璃+摘要) → .fd-edge (壓克力邊緣高光) → .fd-sheet (抽出來的詳細資料紙)
+   一個 .sf-folder = 多層真正有 Z 深度的 DOM：
+     .fd-back (背板) → .fd-spine (左右側邊厚度) → .fd-top/.fd-bottom (上下封邊)
+     → .fd-paper (夾在裡面的文件) → .fd-front (前板玻璃+摘要)
+     → .fd-edge (壓克力邊緣高光) → .fd-sheet (抽出來的詳細資料紙)
    排列、旋轉、抽出全部由 carousel.js 逐幀寫 transform，這裡只管材質與靜態幾何。
    ═══════════════════════════════════════════════════════════════════════════ */
 :root {
@@ -19,7 +20,7 @@
   --fd-front-border-soft: rgba(255,255,255,.22);
   --fd-paper: rgba(250,250,255,.10);
   --fd-paper-line: rgba(255,255,255,.42);
-  --fd-spine: linear-gradient(180deg, rgba(255,255,255,.7), rgba(255,255,255,.3) 50%, rgba(255,255,255,.6));
+  --fd-spine: linear-gradient(90deg, rgba(255,255,255,.9) 0 1px, rgba(255,255,255,.12) 2px, rgba(255,255,255,.05) 70%, rgba(255,255,255,.78) calc(100% - 1px));
   --fd-edge: rgba(255,255,255,.78);
   --fd-edge-soft: rgba(255,255,255,.34);
   --fd-text: #f2f2f8;
@@ -206,36 +207,55 @@ body.light-mode {
 /* 側邊厚度：左右各一片，轉側時露出來就是壓克力的邊 */
 .sf-folder > .fd-spine {
   position: absolute;
-  top: 5px; bottom: 5px;
+  /* 上半部沿開口斜收至前袋，形成兩片板材分開的 V 形側影；底部與封邊重疊 1px。 */
+  top: -1px; bottom: -1px;
   left: 0;
-  width: var(--fd-depth);
+  width: calc(var(--fd-depth) + 1px);
   background: var(--fd-spine);
   opacity: var(--fd-alpha);
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.35);
   transform-origin: left center;
   transform: translateZ(calc(-1 * var(--fd-depth))) rotateY(-90deg);   /* 先退到背板深度再轉，厚度才填在前板與背板之間 */
-  border-radius: 3px;
+  border-radius: 2px;
+  clip-path: polygon(0 0, 8% 0, 100% 34%, 100% 100%, 0 100%);
   backface-visibility: hidden;
 }
 .sf-folder > .fd-spine.fd-spine-r {
   left: auto; right: 0;
   transform-origin: right center;
   transform: translateZ(calc(-1 * var(--fd-depth))) rotateY(90deg);
+  clip-path: polygon(92% 0, 100% 0, 100% 100%, 0 100%, 0 34%);
 }
 
-/* 頂面：把前板與背板之間那 18px 補起來，鏡頭在上方所以看得到 (從下方看時 backface 自動隱藏) */
-.sf-folder > .fd-top {
+/* 頂部替背板補薄邊，底部把前後板收成 U 形；兩端都不再露出次像素缺口。 */
+.sf-folder > .fd-bottom {
   position: absolute;
-  left: 0; right: 0; top: 0;
-  height: var(--fd-depth);
-  transform-origin: 50% 0;
-  transform: rotateX(-90deg);
-  background: linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,.18));
-  opacity: calc(var(--fd-alpha) * .95);
+  left: 1px; right: 1px;
+  height: calc(var(--fd-depth) + 1px);
+  background: linear-gradient(90deg, rgba(255,255,255,.45), rgba(255,255,255,.06) 16%, rgba(255,255,255,.025) 82%, rgba(255,255,255,.5));
+  opacity: calc(var(--fd-alpha) * .98);
   border-radius: 2px;
   backface-visibility: hidden;
 }
-body.light-mode .sf-folder > .fd-top { background: linear-gradient(180deg, rgba(255,255,255,1), rgba(216,220,238,.85)); }
+.sf-folder > .fd-top {
+  position:absolute;
+  left:1px;right:1px;
+  top: 0;
+  height:2px;
+  transform:translateZ(calc(-1 * var(--fd-depth)));
+  background:linear-gradient(90deg,rgba(255,255,255,.9),rgba(255,255,255,.45),rgba(255,255,255,.85));
+  opacity:calc(var(--fd-alpha) * .92);
+  border-radius:2px;
+  backface-visibility:hidden;
+}
+.sf-folder > .fd-bottom {
+  bottom: 0;
+  transform-origin: 50% 100%;
+  transform: rotateX(90deg);
+  background: linear-gradient(90deg, rgba(255,255,255,.42), rgba(181,194,184,.07) 18%, rgba(255,255,255,.025) 82%, rgba(255,255,255,.48));
+}
+body.light-mode .sf-folder > .fd-top {background:linear-gradient(90deg,#fff,#dfe6e0,#fff);}
+body.light-mode .sf-folder > .fd-bottom { background: linear-gradient(90deg, rgba(255,255,255,.92), rgba(190,202,192,.12) 18%, rgba(255,255,255,.08) 82%, rgba(255,255,255,.9)); }
 
 /* 夾在裡面的文件 */
 .sf-folder > .fd-paper {
@@ -641,7 +661,7 @@ body.power-save-mode .sf-card-area-2d::before { display: none; }
 /* Isolate the reading plane so Chromium cannot interleave rail surfaces over form fields. */
 /* Frosted polypropylene: clear upper leaf, diffused pocket, hairline perimeter. */
 #page-student-files {
-  --fd-depth: 14px; --fd-radius: 18px;
+  --fd-depth: 17px; --fd-radius: 18px;
   --fd-back: linear-gradient(155deg,rgba(255,255,255,.66),rgba(231,238,233,.44) 32%,rgba(224,232,226,.56) 76%,rgba(255,255,255,.38));
   --fd-back-border: rgba(249,255,250,.39);
   --fd-front: linear-gradient(165deg,rgba(250,252,250,.62),rgba(233,240,235,.48) 34%,rgba(229,237,231,.58) 63%,rgba(190,204,194,.34) 90%,rgba(255,255,255,.42));
@@ -649,7 +669,7 @@ body.power-save-mode .sf-card-area-2d::before { display: none; }
   --fd-paper-line: rgba(75,91,80,.34);
   --fd-front-border-soft: rgba(255,255,255,.33);
   --fd-edge: rgba(255,255,255,.66); --fd-edge-soft: rgba(255,255,255,.22);
-  --fd-spine: linear-gradient(180deg,#ffffffe8,#b9c5bcaa 42%,#ffffffc7);
+  --fd-spine: linear-gradient(90deg,#fffffff0 0 1px,#d9e1db24 2px,#aab8ae18 68%,#ffffffd9 calc(100% - 1px));
   --fd-shadow: 0 18px 32px -18px #000a,0 3px 8px -4px #0006;
   --fd-accent: linear-gradient(160deg,rgba(0,35,10,.87),rgba(0,182,48,.55) 31%,rgba(0,171,52,.45) 80%,rgba(0,25,4,.82));
   --fd-active-front: linear-gradient(155deg,rgba(87,239,137,.80),rgba(20,194,74,.78) 35%,rgba(21,184,67,.76) 65%,rgba(0,67,14,.88));
@@ -679,8 +699,9 @@ body.power-save-mode .sf-card-area-2d::before { display: none; }
 #page-student-files .sf-folder > .fd-paper i:nth-child(4) {width:90%;opacity:1;}
 #page-student-files .sf-folder > .fd-paper i:last-child {width:56%;}
 #page-student-files .sf-folder > .fd-tab {display:none;}
-#page-student-files .sf-folder > .fd-top {background:linear-gradient(#fffffff0,#a8b8ad99);border-radius:8px 8px 3px 3px;box-shadow:inset 0 1px #fff;}
-#page-student-files .sf-folder > .fd-spine {border-radius:7px;box-shadow:inset 0 0 0 1px #ffffffa8,0 2px 6px #0004;}
+#page-student-files .sf-folder > .fd-top {background:linear-gradient(90deg,#fff,#d9e2dc88 45%,#ffffffed);border-radius:2px;box-shadow:0 0 2px #fff8;}
+#page-student-files .sf-folder > .fd-bottom {background:linear-gradient(90deg,#d9e2dccc,#91a09616 18%,#ffffff0d 82%,#ffffffe0);border-radius:3px;box-shadow:inset 0 -1px #fff8;}
+#page-student-files .sf-folder > .fd-spine {border-radius:2px;box-shadow:inset 1px 0 #ffffffd9,inset -1px 0 #ffffffa8;}
 #page-student-files .fd-rail-label {bottom:17px;left:20px;font-size:15px;color:#1d2721;}
 #page-student-files .fd-name {font-size:17px;line-height:1.4;font-weight:400;}
 #page-student-files .fd-class,#page-student-files .fd-count {display:none;}
@@ -721,7 +742,7 @@ body.light-mode #page-student-files {
   --fd-paper:linear-gradient(170deg,#fff,#edf1eb);
   --fd-paper-line:#5d756265;--fd-edge:#ffffffed;--fd-edge-soft:#516a513b;
   --fd-shadow:0 12px 22px -12px #38533b55;
-  --fd-spine:linear-gradient(#ffffffef,#85998940,#ffffffb0);
+  --fd-spine:linear-gradient(90deg,#fff 0 1px,#85998924 2px,#ffffff24 68%,#ffffffe8 calc(100% - 1px));
   --fd-accent:linear-gradient(160deg,#075723dd,#00b24b85 45%,#05792e9e);
   --fd-active-front:linear-gradient(155deg,#6ff4a6b8,#24c56da8 55%,#057735ba);
   --fd-sheet:linear-gradient(160deg,#fffef8,#f2f3ec);
