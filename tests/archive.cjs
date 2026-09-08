@@ -40,6 +40,8 @@ async function run(engine,viewport){
   await page.waitForTimeout(200);
   await page.locator('#sf-scene').screenshot({path:path.join(out,engine.name()+'-archive-'+viewport.width+'.png')});
   assert.equal(await page.locator('.sf-folder.active.is-open').count(),0);
+  const selectedCentre=await page.locator('.sf-folder.active').evaluate(e=>{const r=e.getBoundingClientRect();return {x:r.left+r.width/2,w:innerWidth};});
+  assert.ok(Math.abs(selectedCentre.x-selectedCentre.w/2)<selectedCentre.w*.04,'selected folder is visually centred: '+JSON.stringify(selectedCentre));
   const railBefore = await page.evaluate(()=>Array.from(document.querySelectorAll('.sf-folder')).filter(e=>!e.classList.contains('sf-far')&&!e.classList.contains('active')).map(e=>({index:e.dataset.index,x:new DOMMatrixReadOnly(getComputedStyle(e).transform).m41})));
   await page.locator('.sf-selection').click();
   await page.waitForFunction(()=>{
@@ -99,5 +101,5 @@ async function run(engine,viewport){
   console.log(engine.name()+' '+viewport.width+': archive, editor, empty search, keyboard and reduced motion PASS');
   } finally { await browser.close(); }
 }
-server.listen(0,'127.0.0.1',async()=>{try {await run(chromium,{width:1280,height:900});await run(webkit,{width:375,height:844});}catch(e){console.error(e);process.exitCode=1;}finally{server.close();}});
+server.listen(0,'127.0.0.1',async()=>{try {await run(chromium,{width:1280,height:900});await run(webkit,{width:375,height:844});await run(webkit,{width:844,height:375});}catch(e){console.error(e);process.exitCode=1;}finally{server.close();}});
 

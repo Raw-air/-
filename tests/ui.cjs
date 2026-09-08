@@ -14,6 +14,7 @@ async function run(engine,viewport){
   const browser=await engine.launch({headless:true});
   const context=await browser.newContext({viewport,deviceScaleFactor:2,serviceWorkers:'block',hasTouch:true});
   const errors=[],requests=[];
+  let retryImportFailed=false;
   await context.route('**/*',async route=>{
     const url=new URL(route.request().url());
     if(url.hostname==='127.0.0.1') {
@@ -22,6 +23,10 @@ async function run(engine,viewport){
     }
     if(url.pathname.startsWith('/api/')){
       requests.push({path:url.pathname,method:route.request().method(),body:route.request().postData()});
+      if(url.pathname==='/api/attendance' && route.request().postData()?.includes('匯入重試測試') && !retryImportFailed){
+        retryImportFailed=true;
+        return route.fulfill({status:503,json:{error:'暫時無法連線'}});
+      }
       const body=url.pathname==='/api/roster'?{students:roster,dateColumns:[]}:url.pathname==='/api/config'?{total_beds:'90'}:url.pathname==='/api/poll'?{ts:0,att_ts:0}:url.pathname==='/api/ping'?{ok:true}:{};
       return route.fulfill({json:body});
     }
@@ -98,8 +103,8 @@ async function run(engine,viewport){
   await page.waitForTimeout(100);
   assert.ok(await page.locator('.sf-folder').count()<=21);
   await page.evaluate(()=>{window._sfStopMotion();});
-  // 弧形空間軌道：橫式多層資料夾 + 資料紙；朝向來自弧的切線 (弧頂側對鏡頭、兩端露正面、連續變化)；
-  // 抽出那本 z 最前且朝向 10–30°；大小靠透視 (manual scale 只有 1)
+  // 弧形空間軌道：直式多層資料夾 + 資料紙；整列維持同向，跨過中央不會翻成鏡像；
+  // 抽出那本 z 最前且朝向使用者；大小靠透視 (manual scale 只有 1)
   const geo=await page.evaluate(()=>{
     const num=(el,re)=>parseFloat((el.style.transform.match(re)||[])[1]);
     const zOf=el=>num(el,/translate3d\([^,]+,[^,]+,\s*(-?[\d.]+)px\)/);
@@ -111,15 +116,13 @@ async function run(engine,viewport){
       top:!!f.querySelector('.fd-top'),spines:f.querySelectorAll('.fd-spine').length,active:{i:_sfActiveIndex,yaw:yawOf(f),z:zOf(f),scale:scOf(f)},
       n,preserve:getComputedStyle(f).transformStyle==='preserve-3d'};
   });
-  assert.ok(geo.ratio>.4&&geo.ratio<.9,'upright glass folder '+geo.ratio);
+  assert.ok(geo.ratio>.5&&geo.ratio<.9,'upright glass folder '+geo.ratio);
   assert.ok(geo.layers>=9&&geo.front&&geo.sheet&&geo.top&&geo.spines===2&&geo.preserve,'layered folder (front/back/top/2 spines/paper/edge) + sheet in a 3D context');
   assert.ok(geo.n.length>=4,'the rail shows a run of folders: '+geo.n.length);
-  const yaws=geo.n.map(p=>p.yaw),absY=yaws.map(Math.abs);
-  assert.ok(geo.active.yaw>=45&&geo.active.yaw<=60,'the extracted folder faces the viewer at 10–30°: '+geo.active.yaw);
-  assert.ok(absY.filter(y=>y>=45&&y<=90).length>=absY.length*.6,'most folders are seen from the side (45–90°): '+yaws.join(','));
-  assert.ok(absY.some(y=>y>78),'the apex of the arc is nearly edge-on: '+yaws.join(','));
-  // 朝向沿弧連續：相鄰兩本差 < 36° (手機每本差 15°，橢圓弧兩端的切線變化比較快)，跨過 ±90 (側對) 那一格視為連續
-  for(let k=1;k<geo.n.length;k++){const d=Math.abs(geo.n[k].yaw-geo.n[k-1].yaw);assert.ok(d<36||Math.abs(d-180)<36,'yaw follows the rail tangent continuously: '+yaws.join(','));}
+  const yaws=geo.n.map(p=>p.yaw);
+  assert.ok(geo.active.yaw>=18&&geo.active.yaw<=26,'the extracted folder faces the viewer while retaining visible thickness: '+geo.active.yaw);
+  assert.ok(yaws.every(y=>y>40&&y<75),'rail folders keep one face towards the viewer: '+yaws.join(','));
+  for(let k=1;k<geo.n.length;k++)assert.ok(Math.abs(geo.n[k].yaw-geo.n[k-1].yaw)<3,'yaw changes continuously without a mirrored flip: '+yaws.join(','));
   assert.ok(geo.n.every(p=>geo.active.z-p.z>55),'the active folder is pulled out of the rail towards the viewer: '+geo.active.z+' vs '+geo.n.map(p=>p.z).join(','));
   assert.ok(geo.n.concat(geo.active).every(p=>p.scale>=.88&&p.scale<=1.08),'size comes from perspective, manual scale stays within 0.88–1.08');
   const zs=geo.n.map(p=>p.z);
@@ -127,6 +130,17 @@ async function run(engine,viewport){
   // 弧：最靠近鏡頭的頂點在中間，兩端都比它後退 (不是單向縮小的斜直線)
   const apex=zs.indexOf(Math.max(...zs));
   assert.ok(apex>0&&apex<zs.length-1&&zs[0]<zs[apex]-30&&zs[zs.length-1]<zs[apex]-30,'curved rail: both ends recede behind the apex: '+zs.join(','));
+  const centred=await page.locator('.sf-folder.active').evaluate(e=>{const r=e.getBoundingClientRect();return {x:r.left+r.width/2,w:innerWidth};});
+  assert.ok(Math.abs(centred.x-centred.w/2)<centred.w*.08,'the selected folder is centred: '+JSON.stringify(centred));
+  assert.equal(await page.locator('.sf-orbit').count(),0,'the decorative orbit ring is removed');
+  assert.ok(await page.locator('#page-student-files').evaluate(e=>parseFloat(getComputedStyle(e).getPropertyValue('--fd-depth'))>=12),'folder shell has visible physical depth');
+  const stableTransform=await page.locator('.sf-folder.active').evaluate(e=>e.style.transform);
+  await page.locator('#sf-search-input').fill('測試住宿生');
+  await page.waitForTimeout(450);
+  assert.equal(await page.locator('.sf-folder.active').evaluate(e=>e.style.transform),stableTransform,'search keeps the same camera and final folder pose');
+  assert.equal(await page.locator('#sf-search-input').evaluate(e=>getComputedStyle(e).outlineStyle),'none','search field does not draw the green focus outline');
+  await page.locator('#sf-search-input').fill('');
+  await page.waitForTimeout(120);
   // A swipe can begin over the folder front; release settles in one short spring, then the sheet re-opens.
   const front=await page.locator('.sf-folder.active .fd-front').boundingBox();
   await page.mouse.move(front.x+front.width*.7,front.y+front.height*.5);
@@ -250,9 +264,16 @@ async function run(engine,viewport){
   assert.equal(imp2.preview.items.find(it=>String(it.room)==='101'&&String(it.bed)==='2').action,'clear');
   const impClear=JSON.parse(requests.filter(r=>r.path==='/api/attendance').slice(-1)[0].body).updates.find(u=>u.pageId==='test-1');
   assert.deepEqual(impClear,{pageId:'test-1',updateProfile:{name:'',class:'',studentId:'',isForeign:false},markEmpty:true,clearProfile:true});
+  const retryRows=[[1,'103','1','匯入班','S-RETRY','匯入重試測試','','','','']];
+  const impRetry=await page.evaluate(({rows,mapping})=>window._importRows(rows,mapping,{blankAsEmpty:false,noteContact:false,skipUnchanged:true}),{rows:retryRows,mapping:impMap});
+  assert.equal(impRetry.result.ok,1,'a transient import request is retried safely');
+  assert.equal(impRetry.result.fail,0);
   await page.evaluate(()=>localStorage.setItem('white_mode','true'));
   await page.reload();await page.waitForFunction(()=>typeof state!=='undefined'&&!state.loading);
   assert.equal(await page.locator('.liquid-nav .nav-icon img').count(),0);
+  assert.equal(await page.locator('.liquid-nav .lens-fringe').count(),0,'liquid glass has no chromatic fringe layer');
+  const navAlignment=await page.locator('.liquid-nav .nav-item').first().evaluate(e=>{const i=e.querySelector('.nav-icon svg').getBoundingClientRect(),t=e.querySelector('.nav-label').getBoundingClientRect();return Math.abs((i.left+i.width/2)-(t.left+t.width/2));});
+  assert.ok(navAlignment<1,'navigation icon and label share the same centre line: '+navAlignment);
   assert.ok(await page.evaluate(()=>document.body.classList.contains('light-mode')));
   await page.screenshot({path:path.join(out,engine.name()+'-light-navigation.png')});
   assert.deepEqual(errors,[]);

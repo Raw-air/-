@@ -4128,6 +4128,7 @@ function renderStudentFileCards(sweepIn = false) {
     return;
   }
 
+  const firstMount = !_carouselAttached;
   sfEnsurePool(track);
   sfRebindAll();
   setup2DCarouselInteraction();
@@ -4135,7 +4136,9 @@ function renderStudentFileCards(sweepIn = false) {
   _sfActiveIndex = 0;
   _currentX = 0;
   // 進場：整排資料夾先擠在中央再依序展開，中央那本最後抽出 (carousel.js)
-  if (window.sfCarousel) window.sfCarousel.enter(0);
+  // 第一次進頁面保留展開動畫；搜尋換結果時直接套用同一組鏡頭與最終姿態，
+  // 避免鍵盤/搜尋狀態讓整排資料夾看起來突然切成另一個俯視角。
+  if (window.sfCarousel) window.sfCarousel.enter(0, { animate: firstMount && !sweepIn });
 }
 
 let _currentX = 0;

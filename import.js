@@ -244,7 +244,9 @@
     IMP.cancelled = false;
     IMP.running = true;
 
-    const BATCH = 15;
+    // Notion/Worker 在大量資料一次寫入時容易超過一般 15 秒請求時限。
+    // 小批次降低單次負載；此更新是完整欄位指派（冪等），暫時性中斷可安全重試。
+    const BATCH = 8;
     for (let i = 0; i < toApply.length; i += BATCH) {
       if (IMP.cancelled) break;
       const batch = toApply.slice(i, i + BATCH);
@@ -260,7 +262,11 @@
       });
 
       try {
-        await window._api.updateAttendance(payloads);
+        await window._api.updateAttendance(payloads, {
+          timeoutMs: 45000,
+          retries: 2,
+          retryDelayMs: 1200,
+        });
         batch.forEach(it => {
           if (it.action === 'clear') {
             it.target.name = ''; it.target.studentId = ''; it.target.class = ''; it.target.squad = '';

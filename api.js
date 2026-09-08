@@ -6,30 +6,44 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
-  async _fetch(path, method = 'GET', body = null) {
+  async _fetch(path, method = 'GET', body = null, requestOptions = {}) {
     const opts = { method, headers: {} };
     if (body) {
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(body);
     }
 
-    // 重試邏輯（最多 2 次）
-    for (let attempt = 0; attempt < 2; attempt++) {
+    const timeoutMs = Math.max(1000, Number(requestOptions.timeoutMs) || 15000);
+    const retries = Math.max(0, Number.isFinite(requestOptions.retries)
+      ? Math.floor(requestOptions.retries)
+      : (method === 'GET' ? 1 : 0));
+
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      let timedOut = false;
       try {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 15000);
+        const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
         let res, data;
         try {
           res = await fetch(`${this.baseUrl}${path}`, { ...opts, signal: controller.signal });
           data = await res.json();
         } finally { clearTimeout(timer); }
-        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        if (!res.ok) {
+          const httpError = new Error(data.error || `HTTP ${res.status}`);
+          httpError.status = res.status;
+          throw httpError;
+        }
         if (data.error) throw new Error(data.error);
         return data;
       } catch (err) {
-        // A timed-out swap/creation may already have succeeded. Never replay writes.
-        if (attempt === 1 || method !== 'GET') throw err;
-        await new Promise(r => setTimeout(r, 1000));
+        const normalized = timedOut
+          ? new Error(`連線逾時（${Math.round(timeoutMs / 1000)} 秒），請稍後重試`)
+          : err;
+        const retryable = timedOut || normalized?.name === 'TypeError' ||
+          [408, 425, 429, 500, 502, 503, 504].includes(Number(normalized?.status));
+        // 寫入預設仍不重播；只有明確傳入 retries 的冪等操作，且為暫時性錯誤時才重試。
+        if (attempt >= retries || !retryable) throw normalized;
+        await new Promise(r => setTimeout(r, Number(requestOptions.retryDelayMs) || 1000));
       }
     }
   }
@@ -42,8 +56,8 @@ class ApiClient {
 
   // 批次更新出席狀態
   // updates: [{ pageId, date, value }]
-  updateAttendance(updates) {
-    return this._fetch('/api/attendance', 'PATCH', { updates });
+  updateAttendance(updates, options) {
+    return this._fetch('/api/attendance', 'PATCH', { updates }, options);
   }
 
   // 取得系統設定

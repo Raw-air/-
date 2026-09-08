@@ -19,7 +19,7 @@ function setup2DCarouselInteraction() {
   _carouselAttached = true;
 
   // ── 弧形軌道：依畫面寬度算，resize / 進場時重算 ────────────────────────────
-  const PERSP = 1500, ORIGIN_X = .34, ORIGIN_Y = -.35;   // Explicit camera shared by all folders in both themes
+  const PERSP = 1500, ORIGIN_X = .5, ORIGIN_Y = .48;   // Fixed, centred camera shared by search and both themes
   const RAD = Math.PI / 180;
   const cfg = {};
   // 軌道是一段橢圓弧：φ 是弧上的角度，φ=0 是最靠近鏡頭的頂點，目前這本停在 φA (<0，頂點左邊)，
@@ -34,9 +34,9 @@ function setup2DCarouselInteraction() {
     const phi = phiOf(d) * RAD, s = Math.sin(phi), co = Math.cos(phi);
     out.x = cfg.cx + cfg.RX * s;
     out.z = cfg.zNear - cfg.RZ * (1 - co);
-    let yaw = Math.atan2(cfg.RX * co, -cfg.RZ * s) / RAD;
-    if (yaw > 90) yaw -= 180;
-    out.yaw = yaw;
+    // 所有資料夾保持同一面朝向鏡頭。舊版依橢圓切線在弧頂由 +90° 跳到 -90°，
+    // 右側檔案滑到左側時會像翻面／鏡像。小幅連續扇形足以保留立體層次，且不會換面。
+    out.yaw = cfg.railYaw + Math.max(-10, Math.min(10, d * cfg.yawStep));
     return out;
   }
   // 世界座標 → 畫面 px (元素本身排在舞台正中，所以要加 W/2)
@@ -49,17 +49,19 @@ function setup2DCarouselInteraction() {
     const mobile = W < 640, tablet = W < 1024;
     cfg.mobile = mobile;
     cfg.fw = mobile ? Math.max(256, Math.min(W - 96, 380)) : tablet ? 330 : 360;   // 直立玻璃檔案比例
-    cfg.fh = Math.round(cfg.fw * .91);
+    cfg.fh = Math.round(cfg.fw * 1.18);                 // 直式檔案比例；正面朝向使用者時仍保有資料夾輪廓
     cfg.RX = mobile ? 250 : tablet ? 430 : Math.min(W * .47, 650);      // 弧的橫向半徑
     cfg.RZ = mobile ? 200 : tablet ? 400 : 520;      // 弧的縱深半徑 (越大越有透視收斂，但近遠倍率差也越大)
     cfg.zNear = 40;                                  // 頂點離鏡頭多近，其餘都在它後面
     cfg.phiA = mobile ? -40 : -35;                   // 目前這本停在弧的哪個角度
     cfg.dPhi = mobile ? 15 : tablet ? 6.5 : 5.2;         // 每本差幾度 (越大間隙越明顯)
-    cfg.activeX = mobile ? .46 : .24;                // 抽出那本落在畫面寬度的幾成
+    cfg.activeX = mobile ? .54 : .5;                 // 補償手機斜視投影後的包圍盒偏移，視覺中心仍在 50%
     cfg.pull = mobile ? 150 : tablet ? 180 : 200;    // 抽出：離開弧往鏡頭多少
-    cfg.side = mobile ? 14 : 30;                     // 抽出：再往左偏一點 (離開軌道)
+    cfg.side = 0;                                    // 抽出時仍維持置中
     cfg.lift = mobile ? 14 : 20;                     // 抽出：上移
-    cfg.activeYaw = 56;                              // 抽出後的朝向 (軌道給的側視角只校正到這裡，不轉正)
+    cfg.railYaw = mobile ? 58 : 62;                  // 檔案列同向側立，避免跨中心時鏡像翻面
+    cfg.yawStep = mobile ? .7 : .45;
+    cfg.activeYaw = mobile ? 20 : 24;                // 選取檔案朝向使用者，仍看得到實體厚度
     cfg.part = .12;                                  // 鄰居沿弧讓開幾本
     cfg.farVisible = mobile ? 5.4 : tablet ? 12 : 16;   // 深處看得到幾本 (超出舞台的就別畫了)
     cfg.fade = mobile ? 1.8 : 3.5;                       // 尾端幾本內淡到 0
@@ -137,7 +139,7 @@ function setup2DCarouselInteraction() {
     out.alpha = Math.max(0, Math.min(near, far));
     out.near = d > -1.6 && d < 2.6;                 // 只有這些給 will-change
     out.blur = out.z < cfg.blur2 ? 2 : out.z < cfg.blur1 ? 1 : 0;
-    out.lefty = r.yaw > 0;                          // yaw>0 (頂點左邊) 左緣離鏡頭近、露在外面 → 側標與標籤放左邊；yaw<0 放右邊
+    out.lefty = true;                                // 同向排列，標籤不會在跨中心時突然換邊
     return out;
   }
   // 進場前「整疊還沒攤開」的姿態：全部擠在目前這本附近、更深、透明
@@ -496,12 +498,16 @@ function setup2DCarouselInteraction() {
   function resetInput() { active = false; dragging = false; touchId = null; mouseActive = false; suppressClick = false; }
   window.sfCarousel = {
     // 進場：全部先擠在中央，依序展開，最後中央那本抽出 (總長約 1 秒)
-    enter(index = 0) {
+    enter(index = 0, options = {}) {
       stopAll(); resetInput(); measure(); resumeEditor = false;
       _sfActiveIndex = index; c = index; lastIndex = index;
       closeSheet(true);
       for (const e of _sfPool) e.el._tf = null;
-      if (reduced()) { ext.ex = ext.part = ext.pulse = 1; state = 'idle'; paint(); scheduleOpen(); return; }
+      if (options.animate === false || reduced()) {
+        ext.mode = 'none'; ext.ex = ext.part = ext.pulse = 1; ent = null; state = 'idle';
+        paint();
+        return;
+      }
       ext.mode = 'none'; ext.ex = ext.part = 0; ext.pulse = 1;
       ent = { t0: performance.now(), only: null };
       state = 'entering';

@@ -571,8 +571,6 @@ body.power-save-mode .sf-card-area-2d::before { display: none; }
 .sf-archive-heading h1 span {display:block;font-size:12px;font-weight:400;letter-spacing:1px;color:#a1afa6;margin-top:10px;}
 #page-student-files .sf-scene-2d {height:490px; margin-top:6px; isolation:isolate;}
 #page-student-files .sf-card-area-2d {width:calc(100% + 64px);flex-shrink:0;margin:0 -32px;}
-.sf-orbit {position:absolute;width:65%;height:330px;top:26px;left:24%;border:1px solid #a0b6a22b;border-bottom:0;border-radius:50% 50% 0 0;pointer-events:none;}
-.sf-orbit span {position:absolute;left:32%;top:-23px;border:1px solid #6cea9c46;border-radius:50%;width:46px;height:46px;display:grid;place-items:center;font-size:24px;color:#7ac291;background:#0d140f;box-shadow:0 0 22px #55dc8710;}
 .sf-selection {position:absolute;left:1.5%;top:55px;z-index:4; width:192px;text-align:left;padding:18px;border:1px solid #ffffff67;border-radius:20px;color:#1d3124;background:linear-gradient(125deg,#ffffffba,#e5ffeda3 65%,#70eea096);backdrop-filter:blur(18px);box-shadow:inset 0 1px #fff9,0 16px 44px #0003;transition:transform .3s var(--fd-ease),box-shadow .3s;cursor:pointer;}
 .sf-selection[hidden] {display:none;}
 .sf-selection:hover {transform:translateY(-4px);box-shadow:inset 0 1px #fff9,0 22px 44px #0005;}
@@ -622,7 +620,6 @@ body.power-save-mode .sf-card-area-2d::before { display: none; }
   #page-student-files .sf-card-area-2d {width:calc(100% + 32px);margin:0 -16px;}
   .sf-selection {left:0;top:26px;width:166px;padding:14px;border-radius:16px;}
   .sf-selection strong {font-size:19px;}.sf-selection small {font-size:10px;}
-  .sf-orbit {top:65px;left:26%;width:100%;height:340px;}
   .sf-gesture-hint {max-width:130px;line-height:1.7;font-size:10px;}
   .sf-archive-footer {gap:8px;letter-spacing:0;}
 }
@@ -644,18 +641,18 @@ body.power-save-mode .sf-card-area-2d::before { display: none; }
 /* Isolate the reading plane so Chromium cannot interleave rail surfaces over form fields. */
 /* Frosted polypropylene: clear upper leaf, diffused pocket, hairline perimeter. */
 #page-student-files {
-  --fd-depth: 3px; --fd-radius: 9px;
-  --fd-back: linear-gradient(155deg,rgba(255,255,255,.20),rgba(255,255,255,.065) 32%,rgba(235,238,235,.13) 76%,rgba(255,255,255,.07));
+  --fd-depth: 14px; --fd-radius: 18px;
+  --fd-back: linear-gradient(155deg,rgba(255,255,255,.66),rgba(231,238,233,.44) 32%,rgba(224,232,226,.56) 76%,rgba(255,255,255,.38));
   --fd-back-border: rgba(249,255,250,.39);
-  --fd-front: linear-gradient(165deg,rgba(244,248,245,.35),rgba(244,248,245,.29) 34%,rgba(237,242,238,.42) 63%,rgba(197,210,201,.13) 90%,rgba(255,255,255,.12));
-  --fd-paper: linear-gradient(175deg,rgba(245,250,246,.20),rgba(235,245,239,.09));
-  --fd-paper-line: rgba(249,255,251,.72);
+  --fd-front: linear-gradient(165deg,rgba(250,252,250,.62),rgba(233,240,235,.48) 34%,rgba(229,237,231,.58) 63%,rgba(190,204,194,.34) 90%,rgba(255,255,255,.42));
+  --fd-paper: linear-gradient(175deg,#fbfcfa,#edf1ec);
+  --fd-paper-line: rgba(75,91,80,.34);
   --fd-front-border-soft: rgba(255,255,255,.33);
   --fd-edge: rgba(255,255,255,.66); --fd-edge-soft: rgba(255,255,255,.22);
-  --fd-spine: linear-gradient(180deg,#ffffff75,#ffffff1a 40%,#ffffff55);
-  --fd-shadow: 0 9px 18px -12px #0008;
+  --fd-spine: linear-gradient(180deg,#ffffffe8,#b9c5bcaa 42%,#ffffffc7);
+  --fd-shadow: 0 18px 32px -18px #000a,0 3px 8px -4px #0006;
   --fd-accent: linear-gradient(160deg,rgba(0,35,10,.87),rgba(0,182,48,.55) 31%,rgba(0,171,52,.45) 80%,rgba(0,25,4,.82));
-  --fd-active-front: linear-gradient(155deg,rgba(89,255,141,.50),rgba(16,213,75,.52) 35%,rgba(37,236,91,.48) 65%,rgba(0,71,13,.65));
+  --fd-active-front: linear-gradient(155deg,rgba(87,239,137,.80),rgba(20,194,74,.78) 35%,rgba(21,184,67,.76) 65%,rgba(0,67,14,.88));
   --fd-glow: 0 0 24px -15px #31ff6870;
   --fd-sheet: linear-gradient(160deg,#f4f5f0,#e5e9e2);
   --fd-sheet-text: #263a2e; --fd-sheet-text-dim: #5a6e60;
@@ -669,22 +666,21 @@ body.power-save-mode .sf-card-area-2d::before { display: none; }
 #page-student-files .modern-input::placeholder {color:#ffffffc4;}
 #page-student-files .search-icon-wrapper {color:#fff;}
 #page-student-files .sf-scene-2d {height:600px;}
-#page-student-files .sf-orbit {height:290px;top:82px;left:23%;width:67%;border-color:#f1fff224;mask-image:linear-gradient(#000 20%,transparent 85%);}
-#page-student-files .sf-orbit span {left:37%;}
 #page-student-files .sf-selection {top:105px;left:2%;background:linear-gradient(145deg,#fcfffcd0,#f2f8f2a6 60%,#90f1ae90);border-color:#ffffff60;box-shadow:inset 0 1px 3px #fff7,0 8px 32px #0002;backdrop-filter:blur(20px);}
 #page-student-files .sf-folder > .fd-back {border-width:.8px;}
-#page-student-files .sf-folder > .fd-front {top:37%;padding:20px 22px;border-radius:10px;backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);box-shadow:inset 0 1px 2px #ffffff5a,inset 1px 0 1px #ffffff22,inset 0 -1px 2px #ffffff33;}
-#page-student-files .sf-folder.active > .fd-front {backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);border-color:#96ffb56b;}
+#page-student-files .sf-folder > .fd-front {top:37%;padding:20px 22px;border-radius:18px;backdrop-filter:blur(11px) saturate(.82);-webkit-backdrop-filter:blur(11px) saturate(.82);box-shadow:inset 0 2px 3px #ffffff8c,inset 2px 0 2px #ffffff4d,inset 0 -2px 3px #8da0963d;}
+#page-student-files .sf-folder.active > .fd-front {backdrop-filter:blur(13px) saturate(.88);-webkit-backdrop-filter:blur(13px) saturate(.88);border-color:#d5ffe3a8;}
 #page-student-files .sf-folder > .fd-front::before {background:linear-gradient(110deg,transparent 25%,#ffffff0a 40%,#ffffff1c 47%,transparent 64%),radial-gradient(ellipse at 20% 80%,#ffffff22,transparent 65%);}
-#page-student-files .sf-folder > .fd-edge {border-width:.75px;transform:translateZ(.7px);}
-#page-student-files .sf-folder > .fd-paper {inset:30px 25px 18px;padding:18px 17px;gap:9px;border-radius:6px;box-shadow:0 1px 2px #0002;}
+#page-student-files .sf-folder > .fd-edge {border-width:1.35px;transform:translateZ(1.5px);border-radius:18px;box-shadow:inset 0 0 0 1px #ffffff22;}
+#page-student-files .sf-folder > .fd-paper {inset:28px 24px 16px;padding:18px 17px;gap:9px;border-radius:12px;box-shadow:0 3px 9px #0003;}
 #page-student-files .sf-folder > .fd-paper i {height:5px;flex-shrink:0;width:90%;border-radius:2px;}
 #page-student-files .sf-folder > .fd-paper i:first-child {height:10px;width:70%;margin-bottom:3px;}
 #page-student-files .sf-folder > .fd-paper i:nth-child(3) {width:82%;}
 #page-student-files .sf-folder > .fd-paper i:nth-child(4) {width:90%;opacity:1;}
 #page-student-files .sf-folder > .fd-paper i:last-child {width:56%;}
 #page-student-files .sf-folder > .fd-tab {display:none;}
-#page-student-files .sf-folder > .fd-top {background:linear-gradient(#ffffff40,#ffffff08);}
+#page-student-files .sf-folder > .fd-top {background:linear-gradient(#fffffff0,#a8b8ad99);border-radius:8px 8px 3px 3px;box-shadow:inset 0 1px #fff;}
+#page-student-files .sf-folder > .fd-spine {border-radius:7px;box-shadow:inset 0 0 0 1px #ffffffa8,0 2px 6px #0004;}
 #page-student-files .fd-rail-label {bottom:17px;left:20px;font-size:15px;color:#1d2721;}
 #page-student-files .fd-name {font-size:17px;line-height:1.4;font-weight:400;}
 #page-student-files .fd-class,#page-student-files .fd-count {display:none;}
@@ -715,15 +711,14 @@ body.power-save-mode .sf-card-area-2d::before { display: none; }
 #page-student-files .fd-sheet .sf-form-group input,#page-student-files .fd-sheet .sf-form-group textarea {box-shadow:inset 0 1px 2px #17391f08;color:var(--fd-sheet-text);}
 #page-student-files .fd-sheet .sf-form-group textarea::placeholder {color:#677b6d;}
 #page-student-files .sf-folder.is-open .fd-summary {opacity:.75;}
-#page-student-files .sf-scene-2d:has(.is-open) .sf-orbit {opacity:0;transition:opacity .25s;}
 #page-student-files .sf-scene-2d:has(.is-open) .blob {animation-play-state:paused;}
 /* Theme changes alter lighting and contrast; the geometry and interaction stay identical. */
 body.light-mode #page-student-files {
   color:#263a2d;background:#edf0e9;border-color:#c2cbc2;
-  --fd-back:linear-gradient(150deg,#ffffff40,#a9b5aa12 40%,#ffffff33);
+  --fd-back:linear-gradient(150deg,#ffffffe0,#d8e0d8b8 40%,#ffffffc7);
   --fd-back-border:#526d5260;--fd-front-border-soft:#ffffffbd;
-  --fd-front:linear-gradient(160deg,#ffffffba,#e3eae1a6 38%,#c9d6c894 66%,#9cac9f24 92%);
-  --fd-paper:linear-gradient(170deg,#ffffff8c,#d7e1d647);
+  --fd-front:linear-gradient(160deg,#ffffffe8,#e5ebe4d9 38%,#d7e0d6d1 66%,#afbeb2a8 92%);
+  --fd-paper:linear-gradient(170deg,#fff,#edf1eb);
   --fd-paper-line:#5d756265;--fd-edge:#ffffffed;--fd-edge-soft:#516a513b;
   --fd-shadow:0 12px 22px -12px #38533b55;
   --fd-spine:linear-gradient(#ffffffef,#85998940,#ffffffb0);
@@ -734,14 +729,11 @@ body.light-mode #page-student-files {
 body.light-mode #page-student-files .sf-archive-header,body.light-mode #page-student-files .sf-archive-footer {border-color:#244d3026;}
 body.light-mode #page-student-files .sf-eyebrow,body.light-mode #page-student-files .sf-archive-status,body.light-mode #page-student-files .sf-archive-heading h1 span,body.light-mode #page-student-files .sf-archive-footer,body.light-mode #page-student-files .back-btn {color:#566c5b;}
 body.light-mode #page-student-files .sf-selection {background:linear-gradient(145deg,#ffffffd9,#ffffff9c 60%,#74df9ca1);border-color:#fff;box-shadow:0 12px 28px #344e3818,inset 0 1px 3px #fff;}
-body.light-mode #page-student-files .sf-orbit {border-color:#32553844;}
-body.light-mode #page-student-files .sf-orbit span {background:#e5ece2;color:#39744c;}
 body.light-mode #page-student-files .sf-rail-controls button {color:#31583d;border-color:#3b614330;background:#ffffff52;}
 body.light-mode #page-student-files .sf-empty-hint div {color:#566c5b!important;}
 @media(max-width:639px) {
   #page-student-files .sf-scene-2d {height:650px;}
   #page-student-files .sf-selection {top:76px;}
-  #page-student-files .sf-orbit {top:100px;}
   #page-student-files .sf-folder > .fd-sheet {width:300px;left:calc(50% - 150px);}
 }
 @media(hover:hover) {#page-student-files .sf-folder:not(.is-open):hover > .fd-edge {border-color:#e4ffed;box-shadow:0 0 12px #ffffff18;}}
@@ -749,13 +741,25 @@ body.light-mode #page-student-files .sf-empty-hint div {color:#566c5b!important;
 #page-student-files .sf-card-area-2d {perspective-origin:34% -35%;}
 #page-student-files .sf-archive-heading {padding-top:18px;}
 #page-student-files .sf-archive-heading .sf-eyebrow {margin:0;}
-#page-student-files {--fd-back:linear-gradient(155deg,#ffffff45,#ffffff18 32%,#ebeeeb36 76%,#ffffff18);--fd-paper:linear-gradient(175deg,#f5faf654,#ebf5ef26);}
+#page-student-files {--fd-back:linear-gradient(155deg,#ffffffa8,#dce5de70 32%,#eef3ef8f 76%,#ffffff61);--fd-paper:linear-gradient(175deg,#fbfcfa,#edf1ec);}
 #page-student-files .sf-folder > .fd-paper i {width:77%;}
 #page-student-files .sf-folder > .fd-paper i:nth-child(3) {width:69%;}
 #page-student-files .sf-folder > .fd-paper i:nth-child(4) {width:77%;}
-#page-student-files .sf-orbit {mask-image:none;clip-path:inset(-30px 0 60% 0);}
 /* Only the selected pocket samples its backdrop; other pockets use the same baked lighting. */
-#page-student-files .sf-folder:not(.active) > .fd-front {backdrop-filter:none;-webkit-backdrop-filter:none;}
+#page-student-files .sf-folder:not(.active) > .fd-front {backdrop-filter:blur(9px) saturate(.78);-webkit-backdrop-filter:blur(9px) saturate(.78);}
 /* Every folder carries the same explicit camera matrix, including on WebKit. */
 #page-student-files .sf-card-area-2d {perspective:none;}
 #page-student-files .sf-card-track {transform-style:flat;}
+
+/* Search keeps the real 3D rail in place; only a small loader overlays it. */
+#page-student-files .sf-scene-2d.is-searching .sf-card-area-2d {opacity:1!important;}
+#page-student-files .search-orb-container .modern-input:focus-visible {outline:none;box-shadow:none;}
+#page-student-files .search-orb-container:focus-within .input-overlay {
+  border-color:rgba(255,255,255,.4);
+  box-shadow:0 16px 34px rgba(0,0,0,.22),inset 0 0 0 1px rgba(255,255,255,.08);
+}
+
+/* The reading surfaces always show their front face; the rail never exposes mirrored text. */
+#page-student-files .sf-folder > .fd-front,
+#page-student-files .sf-folder > .fd-paper,
+#page-student-files .sf-folder > .fd-edge {backface-visibility:hidden;-webkit-backface-visibility:hidden;}

@@ -7,6 +7,8 @@ vm.runInContext(fs.readFileSync(require('path').join(__dirname,'../api.js'),'utf
   assert.equal(calls,1,'Writes must not be replayed after an uncertain response');
   calls=0;await assert.rejects(()=>ctx.window._api.getConfig(),/HTTP 503/);
   assert.equal(calls,2,'Read requests may retry');
+  calls=0;await assert.rejects(()=>ctx.window._api.updateAttendance([],{retries:2,retryDelayMs:1}),/HTTP 503/);
+  assert.equal(calls,3,'Explicitly idempotent attendance updates may retry');
   assert.equal(await ctx.window._api.poll(),null);
   console.log('HTTP errors, safe write retry policy and poll failure PASS');
 })().catch(e=>{console.error(e);process.exit(1);});
