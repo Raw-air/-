@@ -10,10 +10,10 @@
   <meta name="theme-color" content="#151518">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=105">
-  <link rel="stylesheet" href="motion.css?v=105">
-  <link rel="stylesheet" href="folder.css?v=105">
-  <link rel="stylesheet" href="liquid-nav.css?v=105">
+  <link rel="stylesheet" href="style.css?v=107">
+  <link rel="stylesheet" href="motion.css?v=107">
+  <link rel="stylesheet" href="folder.css?v=107">
+  <link rel="stylesheet" href="liquid-nav.css?v=107">
   <link rel="manifest" href="manifest.json?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=2">
   <script defer src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -978,7 +978,19 @@
 
     <div class="settings-card">
       <div class="settings-card-header"><img src="./Lp/ICON/COPY.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">匯出 Excel</div>
-      <button id="export-btn" class="action-btn wide" onclick="exportExcel()"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> 匯出完整 Excel</button>
+      <p class="settings-hint">自動套用本學期的預設時段；這次匯出也可以臨時調整，不會改到預設值。</p>
+      <div class="export-date-grid">
+        <div class="export-date-field">
+          <label for="export-start-date">資料開始日期</label>
+          <input type="date" id="export-start-date" class="styled-input" oninput="updateExportDateSummary()">
+        </div>
+        <div class="export-date-field">
+          <label for="export-end-date">資料結束日期</label>
+          <input type="date" id="export-end-date" class="styled-input" oninput="updateExportDateSummary()">
+        </div>
+      </div>
+      <p id="export-date-summary" class="export-date-summary" aria-live="polite"></p>
+      <button id="export-btn" class="action-btn wide" onclick="exportExcel()"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> 匯出所選時段 Excel</button>
     </div>
 
     <div class="settings-card">
@@ -995,8 +1007,24 @@
 
     <!-- 開發者面板（需要密碼） -->
     <div id="dev-panel" class="dev-panel">
-      <!-- 幹部按鈕自訂 + 密碼 -->
       <div class="dev-card">
+        <div class="dev-card-header"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg> Excel 匯出預設時段</div>
+        <p class="dev-card-hint">設定本學期常用的資料起訖日。儲存後，所有使用者開啟匯出功能時都會自動帶入此區間。</p>
+        <div class="export-date-grid">
+          <div class="export-date-field">
+            <label for="dev-export-start-date">預設開始日期</label>
+            <input type="date" id="dev-export-start-date" class="styled-input">
+          </div>
+          <div class="export-date-field">
+            <label for="dev-export-end-date">預設結束日期</label>
+            <input type="date" id="dev-export-end-date" class="styled-input">
+          </div>
+        </div>
+        <button id="save-export-range-btn" class="action-btn wide save-btn" onclick="saveDefaultExportRange()">儲存預設匯出時段</button>
+      </div>
+
+      <!-- 幹部按鈕自訂 + 密碼 -->
+      <div class="dev-card" style="margin-top:16px;">
         <div class="dev-card-header"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/></svg> 幹部專區設定</div>
         <p class="dev-card-hint">設定首頁幹部按鈕的 EMOJI、名稱與登入密碼，儲存後即時同步至雲端。</p>
 
@@ -1271,14 +1299,14 @@
     <button type="button" class="nav-item" data-page="settings"><span class="nav-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-label">設定</span></button>
   </nav>
 
-  <script src="config.js?v=105"></script>
-  <script src="api.js?v=105"></script>
-  <script src="app.js?v=105"></script>
-  <script src="import.js?v=105"></script>
-  <script src="theme.js?v=105"></script>
-  <script src="carousel.js?v=105"></script>
-  <script src="dissolve.js?v=105"></script>
-  <script src="navigation.js?v=105"></script>
+  <script src="config.js?v=107"></script>
+  <script src="api.js?v=107"></script>
+  <script src="app.js?v=107"></script>
+  <script src="import.js?v=107"></script>
+  <script src="theme.js?v=107"></script>
+  <script src="carousel.js?v=107"></script>
+  <script src="dissolve.js?v=107"></script>
+  <script src="navigation.js?v=107"></script>
 
   <!-- 幹部工作手冊 Modal -->
   <div id="duty-manual-modal" class="modal-overlay">

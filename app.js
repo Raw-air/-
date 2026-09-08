@@ -2290,6 +2290,8 @@ function renderSettings() {
   if (geminiInput) {
     geminiInput.value = localStorage.getItem('gemini_api_key') || '';
   }
+
+  initializeExportDateInputs();
 }
 
 function adjustSetting(key, delta) {
@@ -2709,19 +2711,144 @@ function showToast(msg, type = 'info') {
 }
 
 // ─── 匯出 ───────────────────────────────────────────────────────────────────
+const EXPORT_START_KEY = 'export_start_date';
+const EXPORT_END_KEY = 'export_end_date';
+
+function parseISODate(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return date;
+}
+
+function dateColumnToISO(columnName) {
+  const match = String(columnName || '').match(/^(\d{1,2})月(\d{1,2})日$/);
+  if (!match) return '';
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  const semesterMatch = String(CONFIG.SEMESTER || '').match(/^(\d+)-([12])$/);
+  let year = new Date().getFullYear();
+  if (semesterMatch) {
+    const academicYear = Number(semesterMatch[1]) + 1911;
+    const term = Number(semesterMatch[2]);
+    year = term === 1 ? academicYear + (month <= 7 ? 1 : 0) : academicYear + 1;
+  }
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return '';
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function getExportColumnEntries() {
+  return state.dateColumns
+    .map(column => ({ column, iso: dateColumnToISO(column) }))
+    .filter(entry => entry.iso);
+}
+
+function getAvailableExportRange() {
+  const dates = getExportColumnEntries().map(entry => entry.iso).sort();
+  return dates.length ? { start: dates[0], end: dates[dates.length - 1] } : { start: '', end: '' };
+}
+
+function getConfiguredExportRange() {
+  const available = getAvailableExportRange();
+  let start = parseISODate(state.config[EXPORT_START_KEY]) ? state.config[EXPORT_START_KEY] : available.start;
+  let end = parseISODate(state.config[EXPORT_END_KEY]) ? state.config[EXPORT_END_KEY] : available.end;
+  if (available.start && available.end) {
+    start = start < available.start ? available.start : start;
+    end = end > available.end ? available.end : end;
+  }
+  return start && end && start <= end ? { start, end } : available;
+}
+
+function setExportInputBounds(input, available) {
+  if (!input) return;
+  input.min = available.start;
+  input.max = available.end;
+}
+
+function initializeExportDateInputs() {
+  const available = getAvailableExportRange();
+  const configured = getConfiguredExportRange();
+  const startInput = document.getElementById('export-start-date');
+  const endInput = document.getElementById('export-end-date');
+  const devStartInput = document.getElementById('dev-export-start-date');
+  const devEndInput = document.getElementById('dev-export-end-date');
+  for (const input of [startInput, endInput, devStartInput, devEndInput]) setExportInputBounds(input, available);
+  if (startInput) startInput.value = configured.start;
+  if (endInput) endInput.value = configured.end;
+  if (devStartInput) devStartInput.value = configured.start;
+  if (devEndInput) devEndInput.value = configured.end;
+  updateExportDateSummary();
+}
+
+function readExportRange(startId, endId) {
+  const start = document.getElementById(startId)?.value || '';
+  const end = document.getElementById(endId)?.value || '';
+  if (!parseISODate(start) || !parseISODate(end)) return { error: '請選擇完整的開始與結束日期' };
+  if (start > end) return { error: '結束日期不能早於開始日期' };
+  const columns = getExportColumnEntries()
+    .filter(entry => entry.iso >= start && entry.iso <= end)
+    .map(entry => entry.column);
+  if (!columns.length) return { error: '所選時段沒有可匯出的點名資料' };
+  return { start, end, columns };
+}
+
+function formatExportDate(iso) {
+  const date = parseISODate(iso);
+  return date ? `${date.getUTCFullYear()}年${date.getUTCMonth() + 1}月${date.getUTCDate()}日` : '';
+}
+
+function updateExportDateSummary() {
+  const summary = document.getElementById('export-date-summary');
+  if (!summary) return;
+  const range = readExportRange('export-start-date', 'export-end-date');
+  summary.classList.toggle('is-error', !!range.error);
+  summary.textContent = range.error || `${formatExportDate(range.start)}至${formatExportDate(range.end)} · ${range.columns.length} 個日期欄位`;
+}
+
+async function saveDefaultExportRange() {
+  const range = readExportRange('dev-export-start-date', 'dev-export-end-date');
+  if (range.error) { showToast(range.error, 'error'); return; }
+  const button = document.getElementById('save-export-range-btn');
+  if (button?.disabled) return;
+  if (button) { button.disabled = true; button.setAttribute('aria-busy', 'true'); button.textContent = '儲存中…'; }
+  try {
+    const updates = { [EXPORT_START_KEY]: range.start, [EXPORT_END_KEY]: range.end };
+    await window._api.setConfig(updates);
+    Object.assign(state.config, updates);
+    const startInput = document.getElementById('export-start-date');
+    const endInput = document.getElementById('export-end-date');
+    if (startInput) startInput.value = range.start;
+    if (endInput) endInput.value = range.end;
+    updateExportDateSummary();
+    showToast(`預設匯出時段已儲存（${range.columns.length} 個日期）`, 'success');
+  } catch (err) {
+    showToast('儲存失敗：' + err.message, 'error');
+  } finally {
+    if (button) { button.disabled = false; button.removeAttribute('aria-busy'); button.textContent = '儲存預設匯出時段'; }
+  }
+}
+
 function exportExcel() {
   if (!state.students.length) { showToast('沒有資料', 'error'); return; }
+  const range = readExportRange('export-start-date', 'export-end-date');
+  if (range.error) { showToast(range.error, 'error'); return; }
   try {
-    const headers = ['名稱', '寢床號', '床號', '班別', '學號', ...state.dateColumns];
+    const headers = ['名稱', '寢床號', '床號', '班別', '學號', ...range.columns];
     const rows = state.students.map(s => {
       const r = [s.name, s.room, s.bed, s.class, s.studentId];
-      for (const d of state.dateColumns) r.push(s.attendance[d] || '✓');
+      for (const d of range.columns) r.push(s.attendance[d] || '✓');
       return r;
     });
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '點名總表');
-    XLSX.writeFile(wb, `碧苑點名_${CONFIG.SEMESTER}_${getTodayColumnName()}.xlsx`);
-    showToast('Excel 已下載', 'success');
+    const fileRange = `${range.start.replaceAll('-', '')}-${range.end.replaceAll('-', '')}`;
+    XLSX.writeFile(wb, `碧苑點名_${CONFIG.SEMESTER}_${fileRange}.xlsx`);
+    showToast(`Excel 已下載（${range.columns.length} 個日期）`, 'success');
   } catch (err) { showToast('匯出失敗：' + err.message, 'error'); }
 }
 
@@ -2730,6 +2857,8 @@ window.enterSquad = enterSquad;
 window.toggleStatus = toggleStatus;
 window.showDateDetail = showDateDetail;
 window.exportExcel = exportExcel;
+window.updateExportDateSummary = updateExportDateSummary;
+window.saveDefaultExportRange = saveDefaultExportRange;
 window.navigateTo = navigateTo;
 window.loadData = loadData;
 window.openEmptyBedModal = openEmptyBedModal;

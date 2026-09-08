@@ -94,6 +94,43 @@ async function run(engine,viewport){
   assert.equal(requests.filter(r=>r.path==='/api/config'&&r.method==='POST').length,before);
   await page.locator('#cfg-total-beds').fill('100');await page.evaluate(()=>saveDormSettings());
   assert.equal(requests.filter(r=>r.path==='/api/config'&&r.method==='POST').length,before+1);
+  const exportChecks=await page.evaluate(async()=>{
+    state.dateColumns=['2月20日','2月21日','2月22日','6月25日'];
+    state.students[0].attendance={'2月20日':'✓','2月21日':'◎','2月22日':'✘','6月25日':'△'};
+    state.config.export_start_date='2026-02-20';state.config.export_end_date='2026-02-22';renderSettings();
+    const exportGridColumns=getComputedStyle(document.querySelector('#export-start-date').closest('.export-date-grid')).gridTemplateColumns.split(' ').length;
+    const exportInputHeight=document.getElementById('export-start-date').getBoundingClientRect().height;
+    const originalSemester=CONFIG.SEMESTER;CONFIG.SEMESTER='114-1';
+    const firstSemesterDates=[dateColumnToISO('9月1日'),dateColumnToISO('1月15日')];CONFIG.SEMESTER=originalSemester;
+    let exported=null,fileName='';
+    window.XLSX={utils:{aoa_to_sheet:data=>(exported=data),book_new:()=>({}),book_append_sheet:()=>{}},writeFile:(_,name)=>{fileName=name;}};
+    exportExcel();
+    const firstHeaders=exported[0].slice();
+    const firstRow=exported[1].slice();
+    document.getElementById('dev-export-start-date').value='2026-02-21';
+    document.getElementById('dev-export-end-date').value='2026-06-25';
+    await saveDefaultExportRange();
+    const savedRange=[state.config.export_start_date,state.config.export_end_date];
+    const appliedRange=[document.getElementById('export-start-date').value,document.getElementById('export-end-date').value];
+    exported=null;document.getElementById('export-start-date').value='2026-06-25';document.getElementById('export-end-date').value='2026-02-20';exportExcel();
+    return {firstHeaders,firstRow,fileName,savedRange,appliedRange,invalidBlocked:exported===null,exportGridColumns,exportInputHeight,firstSemesterDates};
+  });
+  assert.deepEqual(exportChecks.firstHeaders,['名稱','寢床號','床號','班別','學號','2月20日','2月21日','2月22日']);
+  assert.deepEqual(exportChecks.firstRow.slice(-3),['✓','◎','✘']);
+  assert.equal(exportChecks.fileName,'碧苑點名_114-2_20260220-20260222.xlsx');
+  assert.deepEqual(exportChecks.savedRange,['2026-02-21','2026-06-25']);
+  assert.deepEqual(exportChecks.appliedRange,['2026-02-21','2026-06-25']);
+  assert.equal(exportChecks.invalidBlocked,true);
+  assert.equal(exportChecks.exportGridColumns,viewport.width<=430?1:2,'date inputs use the responsive column count');
+  assert.ok(exportChecks.exportInputHeight>=44,'date inputs keep a touch-friendly height');
+  assert.deepEqual(exportChecks.firstSemesterDates,['2025-09-01','2026-01-15'],'first-semester dates cross the calendar year correctly');
+  await page.evaluate(()=>{document.getElementById('export-start-date').value='2026-02-21';document.getElementById('export-end-date').value='2026-06-25';updateExportDateSummary();});
+  await page.locator('#export-btn').scrollIntoViewIfNeeded();
+  await page.screenshot({path:path.join(out,engine.name()+'-export-range.png')});
+  await page.evaluate(()=>document.getElementById('dev-panel').classList.add('open'));
+  await page.locator('#save-export-range-btn').scrollIntoViewIfNeeded();
+  await page.screenshot({path:path.join(out,engine.name()+'-export-default.png')});
+  await page.evaluate(()=>document.getElementById('dev-panel').classList.remove('open'));
   await page.evaluate(()=>{navigateTo('student-files');_sfResults=state.students;renderStudentFileCards();});
   // 進場 (~1s)：整排展開、中央那本抽出、自動打開詳細資料紙
   await page.waitForFunction(()=>window.sfCarousel&&sfCarousel.state==='idle',null,{timeout:5000});
@@ -296,4 +333,4 @@ async function offline(){
   console.log('Offline shell, versioned assets and particle-dissolve dependencies PASS');
   await browser.close();
 }
-(async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));try{if(process.env.TEST_OFFLINE)await offline();else await run(process.env.TEST_WEBKIT?webkit:chromium,process.env.TEST_DESKTOP?{width:1440,height:1000}:{width:390,height:844});}finally{server.close();}})().catch(e=>{console.error(e);process.exit(1);});
+(async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));try{if(process.env.TEST_OFFLINE)await offline();else {const customViewport=Number(process.env.TEST_WIDTH)&&Number(process.env.TEST_HEIGHT)?{width:Number(process.env.TEST_WIDTH),height:Number(process.env.TEST_HEIGHT)}:null;await run(process.env.TEST_WEBKIT?webkit:chromium,customViewport||(process.env.TEST_DESKTOP?{width:1440,height:1000}:{width:390,height:844}));}}finally{server.close();}})().catch(e=>{console.error(e);process.exit(1);});
