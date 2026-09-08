@@ -72,42 +72,31 @@ body.light-mode .bottom-nav.liquid-nav {
   -webkit-mask-image:-webkit-radial-gradient(#fff,#000);
   background:var(--lens-fill);
   box-shadow:var(--lens-shadow);
-  transform:scale(var(--lens-sx,1),var(--lens-sy,1)) skewX(var(--lens-skew,0deg));
+  transform:scale(var(--lens-sx,1),var(--lens-sy,1));
   transition:transform .18s cubic-bezier(.2,.8,.2,1);
 }
-.liquid-nav.is-pressing .lens-shape {transform:scale(calc(var(--lens-sx,1) * 1.05),calc(var(--lens-sy,1) * 1.07)) skewX(var(--lens-skew,0deg));}
+.liquid-nav.is-pressing .lens-shape {transform:scale(calc(var(--lens-sx,1) * 1.05),calc(var(--lens-sy,1) * 1.07));}
 .liquid-nav.is-dragging .lens-shape {transition:transform .06s linear;}
 .lens-blur {
   position:absolute;inset:0;border-radius:var(--lens-radius);
   backdrop-filter:blur(12px) saturate(100%) brightness(var(--lens-bright));-webkit-backdrop-filter:blur(12px) saturate(100%) brightness(var(--lens-bright));
 }
 @keyframes liquid-squish {
-  0% {transform:scale(1,1) skewX(0);border-radius:27px;}
-  38% {transform:scale(1.18,.86) skewX(-3deg);border-radius:42% 58% 46% 54% / 56% 44% 58% 42%;}
-  72% {transform:scale(.98,1.04) skewX(1.5deg);border-radius:54% 46% 52% 48% / 45% 55% 47% 53%;}
-  100% {transform:scale(1,1) skewX(0);border-radius:27px;}
+  0% {transform:scale(1,1);}
+  38% {transform:scale(1.18,.86);}
+  72% {transform:scale(.98,1.04);}
+  100% {transform:scale(1,1);}
 }
 .liquid-lens.is-travelling .lens-shape {animation:liquid-squish .5s cubic-bezier(.32,.9,.3,1);}
 /* 放大層：跟真實那一列同樣排版的複本，以鏡片中心放大 */
 .lens-zoom {position:absolute;inset:0;transform:scale(1.12);}
-/* 厚玻璃邊緣的折射：只顯示一圈經位移、非等比放大的內容取樣。 */
-.lens-refraction {
-  position:absolute;inset:0;z-index:1;border-radius:inherit;overflow:hidden;pointer-events:none;
-  -webkit-mask-image:radial-gradient(ellipse 50% 50% at 50% 50%,transparent 56%,#000 66%,#000 83%,transparent 94%);
-  mask-image:radial-gradient(ellipse 50% 50% at 50% 50%,transparent 56%,#000 66%,#000 83%,transparent 94%);
-  opacity:.82;
-}
-.lens-zoom-refracted {
-  transform:scale(1.26,1.10) translate3d(-1px,.5px,0);
-  filter:url(#liquid-nav-refraction);
-}
 /* 無色色散的透明厚邊 */
 .lens-rim::after {
   content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
   background:linear-gradient(145deg,rgba(255,255,255,.32),transparent 42%,rgba(255,255,255,.12));
   -webkit-mask-image:radial-gradient(ellipse 50% 50% at 50% 50%,transparent 60%,#000 94%);
   mask-image:radial-gradient(ellipse 50% 50% at 50% 50%,transparent 60%,#000 94%);
-  opacity:.52;filter:url(#liquid-nav-refraction);
+  opacity:.42;
 }
 body.light-mode .lens-rim::after {opacity:.58;}
 .lens-row {
@@ -132,7 +121,6 @@ body.light-mode .lens-rim::after {opacity:.58;}
     inset -3px -4px 9px rgba(255,255,255,.08),
     inset 3px 4px 10px rgba(255,255,255,.05);
 }
-#liquid-nav-filter-defs {position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;}
 /* 導覽項目 */
 .liquid-nav .nav-item {height:64px;padding:9px 0 7px;gap:2px;border:0;background:none;box-shadow:none;min-width:0;flex:1;border-radius:32px;color:var(--nav-ink);font:inherit;transition:transform .2s,color .25s;touch-action:none;}
 .liquid-nav .nav-icon,.liquid-nav .nav-label,body.light-mode .liquid-nav .nav-icon,body.light-mode .liquid-nav .nav-label {color:inherit;filter:none;transform:none;opacity:1;transition:none;}
@@ -157,5 +145,4 @@ body.light-mode .liquid-nav .nav-item.active .nav-icon,body.light-mode .liquid-n
 @media (prefers-reduced-motion:reduce) {
   .liquid-nav,.liquid-nav.no-prop .liquid-lens,.liquid-nav.no-prop::after,.liquid-nav.no-prop .lens-row {transition:none;}
   .liquid-lens.is-travelling .lens-shape {animation:none;}
-  .lens-zoom-refracted {filter:none;transform:scale(1.2,1.08);}
 }

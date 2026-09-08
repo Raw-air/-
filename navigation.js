@@ -23,24 +23,7 @@ function setupNav(){
     row.appendChild(c);return c;
   });
   zoom.appendChild(row);shape.appendChild(zoom);
-  // 鏡片厚邊再取樣同一列內容，僅在邊界顯示；位移濾鏡讓圖示穿越邊框時產生真實的彎折，而不是單純放大。
-  let filterSvg=document.getElementById('liquid-nav-filter-defs');
-  if(!filterSvg){
-    filterSvg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-    filterSvg.id='liquid-nav-filter-defs';filterSvg.setAttribute('aria-hidden','true');
-    filterSvg.innerHTML='<defs><filter id="liquid-nav-refraction" x="-20%" y="-30%" width="140%" height="160%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency=".012 .055" numOctaves="1" seed="7" result="warp"/><feDisplacementMap in="SourceGraphic" in2="warp" scale="7" xChannelSelector="R" yChannelSelector="G"/></filter></defs>';
-    document.body.appendChild(filterSvg);
-  }
-  const refraction=document.createElement('span');refraction.className='lens-refraction';
-  const refractedZoom=document.createElement('span');refractedZoom.className='lens-zoom lens-zoom-refracted';
-  const refractedRow=document.createElement('span');refractedRow.className='lens-row';
-  for(const item of items){
-    const c=document.createElement('span');c.className='lens-item';c.dataset.page=item.dataset.page;
-    c.innerHTML=`<span class="nav-icon">${_navOriginalIcons.get(item.dataset.page)}</span><span class="nav-label">${item.querySelector('.nav-label').textContent}</span>`;
-    refractedRow.appendChild(c);
-  }
-  refractedZoom.appendChild(refractedRow);refraction.appendChild(refractedZoom);shape.appendChild(refraction);
-  // 保持乾淨、無色的液體玻璃，不使用彩色色散殘影。
+  // 保持乾淨、無色的液體玻璃；不再疊加青／洋紅色散複本，避免深色模式出現負片殘影。
   const rim=document.createElement('span');rim.className='lens-rim';shape.appendChild(rim);
   lens.appendChild(shape);nav.prepend(lens);
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
@@ -84,7 +67,6 @@ function setupNav(){
   function stretch(){
     const s=Math.min(.28,Math.abs(drag.v)/2600);
     nav.style.setProperty('--lens-sx',(1+s).toFixed(3));nav.style.setProperty('--lens-sy',(1-s*.55).toFixed(3));
-    nav.style.setProperty('--lens-skew',Math.max(-4,Math.min(4,drag.v/520)).toFixed(2)+'deg');
   }
   nav.addEventListener('pointerdown',e=>{
     if(e.button!==0||drag.active||!e.target.closest('.nav-item'))return;
@@ -109,7 +91,7 @@ function setupNav(){
     if(!drag.active||e.pointerId!==drag.id)return;
     drag.active=false;
     nav.classList.remove('is-pressing','is-dragging');
-    nav.style.removeProperty('--lens-sx');nav.style.removeProperty('--lens-sy');nav.style.removeProperty('--lens-skew');
+    nav.style.removeProperty('--lens-sx');nav.style.removeProperty('--lens-sy');
     try{nav.releasePointerCapture(e.pointerId);}catch(_){}
     if(!drag.moved)return; // 單純點一下 → 交給按鈕的 click
     suppressClick=true;setTimeout(()=>suppressClick=false,0);

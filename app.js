@@ -3892,7 +3892,7 @@ function sfUpdateSummary(el, s, draft) {
   const badge = q('.sf-card-badge-relative'); if (badge) badge.textContent = m.badge;
 }
 
-// 資料夾 DOM：真正有 Z 深度的封邊殼（背板 / 左右側邊 / 頂底面 / 內頁 / 前板 / 邊緣）+ 抽出的資料紙
+// 資料夾 DOM：6 層真正有 Z 深度的殼 (背板+標籤 / 左右側邊 / 內頁 / 前板玻璃+摘要 / 邊緣高光) + 抽出來的詳細資料紙
 function sfCardHTML(s, draft) {
   const d = draft || {};
   const name = d.name !== undefined ? d.name : (s.name || '');
@@ -3906,7 +3906,7 @@ function sfCardHTML(s, draft) {
       <div class="fd-back"></div>
       <div class="fd-tab"><span>${sfEsc(s.room)}</span><b>${sfEsc(s.bed)}</b><i class="${m.dot}"></i></div><div class="fd-tab fd-tab-r"><span>${sfEsc(s.room)}</span><b>${sfEsc(s.bed)}</b><i class="${m.dot}"></i></div>
       <div class="fd-spine"></div><div class="fd-spine fd-spine-r"></div>
-      <div class="fd-top"></div><div class="fd-bottom"></div>
+      <div class="fd-top"></div>
       <div class="fd-paper" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
       <div class="fd-front">
         <div class="fd-file-mark" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="7" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3z"/><circle cx="18" cy="8" r="2"/><path d="M17 13a4 4 0 0 1 5 4v2h-5z"/></svg><span>${sfEsc(s.bed)}</span></div>

@@ -113,15 +113,15 @@ async function run(engine,viewport){
     const f=document.querySelector('.sf-folder.active'),r=f.getBoundingClientRect();
     const n=Array.from(document.querySelectorAll('.sf-folder:not(.sf-far):not(.active)')).map(e=>({i:+e.dataset.index,yaw:yawOf(e),z:zOf(e),scale:scOf(e)})).sort((p,q)=>p.i-q.i);
     return {ratio:r.width/r.height,layers:f.children.length,front:!!f.querySelector('.fd-front'),sheet:!!f.querySelector('.fd-sheet'),
-      top:!!f.querySelector('.fd-top'),bottom:!!f.querySelector('.fd-bottom'),spines:f.querySelectorAll('.fd-spine').length,active:{i:_sfActiveIndex,yaw:yawOf(f),z:zOf(f),scale:scOf(f)},
+      top:!!f.querySelector('.fd-top'),spines:f.querySelectorAll('.fd-spine').length,active:{i:_sfActiveIndex,yaw:yawOf(f),z:zOf(f),scale:scOf(f)},
       n,preserve:getComputedStyle(f).transformStyle==='preserve-3d'};
   });
   assert.ok(geo.ratio>.5&&geo.ratio<.9,'upright glass folder '+geo.ratio);
-  assert.ok(geo.layers>=10&&geo.front&&geo.sheet&&geo.top&&geo.bottom&&geo.spines===2&&geo.preserve,'layered folder (front/back/top/bottom/2 spines/paper/edge) + sheet in a 3D context');
+  assert.ok(geo.layers>=9&&geo.front&&geo.sheet&&geo.top&&geo.spines===2&&geo.preserve,'layered folder (front/back/top/2 spines/paper/edge) + sheet in a 3D context');
   assert.ok(geo.n.length>=4,'the rail shows a run of folders: '+geo.n.length);
   const yaws=geo.n.map(p=>p.yaw);
   assert.ok(geo.active.yaw>=18&&geo.active.yaw<=26,'the extracted folder faces the viewer while retaining visible thickness: '+geo.active.yaw);
-  assert.ok(yaws.every(y=>y>82&&y<89),'rail folders stay side-on while exposing their front/back layers: '+yaws.join(','));
+  assert.ok(yaws.every(y=>y>40&&y<75),'rail folders keep one face towards the viewer: '+yaws.join(','));
   for(let k=1;k<geo.n.length;k++)assert.ok(Math.abs(geo.n[k].yaw-geo.n[k-1].yaw)<3,'yaw changes continuously without a mirrored flip: '+yaws.join(','));
   assert.ok(geo.n.every(p=>geo.active.z-p.z>55),'the active folder is pulled out of the rail towards the viewer: '+geo.active.z+' vs '+geo.n.map(p=>p.z).join(','));
   assert.ok(geo.n.concat(geo.active).every(p=>p.scale>=.88&&p.scale<=1.08),'size comes from perspective, manual scale stays within 0.88–1.08');
@@ -133,7 +133,7 @@ async function run(engine,viewport){
   const centred=await page.locator('.sf-folder.active').evaluate(e=>{const r=e.getBoundingClientRect();return {x:r.left+r.width/2,w:innerWidth};});
   assert.ok(Math.abs(centred.x-centred.w/2)<centred.w*.08,'the selected folder is centred: '+JSON.stringify(centred));
   assert.equal(await page.locator('.sf-orbit').count(),0,'the decorative orbit ring is removed');
-  assert.ok(await page.locator('#page-student-files').evaluate(e=>parseFloat(getComputedStyle(e).getPropertyValue('--fd-depth'))>=16),'folder shell has visible physical depth');
+  assert.ok(await page.locator('#page-student-files').evaluate(e=>parseFloat(getComputedStyle(e).getPropertyValue('--fd-depth'))>=12),'folder shell has visible physical depth');
   const stableTransform=await page.locator('.sf-folder.active').evaluate(e=>e.style.transform);
   await page.locator('#sf-search-input').fill('測試住宿生');
   await page.waitForTimeout(450);
@@ -272,8 +272,6 @@ async function run(engine,viewport){
   await page.reload();await page.waitForFunction(()=>typeof state!=='undefined'&&!state.loading);
   assert.equal(await page.locator('.liquid-nav .nav-icon img').count(),0);
   assert.equal(await page.locator('.liquid-nav .lens-fringe').count(),0,'liquid glass has no chromatic fringe layer');
-  assert.equal(await page.locator('.liquid-nav .lens-refraction').count(),1,'liquid glass has a dedicated edge-refraction layer');
-  assert.equal(await page.locator('#liquid-nav-refraction').count(),1,'liquid glass has a displacement map for border refraction');
   const navAlignment=await page.locator('.liquid-nav .nav-item').first().evaluate(e=>{const i=e.querySelector('.nav-icon svg').getBoundingClientRect(),t=e.querySelector('.nav-label').getBoundingClientRect();return Math.abs((i.left+i.width/2)-(t.left+t.width/2));});
   assert.ok(navAlignment<1,'navigation icon and label share the same centre line: '+navAlignment);
   assert.ok(await page.evaluate(()=>document.body.classList.contains('light-mode')));
