@@ -96,7 +96,7 @@ async function run(engine,viewport){
   assert.equal(await page.locator('.sf-folder.active.is-open').count(),0,'the archive stays closed until explicitly opened');
   await page.evaluate(()=>{window._sfStopMotion();_sfResults=state.students;renderStudentFileCards();});
   await page.waitForTimeout(100);
-  assert.ok(await page.locator('.sf-folder').count()<=17);
+  assert.ok(await page.locator('.sf-folder').count()<=21);
   await page.evaluate(()=>{window._sfStopMotion();});
   // 弧形空間軌道：橫式多層資料夾 + 資料紙；朝向來自弧的切線 (弧頂側對鏡頭、兩端露正面、連續變化)；
   // 抽出那本 z 最前且朝向 10–30°；大小靠透視 (manual scale 只有 1)

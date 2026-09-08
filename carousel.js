@@ -19,7 +19,7 @@ function setup2DCarouselInteraction() {
   _carouselAttached = true;
 
   // ── 弧形軌道：依畫面寬度算，resize / 進場時重算 ────────────────────────────
-  const PERSP = 1500, ORIGIN_X = .34, ORIGIN_Y = .40;   // 跟 folder.css 的 perspective / perspective-origin 一致
+  const PERSP = 1500, ORIGIN_X = .34, ORIGIN_Y = -.35;   // Explicit camera shared by all folders in both themes
   const RAD = Math.PI / 180;
   const cfg = {};
   // 軌道是一段橢圓弧：φ 是弧上的角度，φ=0 是最靠近鏡頭的頂點，目前這本停在 φA (<0，頂點左邊)，
@@ -48,28 +48,31 @@ function setup2DCarouselInteraction() {
     const W = area.clientWidth || innerWidth;
     const mobile = W < 640, tablet = W < 1024;
     cfg.mobile = mobile;
-    cfg.fw = mobile ? Math.max(256, Math.min(W - 96, 380)) : tablet ? 290 : 300;   // 直立玻璃檔案比例
-    cfg.fh = Math.round(cfg.fw * 1.06);
-    cfg.RX = mobile ? 250 : tablet ? 520 : 700;      // 弧的橫向半徑
+    cfg.fw = mobile ? Math.max(256, Math.min(W - 96, 380)) : tablet ? 330 : 360;   // 直立玻璃檔案比例
+    cfg.fh = Math.round(cfg.fw * .91);
+    cfg.RX = mobile ? 250 : tablet ? 430 : Math.min(W * .47, 650);      // 弧的橫向半徑
     cfg.RZ = mobile ? 200 : tablet ? 400 : 520;      // 弧的縱深半徑 (越大越有透視收斂，但近遠倍率差也越大)
     cfg.zNear = 40;                                  // 頂點離鏡頭多近，其餘都在它後面
-    cfg.phiA = mobile ? -40 : -42;                   // 目前這本停在弧的哪個角度
-    cfg.dPhi = mobile ? 15 : tablet ? 9 : 8;         // 每本差幾度 (越大間隙越明顯)
-    cfg.activeX = mobile ? .46 : .25;                // 抽出那本落在畫面寬度的幾成
+    cfg.phiA = mobile ? -40 : -35;                   // 目前這本停在弧的哪個角度
+    cfg.dPhi = mobile ? 15 : tablet ? 6.5 : 5.2;         // 每本差幾度 (越大間隙越明顯)
+    cfg.activeX = mobile ? .46 : .24;                // 抽出那本落在畫面寬度的幾成
     cfg.pull = mobile ? 150 : tablet ? 180 : 200;    // 抽出：離開弧往鏡頭多少
     cfg.side = mobile ? 14 : 30;                     // 抽出：再往左偏一點 (離開軌道)
     cfg.lift = mobile ? 14 : 20;                     // 抽出：上移
-    cfg.activeYaw = 52;                              // 抽出後的朝向 (軌道給的側視角只校正到這裡，不轉正)
+    cfg.activeYaw = 56;                              // 抽出後的朝向 (軌道給的側視角只校正到這裡，不轉正)
     cfg.part = .12;                                  // 鄰居沿弧讓開幾本
-    cfg.farVisible = mobile ? 5.4 : tablet ? 9 : 11.5;   // 深處看得到幾本 (超出舞台的就別畫了)
+    cfg.farVisible = mobile ? 5.4 : tablet ? 12 : 16;   // 深處看得到幾本 (超出舞台的就別畫了)
     cfg.fade = mobile ? 1.8 : 3.5;                       // 尾端幾本內淡到 0
-    cfg.nearVisible = mobile ? 2.4 : 3.2;
+    cfg.nearVisible = mobile ? 2.4 : 4.2;
     // 依深度切兩段模糊：門檻取弧上「真正到得了」的深度範圍 (近端 / 遠端誰更深就用誰) 的 45% 與 75%
     cfg.cx = 0;
     const zEnd = Math.min(rail(cfg.farVisible, R0).z, rail(-cfg.nearVisible, R1).z), zTop = cfg.zNear;
     cfg.blur1 = zTop + (zEnd - zTop) * .45; cfg.blur2 = zTop + (zEnd - zTop) * .75;
     area.style.setProperty('--fd-w', cfg.fw + 'px');
     area.style.setProperty('--fd-h', cfg.fh + 'px');
+    const cameraX = W * (ORIGIN_X - .5), cameraY = area.clientHeight * (ORIGIN_Y - .5);
+    cfg.camera = `translate(${cameraX.toFixed(1)}px,${cameraY.toFixed(1)}px) perspective(${PERSP}px) translate(${(-cameraX).toFixed(1)}px,${(-cameraY).toFixed(1)}px) `;
+    cfg.exitDistance = W + cfg.fw;
     // 解出弧的位置 cx，讓抽出來的那本 (含 pull、side) 剛好落在 activeX
     cfg.cx = 0;
     const a = rail(0, R0), ox = W * ORIGIN_X, P = PERSP / (PERSP - a.z - cfg.pull);
@@ -124,7 +127,7 @@ function setup2DCarouselInteraction() {
     const r = rail(d + room, R0);
     // 抽出：離開弧往鏡頭、微微上移、往左一點；朝向從軌道給的側視角校正到 activeYaw
     out.x = r.x - cfg.side * k;
-    out.y = -cfg.lift * k;
+    out.y = -35 - cfg.lift * k;
     out.z = r.z + cfg.pull * k;
     out.rot = r.yaw + (cfg.activeYaw - r.yaw) * k;
     out.scale = 1 + (ext.pulse - 1) * bump;         // 大小交給透視；這裡只有抽出時 ±3% 的脈衝
@@ -158,6 +161,11 @@ function setup2DCarouselInteraction() {
     _currentX = -c * _cardWidth;
     sfSyncWindow(c);
     const now = performance.now();
+    // Explicit camera projection avoids WebKit dropping inherited perspective through clipped ancestors.
+    const opening = sheet.amt;
+    const depart = smooth(opening / .48);
+    const center = outCubic((opening - .08) / .65);
+    const pull = outQuint((opening - .35) / .65);
     for (const entry of _sfPool) {
       const el = entry.el, v = entry.vIndex;
       if (v === null || !n) { el.classList.add('sf-far'); continue; }
@@ -178,17 +186,28 @@ function setup2DCarouselInteraction() {
           p.rot = g.rot + (p.rot - g.rot) * e; p.scale = g.scale + (p.scale - g.scale) * e; p.alpha *= e;
         }
       }
-      // Bring the editor to a front-facing reading plane, continuously from its rail pose.
+      // One reversible timeline: rail parts first, then the paper lifts out of its pocket.
       if (entry === sheet.entry && v === sheet.vIndex) {
-        p.x *= 1 - sheet.amt;
-        p.rot *= 1 - sheet.amt;
-        p.z += (60 - p.z) * sheet.amt;
+        p.x *= 1 - center;
+        p.rot *= 1 - center;
+        p.z += (40 - p.z) * center;
+        p.y += (sheet.shift - p.y) * center;
+        el.style.setProperty('--fd-sheet-y', (45 - (45 + sheet.rise) * pull).toFixed(2) + 'px');
+        el.style.setProperty('--fd-sheet-reveal', ((1 - pull) * 100).toFixed(2) + '%');
+        el.style.setProperty('--fd-sheet-opacity', smooth((opening - .30) / .14).toFixed(3));
+      } else if (opening) {
+        const direction = v < sheet.vIndex ? -1 : 1;
+        p.x += direction * cfg.exitDistance * depart;
+        p.z -= 100 * depart;
+        p.rot += direction * 12 * depart;
+        p.alpha *= 1 - smooth((depart - .80) / .20);
       }
-      // 開紙時這本往下讓位
-      const y = p.y + (entry === sheet.entry && v === sheet.vIndex ? sheet.shift * sheet.amt : 0);   // 回收換人就不套
+      const y = p.y;
       put(el,
-        `translate3d(${p.x.toFixed(1)}px,${y.toFixed(1)}px,${p.z.toFixed(1)}px) rotateY(${p.rot.toFixed(2)}deg) scale(${p.scale.toFixed(3)})`,
+        cfg.camera + `translate3d(${p.x.toFixed(1)}px,${y.toFixed(1)}px,${p.z.toFixed(1)}px) rotateY(${p.rot.toFixed(2)}deg) scale(${p.scale.toFixed(3)})`,
         p.alpha.toFixed(3), p.near, p.blur, p.lefty);
+      const layer = Math.round(p.z) + 2000;
+      if (el._layer !== layer) { el.style.zIndex = layer; el._layer = layer; }
       // 資料紙要正對使用者，所以把這本的 yaw 反轉回去
       if (isActive) {
         const cy = (-p.rot).toFixed(2) + 'deg';
@@ -248,9 +267,9 @@ function setup2DCarouselInteraction() {
     }
     // 開紙讓位
     if (sheet.amt !== sheet.target) {
-      const t = reduced() ? 1 : clamp01((now - sheet.t0) / (sheet.target ? 480 : 220));
-      sheet.amt = sheet.from + (sheet.target - sheet.from) * outQuint(t);
-      if (t < 1) more = true; else { sheet.amt = sheet.target; if (!sheet.target) { sheet.entry = null; sheet.vIndex = null; } }
+      const t = reduced() ? 1 : clamp01((now - sheet.t0) / (sheet.target ? 860 : 620));
+      sheet.amt = sheet.from + (sheet.target - sheet.from) * t;
+      if (t < 1) more = true; else { sheet.amt = sheet.target; if (!sheet.target) { for (const e of _sfPool) e.el.classList.remove('is-open', 'is-closing'); sheet.entry = null; sheet.vIndex = null; } }
     }
     paint();
     if (more) requestFrame();
@@ -278,22 +297,29 @@ function setup2DCarouselInteraction() {
   function openSheet() {
     const entry = sfActiveEntry();
     clearTimeout(sheet.timer);
-    if (!entry || state !== 'idle' || !entry.student) return;
-    if (entry.el.classList.contains('is-open')) return;
+    if (!entry || !entry.student || state === 'locked') return;
+    if (state !== 'idle') { resumeEditor = true; return; }
+    if (entry.el.classList.contains('is-open') && sheet.target === 1) return;
     for (const e of _sfPool) if (e !== entry) e.el.classList.remove('is-open');
     entry.el.classList.add('is-open');
+    entry.el.classList.remove('is-closing');
     resumeEditor = true;
     sheet.entry = entry; sheet.vIndex = entry.vIndex;
-    sheet.shift = 0;
+    const paperHeight = entry.el.querySelector('.fd-sheet').offsetHeight;
+    sheet.rise = Math.max(160, paperHeight - cfg.fh * .37 + 12);
+    sheet.shift = 22 + sheet.rise - (area.clientHeight / 2 - cfg.fh / 2);
     sheet.from = sheet.amt; sheet.target = 1; sheet.t0 = performance.now();
     requestFrame();
   }
   function closeSheet(instant) {
     clearTimeout(sheet.timer);
-    for (const e of _sfPool) e.el.classList.remove('is-open');
-    if (instant) { sheet.amt = sheet.target = 0; sheet.entry = null; paint(); return; }
+    if (instant || reduced()) {
+      for (const e of _sfPool) e.el.classList.remove('is-open', 'is-closing');
+      sheet.amt = sheet.target = 0; sheet.entry = null; sheet.vIndex = null; paint(); return;
+    }
+    if (sheet.entry) sheet.entry.el.classList.add('is-closing');
     if (sheet.amt) { sheet.from = sheet.amt; sheet.target = 0; sheet.t0 = performance.now(); requestFrame(); }
-    else sheet.entry = null;
+    else { for (const e of _sfPool) e.el.classList.remove('is-open', 'is-closing'); sheet.entry = null; }
   }
   let resumeEditor = false;
   function scheduleOpen() {
@@ -302,7 +328,7 @@ function setup2DCarouselInteraction() {
   }
   function toggleSheet() {
     const entry = sfActiveEntry();
-    if (entry?.el.classList.contains('is-open')) { resumeEditor = false; closeSheet(false); } else openSheet();
+    if (entry?.el.classList.contains('is-open') && sheet.target === 1) { resumeEditor = false; closeSheet(false); } else openSheet();
   }
 
   // ── 吸附到某一本 ─────────────────────────────────────────────────────────
@@ -445,7 +471,7 @@ function setup2DCarouselInteraction() {
     if (!folder || e.target.closest('.fd-sheet')) return;
     const entry = _sfPool.find(x => x.el === folder);
     if (!entry || entry.vIndex === null) return;
-    if (entry.vIndex !== _sfActiveIndex) jumpTo(entry.vIndex);
+    if (entry.vIndex !== _sfActiveIndex) { resumeEditor = true; jumpTo(entry.vIndex); }
     else if (state === 'idle') toggleSheet();
   }, true);
   area.tabIndex = 0; area.setAttribute('aria-label', '住宿生資料夾，可左右滑動、使用方向鍵，Enter 展開');
@@ -458,7 +484,10 @@ function setup2DCarouselInteraction() {
   window.addEventListener('resize', () => {
     measure();
     for (const e of _sfPool) e.el._tf = null;
-    if (sheet.entry) sheet.shift = 0;
+    if (sheet.entry) {
+      sheet.rise = Math.max(160, sheet.entry.el.querySelector('.fd-sheet').offsetHeight - cfg.fh * .37 + 12);
+      sheet.shift = 22 + sheet.rise - (area.clientHeight / 2 - cfg.fh / 2);
+    }
     if (currentPage === 'student-files') paint();
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden) window._sfStopMotion(); });

@@ -3829,8 +3829,9 @@ let _sfRandomDefaults = [];
 // 以前是把搜尋結果複製 5~60 次全部塞進 DOM (常常 60~500 張卡)，每張又有毛玻璃與上千個硬體圖層，
 // 這就是 iPhone 左右滑會卡的主因。現在 DOM 固定 13 張，滑再多也不會變重。
 // 軌道往右後方延伸，所以視窗是不對稱的：近端只留 3 本，深處留 13 本
-const SF_POOL_SIZE = 17;
-const SF_HALF = 3;
+// Fixed pool: four preceding files plus the dense forward rail, independent of roster size.
+const SF_POOL_SIZE = 21;
+const SF_HALF = 4;
 let _sfPool = [];              // [{ el, vIndex, student }]
 let _sfDrafts = new Map();     // student.id -> 尚未儲存的草稿 (卡片被回收時暫存，回來時還原)
 let _sfWindowStart = null;
@@ -3906,8 +3907,9 @@ function sfCardHTML(s, draft) {
       <div class="fd-tab"><span>${sfEsc(s.room)}</span><b>${sfEsc(s.bed)}</b><i class="${m.dot}"></i></div><div class="fd-tab fd-tab-r"><span>${sfEsc(s.room)}</span><b>${sfEsc(s.bed)}</b><i class="${m.dot}"></i></div>
       <div class="fd-spine"></div><div class="fd-spine fd-spine-r"></div>
       <div class="fd-top"></div>
-      <div class="fd-paper"><i></i><i></i><i></i><i></i></div>
+      <div class="fd-paper" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
       <div class="fd-front">
+        <div class="fd-file-mark" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="7" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3z"/><circle cx="18" cy="8" r="2"/><path d="M17 13a4 4 0 0 1 5 4v2h-5z"/></svg><span>${sfEsc(s.bed)}</span></div>
         <div class="fd-rail-label">${sfEsc(m.name)}</div>
         <div class="fd-summary">
           <div class="fd-name${m.nameEmpty ? ' is-empty' : ''}">${sfEsc(m.name)}</div>

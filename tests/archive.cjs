@@ -12,6 +12,7 @@ const server=http.createServer((req,res)=>{
 const roster=Array.from({length:90},(_,i)=>({id:'test-'+i,name:'測試住宿生 '+i,studentId:'TEST'+i,class:'測試班',squad:'一單',room:String(101+Math.floor(i/4)*2),bed:String(i%4+1),attendance:{},remarks:'合成資料，不連線正式資料庫',isForeign:false,isEmpty:false}));
 async function run(engine,viewport){
   const browser=await engine.launch({headless:true});
+  try {
   const context=await browser.newContext({viewport,deviceScaleFactor:2,serviceWorkers:'block',hasTouch:true});
   const errors=[],requests=[];
   await context.route('**/*',async route=>{
@@ -35,15 +36,28 @@ async function run(engine,viewport){
   await page.waitForFunction(()=>typeof state!=='undefined'&&!state.loading);
 
   await page.evaluate(()=>{navigateTo('student-files');initStudentFiles();});
-  await page.waitForTimeout(1700);
-  await page.screenshot({path:path.join(out,engine.name()+'-archive-'+viewport.width+'.png')});
+  await page.waitForFunction(()=>sfCarousel?.state==='idle');
+  await page.waitForTimeout(200);
+  await page.locator('#sf-scene').screenshot({path:path.join(out,engine.name()+'-archive-'+viewport.width+'.png')});
   assert.equal(await page.locator('.sf-folder.active.is-open').count(),0);
+  const railBefore = await page.evaluate(()=>Array.from(document.querySelectorAll('.sf-folder')).filter(e=>!e.classList.contains('sf-far')&&!e.classList.contains('active')).map(e=>({index:e.dataset.index,x:new DOMMatrixReadOnly(getComputedStyle(e).transform).m41})));
   await page.locator('.sf-selection').click();
-  await page.waitForTimeout(650);
-  await page.screenshot({path:path.join(out,engine.name()+'-editor-'+viewport.width+'.png')});
+  await page.waitForFunction(()=>{
+    const left=document.querySelector('.sf-folder[data-index="-1"]');
+    return document.querySelector('.sf-folder.active.is-open') && left && new DOMMatrixReadOnly(getComputedStyle(left).transform).m41 < -400;
+  });
+  const railDeparting = await page.evaluate(()=>Array.from(document.querySelectorAll('.sf-folder')).map(e=>({index:e.dataset.index,x:new DOMMatrixReadOnly(getComputedStyle(e).transform).m41})));
+  assert.ok(railBefore.some(b=>+b.index<0 && railDeparting.find(a=>a.index===b.index).x<b.x-30),'left folders travel left');
+  assert.ok(railBefore.some(b=>+b.index>0 && railDeparting.find(a=>a.index===b.index).x>b.x+30),'right folders travel right');
+
+  await page.waitForFunction(()=>parseFloat(document.querySelector('.sf-folder.active')?.style.getPropertyValue('--fd-sheet-y')) < -160);
+  await page.waitForTimeout(300);
+  await page.locator('#sf-scene').screenshot({path:path.join(out,engine.name()+'-editor-'+viewport.width+'.png')});
+  const liftedY=await page.locator('.sf-folder.active').evaluate(e=>parseFloat(e.style.getPropertyValue('--fd-sheet-y')));
+  assert.ok(liftedY < -100,'paper is pulled upward after the folders depart');
   await page.locator('.sf-folder.active .sf-input-name').fill('測試草稿');
   await page.locator('.sf-folder.active .sf-close-btn').click();
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(750);
   await page.locator('[aria-label="下一份檔案"]').click();
   await page.waitForFunction(()=>sfCarousel.state==='idle');
   assert.equal(await page.locator('.sf-folder.active.is-open').count(),0);
@@ -62,9 +76,28 @@ async function run(engine,viewport){
   assert.equal(await page.locator('.sf-folder.active.is-open').count(),1);
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('.sf-folder.active.is-open').count(),0);
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  const darkGeometry=await page.locator('.sf-folder.active').evaluate(e=>e.style.transform);
+  const darkMaterial=await page.locator('.sf-folder.active .fd-front').evaluate(e=>getComputedStyle(e).backgroundImage);
+  await page.evaluate(()=>{document.activeElement?.blur();document.body.classList.add('light-mode');sfCarousel.paint();});
+  assert.equal(await page.locator('.sf-folder.active').evaluate(e=>e.style.transform),darkGeometry,'themes preserve the same file geometry');
+  assert.notEqual(await page.locator('.sf-folder.active .fd-front').evaluate(e=>getComputedStyle(e).backgroundImage),darkMaterial,'light mode uses its own material lighting');
+  await page.locator('#sf-scene').screenshot({path:path.join(out,engine.name()+'-archive-light-'+viewport.width+'.png')});
+  await page.locator('.sf-selection').click();
+  await page.waitForTimeout(1050);
+  await page.locator('#sf-scene').screenshot({path:path.join(out,engine.name()+'-editor-light-'+viewport.width+'.png')});
+  // A close interrupted by reopening must settle into one visible, usable sheet.
+  await page.evaluate(()=>sfCarousel.dismiss());
+  await page.waitForTimeout(150);
+  await page.evaluate(()=>sfCarousel.openSheet());
+  await page.waitForTimeout(1050);
+  assert.equal(await page.locator('.sf-folder.is-open').count(),1);
+  await page.locator('.sf-folder.active .sf-input-name').fill('中斷後仍可編輯');
+  await page.evaluate(()=>{navigateTo('tools');});
+  assert.equal(await page.locator('.sf-folder.is-open').count(),0);
   assert.deepEqual(errors,[]);
   console.log(engine.name()+' '+viewport.width+': archive, editor, empty search, keyboard and reduced motion PASS');
-  await browser.close();
+  } finally { await browser.close(); }
 }
 server.listen(0,'127.0.0.1',async()=>{try {await run(chromium,{width:1280,height:900});await run(webkit,{width:375,height:844});}catch(e){console.error(e);process.exitCode=1;}finally{server.close();}});
 

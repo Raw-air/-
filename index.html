@@ -10,10 +10,10 @@
   <meta name="theme-color" content="#151518">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=103">
-  <link rel="stylesheet" href="motion.css?v=103">
-  <link rel="stylesheet" href="folder.css?v=103">
-  <link rel="stylesheet" href="liquid-nav.css?v=103">
+  <link rel="stylesheet" href="style.css?v=104">
+  <link rel="stylesheet" href="motion.css?v=104">
+  <link rel="stylesheet" href="folder.css?v=104">
+  <link rel="stylesheet" href="liquid-nav.css?v=104">
   <link rel="manifest" href="manifest.json?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=2">
   <script defer src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -562,12 +562,34 @@
     </header>
     <div class="sf-archive-heading">
       <div><p class="sf-eyebrow">每一份檔案，都有自己的位置</p><h1>住宿生檔案<span>Resident student files</span></h1></div>
-      <div class="search-orb-container" id="sf-search-container">
-        <div class="input-overlay">
-          <div class="search-icon-wrapper"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="search-icon"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg></div>
-          <input type="search" class="modern-input" id="sf-search-input" aria-label="搜尋姓名、床號或學號" placeholder="搜尋姓名、床號或學號" autocomplete="off" oninput="onStudentFileSearch(this.value)" />
-        </div>
+    </div>
+    <!-- Gooey Search Bar -->
+    <div class="search-orb-container" id="sf-search-container">
+      <div class="gooey-background-layer">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+        <div class="blob-bridge"></div>
       </div>
+      <div class="input-overlay">
+        <div class="search-icon-wrapper">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="search-icon">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </div>
+        <input type="text" class="modern-input" id="sf-search-input" aria-label="搜尋姓名、床號或學號" placeholder="搜尋住宿生 (姓名/床號/學號)" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" oninput="onStudentFileSearch(this.value)" />
+        <div class="focus-indicator"></div>
+      </div>
+      <svg class="gooey-svg-filter" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="enhanced-goo">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur"></feGaussianBlur>
+            <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -10" result="goo"></feColorMatrix>
+            <feComposite in="SourceGraphic" in2="goo" operator="atop"></feComposite>
+          </filter>
+        </defs>
+      </svg>
     </div>
 
     <!-- 2D Carousel & Search Blur Overlay -->
@@ -1251,14 +1273,14 @@
     <button type="button" class="nav-item" data-page="settings"><span class="nav-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-label">設定</span></button>
   </nav>
 
-  <script src="config.js?v=103"></script>
-  <script src="api.js?v=103"></script>
-  <script src="app.js?v=103"></script>
-  <script src="import.js?v=103"></script>
-  <script src="theme.js?v=103"></script>
-  <script src="carousel.js?v=103"></script>
-  <script src="dissolve.js?v=103"></script>
-  <script src="navigation.js?v=103"></script>
+  <script src="config.js?v=104"></script>
+  <script src="api.js?v=104"></script>
+  <script src="app.js?v=104"></script>
+  <script src="import.js?v=104"></script>
+  <script src="theme.js?v=104"></script>
+  <script src="carousel.js?v=104"></script>
+  <script src="dissolve.js?v=104"></script>
+  <script src="navigation.js?v=104"></script>
 
   <!-- 幹部工作手冊 Modal -->
   <div id="duty-manual-modal" class="modal-overlay">

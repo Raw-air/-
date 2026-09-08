@@ -1,8 +1,8 @@
 // Atomic shell cache: HTML and JS must always come from the same release.
-const CACHE_NAME = 'biyuan-v63';
-const ASSETS = ['./', './index.html', './style.css?v=103', './app.js?v=103', './import.js?v=103',
-  './api.js?v=103', './config.js?v=103', './theme.js?v=103',
-  './carousel.js?v=103', './navigation.js?v=103', './motion.css?v=103', './liquid-nav.css?v=103', './folder.css?v=103', './dissolve.js?v=103'];
+const CACHE_NAME = 'biyuan-v64';
+const ASSETS = ['./', './index.html', './style.css?v=104', './app.js?v=104', './import.js?v=104',
+  './api.js?v=104', './config.js?v=104', './theme.js?v=104',
+  './carousel.js?v=104', './navigation.js?v=104', './motion.css?v=104', './liquid-nav.css?v=104', './folder.css?v=104', './dissolve.js?v=104'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
