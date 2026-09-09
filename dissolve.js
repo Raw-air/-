@@ -197,7 +197,8 @@
     const R = (el, kind) => {
       if (!el) return null;
       const cs = getComputedStyle(el);
-      if (cs.visibility === 'hidden' || parseFloat(cs.opacity) < .05) return null;   // 看不見的 (收起的摘要、側標) 不算
+      const gpuSurface = window.sfArchiveModel && el.parentElement === root && !el.classList.contains('fd-sheet');
+      if (cs.visibility === 'hidden' || (!gpuSurface && parseFloat(cs.opacity) < .05)) return null;
       const r = el.getBoundingClientRect();
       return r.width > 0 ? { l: r.left, t: r.top, r: r.right, b: r.bottom, kind } : null;
     };
@@ -239,6 +240,7 @@
 
   // ── 主流程 ─────────────────────────────────────────────────────────────
   function run(root, opts = {}) {
+    const startedAt = performance.now();
     init();
     if (running) running.cancel();
     quality = Math.min(1, quality + .12);          // 上次掉幀降過的密度慢慢還回來
@@ -327,6 +329,8 @@
       m.el.style.webkitMaskImage = v; m.el.style.maskImage = v;
     }
     function restore() {
+      delete root._modelWipe;
+      window.sfArchiveModel?.repaint();
       released = true;                        // 補位之後就別再寫遮罩了 (資料夾已經長回來)
       for (const m of masks) { m.el.style.webkitMaskImage = ''; m.el.style.maskImage = ''; m.el.style.visibility = ''; }
       for (const s of rigid) { s.style.visibility = ''; s.style.opacity = ''; }
@@ -347,7 +351,7 @@
     function tick(now) {
       frame = 0;
       if (cancelled) return;
-      if (!t0) { t0 = now; lastNow = now; }
+      if (!t0) { t0 = now; lastNow = now; stats.firstFrameMs = Math.max(0, now - startedAt); }
       const t = now - t0, dtms = Math.min(48, now - lastNow); lastNow = now;
       const dt = dtms / 1000;
       // 自適應密度：連續兩幀掉到 45fps 以下就少生一些 (已經生出來的不動，不然畫面會突然變稀)
@@ -362,6 +366,8 @@
       }
       if (!released) {
         const frontX = box.r - prog * bw;
+        root._modelWipe = frontX - (window.sfArchiveModel?.canvas.getBoundingClientRect().left || 0);
+        window.sfArchiveModel?.repaint();
         if (t >= WIPE_T0 && !hidden) for (const m of masks) setMask(m, frontX);
         for (const s of rigid) s.style.opacity = String(Math.max(0, 1 - prog * 1.6));
         if (prog >= OVER && !hidden) { hidden = true; for (const m of masks) m.el.style.visibility = 'hidden'; }

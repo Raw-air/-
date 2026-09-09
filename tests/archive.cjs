@@ -35,6 +35,16 @@ async function run(engine,viewport){
   await page.goto('http://127.0.0.1:'+server.address().port);
   await page.waitForFunction(()=>typeof state!=='undefined'&&!state.loading);
 
+  await page.locator('.nav-item[data-page="home"]').click();
+  await page.locator('.nav-item[data-page="home"]').focus();
+  await page.keyboard.press('End');
+  assert.equal(await page.evaluate(()=>currentPage),'settings','glass leaves keyboard controls usable');
+  const last=await page.locator('.nav-item[data-page="settings"]').boundingBox(),first=await page.locator('.nav-item[data-page="home"]').boundingBox();
+  await page.mouse.move(last.x+last.width/2,last.y+last.height/2);await page.mouse.down();
+  await page.mouse.move(first.x+first.width/2,first.y+first.height/2,{steps:10});await page.mouse.up();
+  await page.waitForFunction(()=>currentPage==='home');
+  assert.equal(await page.locator('.bottom-nav button').count(),4,'no duplicated interactive controls in glass');
+
   await page.evaluate(()=>{navigateTo('student-files');initStudentFiles();});
   await page.waitForFunction(()=>sfCarousel?.state==='idle');
   await page.waitForTimeout(200);

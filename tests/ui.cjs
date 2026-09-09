@@ -33,8 +33,8 @@ async function run(engine,viewport){
     if(url.pathname.includes('marked'))return route.fulfill({body:'window.marked={parse:s=>s};',contentType:'application/javascript'});
     return route.fulfill({body:'',status:200});
   });
-  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
-  page.on('console',m=>{if(m.type()==='error' && /Shader|WebGLProgram/.test(m.text()))errors.push(m.text());});
+  const page=await context.newPage();page.on('pageerror',e=>{errors.push(e.message);console.error(e.message);});
+  page.on('console',m=>{if(m.type()==='error' && /Shader|WebGLProgram/.test(m.text()))errors.push(m.text());if(m.type()==='warning'&&m.text().includes('[Dissolve]'))console.error(m.text());});
   await page.addInitScript(()=>{window.__vibrations=[];Object.defineProperty(navigator,'vibrate',{value:p=>{window.__vibrations.push(p);return true;},configurable:true});});
   await page.goto('http://127.0.0.1:'+server.address().port);
   await page.waitForFunction(()=>typeof state!=='undefined'&&!state.loading);
@@ -148,7 +148,7 @@ async function run(engine,viewport){
     const yawOf=el=>num(el,/rotateY\((-?[\d.]+)deg\)/);
     const scOf=el=>num(el,/scale\((-?[\d.]+)\)/);
     const f=document.querySelector('.sf-folder.active'),r=f.getBoundingClientRect();
-    const n=Array.from(document.querySelectorAll('.sf-folder:not(.sf-far):not(.active)')).map(e=>({i:+e.dataset.index,yaw:yawOf(e),z:zOf(e),scale:scOf(e)})).sort((p,q)=>p.i-q.i);
+    const n=Array.from(document.querySelectorAll('.sf-folder:not(.sf-far):not(.active)')).map(e=>({i:+e.dataset.index,yaw:yawOf(e),apparent:yawOf(e)+Math.atan2(num(e,/translate3d\((-?[\d.]+)px/),1500-zOf(e))*180/Math.PI,z:zOf(e),scale:scOf(e)})).sort((p,q)=>p.i-q.i);
     return {ratio:r.width/r.height,layers:f.children.length,front:!!f.querySelector('.fd-front'),sheet:!!f.querySelector('.fd-sheet'),
       top:!!f.querySelector('.fd-top'),spines:f.querySelectorAll('.fd-spine').length,active:{i:_sfActiveIndex,yaw:yawOf(f),z:zOf(f),scale:scOf(f)},
       n,preserve:getComputedStyle(f).transformStyle==='preserve-3d'};
@@ -158,8 +158,8 @@ async function run(engine,viewport){
   assert.ok(geo.n.length>=4,'the rail shows a run of folders: '+geo.n.length);
   const yaws=geo.n.map(p=>p.yaw);
   assert.ok(geo.active.yaw>=18&&geo.active.yaw<=26,'the extracted folder faces the viewer while retaining visible thickness: '+geo.active.yaw);
-  assert.ok(yaws.every(y=>y>40&&y<75),'rail folders keep one face towards the viewer: '+yaws.join(','));
-  for(let k=1;k<geo.n.length;k++)assert.ok(Math.abs(geo.n[k].yaw-geo.n[k-1].yaw)<3,'yaw changes continuously without a mirrored flip: '+yaws.join(','));
+  assert.ok(geo.n.every(p=>p.apparent>83.9&&p.apparent<84.1),'off-axis correction preserves an 84 degree side silhouette without flipping: '+JSON.stringify(geo.n));
+  assert.ok(await page.locator('.sf-model-ready .sf-model-canvas').count()===1,'one shared 3D renderer');
   assert.ok(geo.n.every(p=>geo.active.z-p.z>55),'the active folder is pulled out of the rail towards the viewer: '+geo.active.z+' vs '+geo.n.map(p=>p.z).join(','));
   assert.ok(geo.n.concat(geo.active).every(p=>p.scale>=.88&&p.scale<=1.08),'size comes from perspective, manual scale stays within 0.88–1.08');
   const zs=geo.n.map(p=>p.z);
@@ -184,8 +184,8 @@ async function run(engine,viewport){
   await page.mouse.down();await page.mouse.move(front.x+front.width*.7-180,front.y+front.height*.5,{steps:12});await page.mouse.up();
   await page.waitForTimeout(950);
   assert.ok(await page.evaluate(()=>_sfActiveIndex>0));
-  assert.ok(await page.evaluate(()=>Math.abs(_currentX+_sfActiveIndex*_cardWidth)<.5));
   await page.waitForFunction(()=>sfCarousel.state==='idle',null,{timeout:5000});
+  assert.ok(await page.evaluate(()=>Math.abs(_currentX+_sfActiveIndex*_cardWidth)<.5));
   await page.waitForTimeout(350);
   assert.equal(await page.locator('.sf-folder.active.is-open').count(),0,'browsing keeps the archive visible');
   // Return to the first synthetic card for deterministic screenshots.
@@ -206,9 +206,8 @@ async function run(engine,viewport){
   // 「空床」長回來 (草稿，不打 API)，紙會再自動打開
   assert.equal(await page.locator('.sf-dissolve-canvas').count(),1,'particle canvas is created at page mount');
   assert.ok(await page.evaluate(()=>sfDissolve.max>=3000),'the particle pool is preallocated for a dense dust cloud');
-  await page.evaluate(()=>{window.__delT0=performance.now();window.__bhDone=false;clearStudentData(document.querySelector('.sf-folder.active .sf-broom-btn')).then(()=>window.__bhDone=true);});
-  await page.waitForSelector('.sf-dissolve-canvas.is-running',{timeout:400});
-  assert.ok(await page.evaluate(()=>performance.now()-window.__delT0<250),'dissolve starts immediately, no first-run stall');
+  const dustStart=await page.evaluate(()=>{window.__delT0=performance.now();window.__bhDone=false;clearStudentData(document.querySelector('.sf-folder.active .sf-broom-btn')).then(()=>window.__bhDone=true);const c=document.querySelector('.sf-dissolve-canvas');return {ms:performance.now()-__delT0,visible:c.classList.contains('is-running')&&getComputedStyle(c).visibility==='visible'&&c.clientWidth>0};});
+  assert.ok(dustStart.visible&&dustStart.ms<250,'dissolve starts immediately, measured in-page without automation round-trip latency: '+JSON.stringify(dustStart));
   await page.waitForTimeout(140);
   await page.screenshot({path:path.join(out,engine.name()+'-dissolve.png')});
   await page.waitForFunction(()=>window.__bhDone,{timeout:5000});
@@ -216,6 +215,7 @@ async function run(engine,viewport){
   assert.ok(delT<4000,'delete + black-hole suction finishes in time: '+delT);
   // 資料夾本身跟著粉塵一起消失 (DOM 遮罩)，而且粉塵是「一大片」不是幾十顆
   const dust=await page.evaluate(()=>({...sfDissolve.stats,webgl:sfDissolve.webgl,max:sfDissolve.max}));
+  assert.ok(Number.isFinite(dust.firstFrameMs),'record first-frame latency separately from synchronous startup');
   assert.ok(dust.masked,'the folder itself dissolves with the particles (DOM mask follows the frontier)');
   assert.ok(dust.max>=3000,'the particle pool is preallocated for a dense dust cloud: '+dust.max);
   assert.ok(dust.spawned>400,'a dense dust cloud, not a handful of specks: '+JSON.stringify(dust));

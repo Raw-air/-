@@ -4,28 +4,21 @@ function setupNav(){
   nav.setAttribute('aria-label','主要導覽');
   const items=Array.from(nav.querySelectorAll('.nav-item'));
   for(const item of items)item.querySelector('.nav-icon').innerHTML=_navOriginalIcons.get(item.dataset.page);
-  // --lens-x 註冊成真正的 <length>，膠囊光暈、鏡片、複本列、遮罩洞吃同一個數值 → 一條 transition 全部同步
+  // --lens-x 讓鏡片、折射背景的取樣位置一起平滑移動。
   // liquid-nav.css 的 @property 已經註冊 --lens-x；這裡只做功能偵測，沒有 registerProperty 的舊瀏覽器退回逐元素 transition
   const propOK=typeof CSS!=='undefined'&&typeof CSS.registerProperty==='function';
   if(!propOK)nav.classList.add('no-prop');
-  // 真實按鈕包成一列，遮罩才能在鏡片位置挖洞
+  // 真實按鈕保持在玻璃上方，不複製圖示與文字。
   const rowReal=document.createElement('span');rowReal.className='nav-row';
   items.forEach(item=>rowReal.appendChild(item));nav.appendChild(rowReal);
-  // 鏡片：外層只位移；lens-shape 做玻璃材質/拉伸/擠壓；lens-zoom 裡是放大的圖示複本 (跨瀏覽器折射)
+  // 外層位移，lens-shape 處理按壓形變與凸面折射。
   const lens=document.createElement('span');lens.className='liquid-lens';lens.setAttribute('aria-hidden','true');
   const shape=document.createElement('span');shape.className='lens-shape';
-  const blur=document.createElement('span');blur.className='lens-blur';shape.appendChild(blur);
-  const zoom=document.createElement('span');zoom.className='lens-zoom';
-  const row=document.createElement('span');row.className='lens-row';
-  const clones=items.map(item=>{
-    const c=document.createElement('span');c.className='lens-item';c.dataset.page=item.dataset.page;
-    c.innerHTML=`<span class="nav-icon">${_navOriginalIcons.get(item.dataset.page)}</span><span class="nav-label">${item.querySelector('.nav-label').textContent}</span>`;
-    row.appendChild(c);return c;
-  });
-  zoom.appendChild(row);shape.appendChild(zoom);
+  // The lens samples the page behind it; the real four buttons stay sharp.
   // 保持乾淨、無色的液體玻璃；不再疊加青／洋紅色散複本，避免深色模式出現負片殘影。
   const rim=document.createElement('span');rim.className='lens-rim';shape.appendChild(rim);
   lens.appendChild(shape);nav.prepend(lens);
+  window.liquidGlass=window.createLiquidGlass?.(nav,shape);
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
   const LENS_W=84,PAD=8;
   let index=0,lastIndex=-1,travelTimer=0,retryTimer=0,w=0,slot=0,suppressClick=false;
@@ -39,7 +32,7 @@ function setupNav(){
   function measure(){w=nav.clientWidth;slot=(w-16)/4;nav.style.setProperty('--nav-w',w+'px');}
   function mark(i){
     for(const [k,item] of items.entries()){
-      item.classList.toggle('active',k===i);clones[k].classList.toggle('active',k===i);
+      item.classList.toggle('active',k===i);
       if(k===i)item.setAttribute('aria-current','page');else item.removeAttribute('aria-current');
     }
   }

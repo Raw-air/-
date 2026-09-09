@@ -1301,6 +1301,7 @@ function navigateTo(page) {
   const exitAnim = fromIdx < 0 || toIdx < 0 ? 'pageExit' : (isForward ? 'pageExitLeft' : 'pageExitRight');
 
   function showNewPage() {
+    if (currentPage !== page) return; // A fast glass-lens drag supersedes older exit timers.
     document.querySelectorAll('.page').forEach(p => { p.classList.remove('active'); p.style.animation = ''; });
     if (toEl) {
       toEl.classList.add('active');
@@ -4019,6 +4020,7 @@ function sfUpdateSummary(el, s, draft) {
   const tags = q('.fd-tags'); if (tags) tags.innerHTML = m.tags;
   for (const dot of el.querySelectorAll('.fd-tab i')) dot.className = m.dot;
   const badge = q('.sf-card-badge-relative'); if (badge) badge.textContent = m.badge;
+  window.sfArchiveModel?.repaint();
 }
 
 // 資料夾 DOM：6 層真正有 Z 深度的殼 (背板+標籤 / 左右側邊 / 內頁 / 前板玻璃+摘要 / 邊緣高光) + 抽出來的詳細資料紙
@@ -4129,6 +4131,7 @@ function sfBindCard(entry, vIndex) {
   el.className = 'sf-folder';
   el.style.transform = '';
   el.style.visibility = '';
+  delete el._modelWipe;
   el.style.webkitMaskImage = ''; el.style.maskImage = '';
   el.style.removeProperty('--fd-alpha'); el.style.removeProperty('--fd-overlap');
   el._tf = el._op = el._nr = el._lf = null; el._bl = 0;   // 資料夾換人時清掉 carousel.js 的樣式快取 (className 重設會把 class 全清掉，快取也要一起清)
@@ -4250,6 +4253,7 @@ function renderStudentFileCards(sweepIn = false) {
     for (const entry of _sfPool) if (entry.vIndex !== null) sfSaveDraft(entry);
     _sfPool = [];
     _sfWindowStart = null;
+    window.sfCarousel?.paint();
     track.innerHTML = `<div class="sf-empty-hint">
       <div style="font-size:48px; margin-bottom:12px;"><svg class="ui-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
       <div style="color:var(--dim); font-size:14px;">找不到符合的住宿生或床位</div>

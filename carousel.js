@@ -36,7 +36,7 @@ function setup2DCarouselInteraction() {
     out.z = cfg.zNear - cfg.RZ * (1 - co);
     // 所有資料夾保持同一面朝向鏡頭。舊版依橢圓切線在弧頂由 +90° 跳到 -90°，
     // 右側檔案滑到左側時會像翻面／鏡像。小幅連續扇形足以保留立體層次，且不會換面。
-    out.yaw = cfg.railYaw + Math.max(-10, Math.min(10, d * cfg.yawStep));
+    out.yaw = cfg.railYaw - Math.atan2(out.x, PERSP - out.z) / RAD;
     return out;
   }
   // 世界座標 → 畫面 px (元素本身排在舞台正中，所以要加 W/2)
@@ -52,14 +52,14 @@ function setup2DCarouselInteraction() {
     cfg.fh = Math.round(cfg.fw * 1.18);                 // 直式檔案比例；正面朝向使用者時仍保有資料夾輪廓
     cfg.RX = mobile ? 250 : tablet ? 430 : Math.min(W * .47, 650);      // 弧的橫向半徑
     cfg.RZ = mobile ? 200 : tablet ? 400 : 520;      // 弧的縱深半徑 (越大越有透視收斂，但近遠倍率差也越大)
-    cfg.zNear = 40;                                  // 頂點離鏡頭多近，其餘都在它後面
+    cfg.zNear = -90;                                 // 整排退後，讓抽出的檔案保留原尺寸且不互相穿插
     cfg.phiA = mobile ? -40 : -35;                   // 目前這本停在弧的哪個角度
     cfg.dPhi = mobile ? 15 : tablet ? 6.5 : 5.2;         // 每本差幾度 (越大間隙越明顯)
     cfg.activeX = mobile ? .54 : .5;                 // 補償手機斜視投影後的包圍盒偏移，視覺中心仍在 50%
-    cfg.pull = mobile ? 150 : tablet ? 180 : 200;    // 抽出：離開弧往鏡頭多少
+    cfg.pull = mobile ? 270 : 320;                  // 抽出的整片紙必須越過鄰居朝鏡頭突出的側邊
     cfg.side = 0;                                    // 抽出時仍維持置中
     cfg.lift = mobile ? 14 : 20;                     // 抽出：上移
-    cfg.railYaw = mobile ? 58 : 62;                  // 檔案列同向側立，避免跨中心時鏡像翻面
+    cfg.railYaw = 84;                                // 側影保持一致，補償離軸透視而不翻面
     cfg.yawStep = mobile ? .7 : .45;
     cfg.activeYaw = mobile ? 20 : 24;                // 選取檔案朝向使用者，仍看得到實體厚度
     cfg.part = .12;                                  // 鄰居沿弧讓開幾本
@@ -120,6 +120,7 @@ function setup2DCarouselInteraction() {
 
   // ── 每本的姿態：離中心 d 本 (可為負、浮點) ───────────────────────────────
   const P0 = {}, G0 = {};
+  let modelAttempted = false;
   function pose(d, out) {
     const ad = Math.abs(d), s = d < 0 ? -1 : 1;
     // 抽出只影響中央這本 (ad<.5)，用鐘形權重讓拖曳時連續過渡
@@ -159,6 +160,8 @@ function setup2DCarouselInteraction() {
   }
 
   function paint() {
+    if (!window.sfArchiveModel && !modelAttempted && window.createArchiveModel) { modelAttempted = true; window.sfArchiveModel = createArchiveModel(area); }
+    const models = [];
     const n = count();
     _currentX = -c * _cardWidth;
     sfSyncWindow(c);
@@ -205,6 +208,7 @@ function setup2DCarouselInteraction() {
         p.alpha *= 1 - smooth((depart - .80) / .20);
       }
       const y = p.y;
+      if (p.alpha > .012) models.push({ ...p, entry });
       put(el,
         cfg.camera + `translate3d(${p.x.toFixed(1)}px,${y.toFixed(1)}px,${p.z.toFixed(1)}px) rotateY(${p.rot.toFixed(2)}deg) scale(${p.scale.toFixed(3)})`,
         p.alpha.toFixed(3), p.near, p.blur, p.lefty);
@@ -216,6 +220,7 @@ function setup2DCarouselInteraction() {
         if (el._cy !== cy) { el.style.setProperty('--fd-counter-yaw', cy); el._cy = cy; }
       }
     }
+    window.sfArchiveModel?.paint(models, cfg);
     const selected = sfStudentAt(_sfActiveIndex);
     const summaryName = document.getElementById('sf-selection-name');
     const summaryMeta = document.getElementById('sf-selection-meta');
@@ -469,7 +474,7 @@ function setup2DCarouselInteraction() {
   area.addEventListener('click', e => {
     if (suppressClick) { e.preventDefault(); e.stopImmediatePropagation(); return; }
     if (state === 'locked' || !count()) return;
-    const folder = e.target.closest('.sf-folder');
+    const folder = window.sfArchiveModel ? window.sfArchiveModel.hitTest(e.clientX,e.clientY) : e.target.closest('.sf-folder');
     if (!folder || e.target.closest('.fd-sheet')) return;
     const entry = _sfPool.find(x => x.el === folder);
     if (!entry || entry.vIndex === null) return;
