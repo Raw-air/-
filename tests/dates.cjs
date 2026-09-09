@@ -1,0 +1,55 @@
+const {chromium,webkit}=require('playwright');
+const fs=require('fs'),path=require('path'),assert=require('node:assert/strict');
+const root=path.resolve(__dirname,'..');
+async function run(engine){
+ const browser=await engine.launch();try{
+  const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  const students=[{id:'synthetic-date-test',name:'日期測試',room:'101',bed:'1',squad:'一單',class:'測試班',studentId:'TEST',attendance:{'9月9日':'◎','2027-09-09':'✘'}}];
+  await page.route('**/*',route=>{
+    const u=new URL(route.request().url());
+    if(u.hostname==='dates.test'){const file=path.join(root,u.pathname==='/'?'index.html':u.pathname);return fs.existsSync(file)?route.fulfill({path:file}):route.fulfill({status:404,body:''});}
+    if(u.pathname==='/api/roster')return route.fulfill({json:{students,dateColumns:['9月9日','2027-09-09']}});
+    if(u.pathname==='/api/config')return route.fulfill({json:{}});
+    if(u.pathname.includes('marked'))return route.fulfill({body:'window.marked={parse:s=>s}',contentType:'application/javascript'});
+    return route.fulfill({json:{}});
+  });
+  await page.goto('https://dates.test/');await page.waitForFunction(()=>!state.loading);
+  await page.evaluate(()=>{navigateTo('rollcall');state.currentSquad='一單';state.currentDate='9月9日';renderRollCall(true);});
+  await page.locator('#rc-date-btn').click();
+  await page.keyboard.press('Escape');
+  fs.mkdirSync(path.join(root,'test-results'),{recursive:true});
+  await page.locator('#date-picker-panel').screenshot({path:path.join(root,'test-results',engine.name()+'-date-picker.png')});
+  assert.equal(await page.locator('#rc-date-input').getAttribute('min'),null);
+  assert.equal(await page.locator('#rc-date-input').getAttribute('max'),null);
+  await page.locator('#rc-date-input').fill('2027-09-09');
+  await page.locator('#rc-date-input').dispatchEvent('change');
+  assert.equal(await page.evaluate(()=>state.currentDate),'2027-09-09','year-qualified date must not overwrite legacy September 9');
+  assert.match(await page.locator('#rc-date').innerText(),/2027年9月9日/);
+  const result=await page.evaluate(async()=>{
+    const writes=[];_api.updateAttendance=async updates=>writes.push(...updates);
+    selectRollCallDate('2026-09-09');toggleStatus(state.students[0].id);
+    selectRollCallDate('2027-09-09');toggleStatus(state.students[0].id);
+    await new Promise(r=>setTimeout(r,1000));
+    selectRollCallDate('2030-12-31');_api.updateAttendance=async()=>{throw Error('synthetic missing date column');};toggleStatus(state.students[0].id);
+    await new Promise(r=>setTimeout(r,1000));
+    const failedNewDateRetained=state.changes.some(c=>c.date==='2030-12-31')&&!state.dateColumns.includes('2030-12-31');
+    state.config.export_start_date='2026-09-09';state.config.export_end_date='2026-09-12';initializeExportDateInputs();
+    let rows;window.XLSX={utils:{aoa_to_sheet:r=>(rows=r),book_new:()=>({}),book_append_sheet:()=>{}},writeFile:()=>{}};
+    exportExcel();
+    const bounds=['export-start-date','export-end-date','dev-export-start-date','dev-export-end-date'].map(id=>{const e=document.getElementById(id);return [e.min,e.max,e.validity.rangeOverflow,e.validity.rangeUnderflow];});
+    document.getElementById('export-start-date').value='2028-02-28';document.getElementById('export-end-date').value='2028-03-01';const leap=readExportRange('export-start-date','export-end-date');
+    document.getElementById('export-start-date').value='2031-01-01';document.getElementById('export-end-date').value='2030-01-01';const inverted=readExportRange('export-start-date','export-end-date');
+    return {writes,failedNewDateRetained,rows,bounds,leap,inverted,configured:getConfiguredExportRange(),invalid:parseISODate('2026-02-29')};
+  });
+  assert.deepEqual(result.writes.map(w=>w.date).sort(),['2027-09-09','9月9日']);
+  assert.equal(result.failedNewDateRetained,true,'failed new-date writes remain pending and are not falsely marked as saved');
+  assert.deepEqual(result.rows[0].slice(5),['9月9日','2026-09-10','2026-09-11','2026-09-12']);
+  assert.deepEqual(result.rows[1].slice(6),['','',''],'unknown future dates are blank, not present');
+  assert.ok(result.bounds.every(b=>b[0]===''&&b[1]===''&&!b[2]&&!b[3]));
+  assert.equal(result.leap.columns.length,3);assert.ok(result.inverted.error);assert.equal(result.invalid,null);
+  assert.deepEqual(result.configured,{start:'2026-09-09',end:'2026-09-12'});
+  assert.deepEqual(errors,[]);console.log(engine.name()+': date input, year isolation, cross-date sync, unbounded export, blank dates and leap year PASS');
+ }finally{await browser.close();}
+}
+(async()=>{await run(chromium);await run(webkit);})().catch(e=>{console.error(e);process.exitCode=1;});

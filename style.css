@@ -929,7 +929,7 @@ body {
   border: 1px solid rgba(139, 92, 246, .3);
   border-radius: 16px;
   box-shadow: 0 12px 48px rgba(0, 0, 0, .6), 0 0 0 1px rgba(139, 92, 246, .12);
-  width: 220px;
+  width: min(300px, calc(100vw - 32px));
   z-index: 200;
   overflow: hidden;
   transform-origin: top right;
@@ -1000,10 +1000,15 @@ body {
 }
 
 .date-picker-panel.open {
+  max-height: calc(100dvh - 180px);
+  overflow-y: auto;
   transform: scale(1) translateY(0);
   opacity: 1;
   pointer-events: auto
 }
+
+.date-item.today-marker::after { content: '今天'; }
+.date-item.active.today-marker::after { content: '今天 ✓'; }
 
 .rc-stats {
   display: flex;

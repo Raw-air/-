@@ -1522,24 +1522,31 @@ function toggleDatePicker() {
     renderDatePicker();
     panel.classList.add('open');
     btn.classList.add('open');
+    btn.setAttribute('aria-expanded', 'true');
+    const input = document.getElementById('rc-date-input');
+    input.focus();
+    try { input.showPicker?.(); } catch (_) { /* Native input remains usable on Safari. */ }
   }
 }
 
 function closeDatePicker() {
   document.getElementById('date-picker-panel')?.classList.remove('open');
   document.getElementById('rc-date-btn')?.classList.remove('open');
+  document.getElementById('rc-date-btn')?.setAttribute('aria-expanded', 'false');
 }
 
 function renderDatePicker() {
+  document.getElementById('rc-date-input').value = dateColumnToISO(state.currentDate) || localTodayISO();
+  document.getElementById('rc-date-notice').textContent = state.dateColumns.includes(state.currentDate) ? '可自行選擇任何年月日；下方為已有資料的日期。' : '此日期尚無紀錄。新增日期需後端支援，請確認同步成功後再離開。';
   const today = getTodayColumnName();
   const list = document.getElementById('date-picker-list');
   // 倒序排列：最新的在最上面
-  const dates = [...state.dateColumns].reverse();
+  const dates = state.dateColumns.filter(d => dateColumnToISO(d)).sort((a,b) => dateColumnToISO(b).localeCompare(dateColumnToISO(a)));
   list.innerHTML = dates.map(d => {
     const isActive = d === state.currentDate;
     const isToday = d === today;
     return `<div class="date-item${isActive ? ' active' : ''}${isToday ? ' today-marker' : ''}"
-                 onclick="selectRollCallDate('${d}')">${d}</div>`;
+                 onclick="selectRollCallDate('${d}')">${formatExportDate(dateColumnToISO(d))}</div>`;
   }).join('');
   // 自動捲到選中的日期
   setTimeout(() => {
@@ -1549,7 +1556,10 @@ function renderDatePicker() {
 }
 
 function selectRollCallDate(date) {
-  state.currentDate = date;
+  const iso = dateColumnToISO(date);
+  if (!iso) { showToast('請選擇有效的年月日', 'error'); return; }
+  state.currentDate = getExportColumnEntries().find(e => e.iso === iso)?.column || iso;
+  if (!state.dateColumns.includes(state.currentDate)) showToast('此日期尚無紀錄；請確認點名同步成功後再離開。', 'info');
   closeDatePicker();
   renderRollCall(true); // 切換日期時也跳過動畫防止殘影
 }
@@ -1570,7 +1580,9 @@ function renderRollCall(skipAnimation = false) {
   if (!state.currentSquad) return;
 
   document.getElementById('rc-squad-name').textContent = state.currentSquad;
-  document.getElementById('rc-date').textContent = state.currentDate;
+  document.getElementById('rc-date').textContent = formatExportDate(dateColumnToISO(state.currentDate)) || state.currentDate;
+  const unavailable = !state.dateColumns.includes(state.currentDate);
+  document.getElementById('rc-date-notice').textContent = unavailable ? '此日期尚無紀錄。新增日期需後端支援，請確認同步成功後再離開。' : '';
 
   // 更新提交按鈕顯示目前日期
   const submitBtn = document.getElementById('submit-btn');
@@ -1663,16 +1675,18 @@ function toggleStatus(pageId) {
   updateRollCallStats();
 
   // 立即同步到 Notion（debounce 800ms 防止快速連點重複 API）
-  clearTimeout(_syncTimers[pageId]);
-  _syncTimers[pageId] = setTimeout(async () => {
+  const timerKey = pageId + '_' + change.date;
+  clearTimeout(_syncTimers[timerKey]);
+  _syncTimers[timerKey] = setTimeout(async () => {
     try {
       await window._api.updateAttendance([change]);
+      if (!state.dateColumns.includes(change.date)) state.dateColumns.push(change.date);
       // 同步成功：移除 changes 中已成功的那筆
-      const i = state.changes.findIndex(c => c.pageId === pageId && c.date === state.currentDate && c.value === next);
+      const i = state.changes.findIndex(c => c.pageId === pageId && c.date === change.date && c.value === next);
       if (i >= 0) state.changes.splice(i, 1);
 
       // 將成功狀態放入「最近同步」保護中，保護 15 秒不被後台刷新覆蓋
-      const syncKey = pageId + '_' + state.currentDate;
+      const syncKey = pageId + '_' + change.date;
       state.recentSyncs[syncKey] = { value: next, ts: Date.now() };
 
       showSyncDot(pageId, 'ok');
@@ -2714,18 +2728,25 @@ function showToast(msg, type = 'info') {
 const EXPORT_START_KEY = 'export_start_date';
 const EXPORT_END_KEY = 'export_end_date';
 
+function localTodayISO() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+}
+
 function parseISODate(value) {
   const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return null;
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
-  const date = new Date(Date.UTC(year, month - 1, day));
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
   if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
   return date;
 }
 
 function dateColumnToISO(columnName) {
+  if (parseISODate(columnName)) return columnName;
   const match = String(columnName || '').match(/^(\d{1,2})月(\d{1,2})日$/);
   if (!match) return '';
   const month = Number(match[1]);
@@ -2757,17 +2778,13 @@ function getConfiguredExportRange() {
   const available = getAvailableExportRange();
   let start = parseISODate(state.config[EXPORT_START_KEY]) ? state.config[EXPORT_START_KEY] : available.start;
   let end = parseISODate(state.config[EXPORT_END_KEY]) ? state.config[EXPORT_END_KEY] : available.end;
-  if (available.start && available.end) {
-    start = start < available.start ? available.start : start;
-    end = end > available.end ? available.end : end;
-  }
-  return start && end && start <= end ? { start, end } : available;
+  return start && end && start <= end ? { start, end } : { start: available.start || localTodayISO(), end: available.end || localTodayISO() };
 }
 
 function setExportInputBounds(input, available) {
   if (!input) return;
-  input.min = available.start;
-  input.max = available.end;
+  input.removeAttribute('min');
+  input.removeAttribute('max');
 }
 
 function initializeExportDateInputs() {
@@ -2790,10 +2807,16 @@ function readExportRange(startId, endId) {
   const end = document.getElementById(endId)?.value || '';
   if (!parseISODate(start) || !parseISODate(end)) return { error: '請選擇完整的開始與結束日期' };
   if (start > end) return { error: '結束日期不能早於開始日期' };
-  const columns = getExportColumnEntries()
-    .filter(entry => entry.iso >= start && entry.iso <= end)
-    .map(entry => entry.column);
-  if (!columns.length) return { error: '所選時段沒有可匯出的點名資料' };
+  const days = Math.round((parseISODate(end) - parseISODate(start)) / 86400000) + 1;
+  if (days > 16379) return { error: '日期可自由選擇，但單份 Excel 最多容納 16,379 個日期，請分段匯出。' };
+  const known = new Map(getExportColumnEntries().map(entry => [entry.iso, entry.column]));
+  const columns = [];
+  const cursor = parseISODate(start);
+  for (let i=0;i<days;i++) {
+    const iso = cursor.toISOString().slice(0,10);
+    columns.push(known.get(iso) || iso);
+    cursor.setUTCDate(cursor.getUTCDate()+1);
+  }
   return { start, end, columns };
 }
 
@@ -2841,7 +2864,7 @@ function exportExcel() {
     const headers = ['名稱', '寢床號', '床號', '班別', '學號', ...range.columns];
     const rows = state.students.map(s => {
       const r = [s.name, s.room, s.bed, s.class, s.studentId];
-      for (const d of range.columns) r.push(s.attendance[d] || '✓');
+      for (const d of range.columns) r.push(s.attendance[d] ?? (state.dateColumns.includes(d) ? '✓' : ''));
       return r;
     });
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
