@@ -1,6 +1,6 @@
 {
   "name": "biyuan-dorm-ui",
   "private": true,
-  "scripts": { "test": "node tests/api.cjs && node tests/ui.cjs", "test:archive": "node tests/archive.cjs", "test:visual": "node tests/visual-effects.cjs" },
+  "scripts": { "test": "node tests/api.cjs && node tests/ui.cjs", "test:archive": "node tests/archive.cjs" },
   "devDependencies": { "playwright": "1.62.1" }
 }
