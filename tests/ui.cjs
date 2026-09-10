@@ -151,6 +151,39 @@ async function run(engine,viewport){
   await page.locator('#save-export-range-btn').scrollIntoViewIfNeeded();
   await page.screenshot({path:path.join(out,engine.name()+'-export-default.png')});
   await page.evaluate(()=>document.getElementById('dev-panel').classList.remove('open'));
+
+  // 更多選項保留原動態檔案瀏覽，但改名為「資料微動查詢」；新增 Excel 式住宿生檔案管理。
+  await page.evaluate(()=>navigateTo('tools'));
+  await page.waitForTimeout(250);
+  const toolLabels=await page.locator('#page-tools .eb-title').allTextContents();
+  assert.ok(toolLabels.includes('資料微動查詢'));
+  assert.ok(toolLabels.includes('住宿生檔案管理'));
+  await page.evaluate(()=>navigateTo('resident-management'));
+  await page.waitForTimeout(520);
+  const rmHeaders=await page.locator('.rm-table thead th').allTextContents();
+  assert.deepEqual(rmHeaders,['#','名稱','寢床號','床號','班別','學號','外籍','空床','備註','修改']);
+  assert.equal(rmHeaders.some(h=>h.includes('請假')||h.includes('2月')),false,'resident table excludes attendance/leave columns');
+  assert.equal(await page.locator('#rm-table-body tr').count(),roster.length);
+  const firstRmRow=page.locator('#rm-table-body tr').first();
+  assert.deepEqual(await firstRmRow.locator('.rm-readonly').allTextContents(),[roster[0].room,roster[0].bed]);
+  await firstRmRow.locator('.rm-input-name').fill('測試住宿生 0A');
+  assert.equal(await firstRmRow.locator('.rm-row-save').isEnabled(),true);
+  assert.equal(await page.locator('#rm-dirty-count').textContent(),'1');
+  await page.locator('.rm-table-shell').evaluate(shell=>{shell.scrollLeft=shell.scrollWidth;});
+  await firstRmRow.locator('.rm-row-save').click();
+  await page.waitForFunction(()=>state.students[0].name==='測試住宿生 0A');
+  const rmWrite=requests.filter(r=>r.path==='/api/attendance'&&r.method==='PATCH').at(-1);
+  const rmPayload=JSON.parse(rmWrite.body).updates[0];
+  assert.equal(rmPayload.updateProfile.name,'測試住宿生 0A');
+  assert.equal('date' in rmPayload,false,'profile save does not send attendance/date fields');
+  await page.locator('#rm-search-input').fill('找不到的住宿生');
+  assert.equal(await page.locator('#rm-table-body tr:visible').count(),0);
+  assert.equal(await page.locator('#rm-empty-state').isVisible(),true);
+  await page.locator('#rm-search-input').fill('');
+  await page.locator('.rm-table-shell').evaluate(shell=>{shell.scrollLeft=0;});
+  await page.screenshot({path:path.join(out,engine.name()+'-resident-management.png')});
+  const writesBeforeArchiveClear=requests.filter(r=>r.path==='/api/attendance'&&r.method!=='GET').length;
+
   await page.evaluate(()=>{navigateTo('student-files');_sfResults=state.students;renderStudentFileCards();});
   // 進場 (~1s)：整排展開、中央那本抽出、自動打開詳細資料紙
   await page.waitForFunction(()=>window.sfCarousel&&sfCarousel.state==='idle',null,{timeout:5000});
@@ -246,7 +279,7 @@ async function run(engine,viewport){
   assert.equal(await page.evaluate(()=>Array.from(document.querySelector('.sf-folder.active').children).filter(c=>c.style.maskImage||c.style.webkitMaskImage||c.style.visibility==='hidden').length),0,'masks are cleaned up');
   assert.equal(await page.locator('.sf-folder.active .sf-input-name').inputValue(),'');
   assert.equal(await page.locator('.sf-folder.active .fd-name').innerText(),'空床');
-  assert.equal(requests.filter(r=>r.path==='/api/attendance'&&r.method!=='GET').length,0);
+  assert.equal(requests.filter(r=>r.path==='/api/attendance'&&r.method!=='GET').length,writesBeforeArchiveClear);
   await page.waitForFunction(()=>sfCarousel.state==='idle',null,{timeout:5000});
   await page.waitForSelector('.sf-folder.active.is-open',{timeout:3000}).catch(()=>{throw new Error('sheet re-opens on the re-materialised folder');});
   await page.screenshot({path:path.join(out,engine.name()+'-after-delete.png')});

@@ -1324,6 +1324,7 @@ function renderCurrentPage(skipAnimation = false) {
     case 'summary': renderSummary(); break;
     case 'history': renderHistory(); break;
     case 'settings': renderSettings(); break;
+    case 'resident-management': initResidentManagement(false); break;
   }
 }
 
@@ -3972,6 +3973,232 @@ window.openFeedbackReview = openFeedbackReview;
 window.renderFeedbackReviewList = renderFeedbackReviewList;
 window.markFeedbackRead = markFeedbackRead;
 window.checkUnreadFeedback = checkUnreadFeedback;
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 住宿生檔案管理（Excel 式表格；欄位順序與匯出檔一致，不顯示點名／請假日期）
+// ═════════════════════════════════════════════════════════════════════════════
+let _rmRenderMap = new WeakMap();
+const _rmSaving = new Set();
+
+function rmRowValues(row) {
+  return {
+    name: row.querySelector('.rm-input-name').value.trim(),
+    class: row.querySelector('.rm-input-class').value.trim(),
+    studentId: row.querySelector('.rm-input-id').value.trim(),
+    remarks: row.querySelector('.rm-input-remarks').value.trim(),
+    isForeign: row.querySelector('.rm-input-foreign').checked,
+    isEmpty: row.querySelector('.rm-input-empty').checked,
+  };
+}
+
+function rmFingerprint(values) {
+  return JSON.stringify([
+    values.name || '', values.class || '', values.studentId || '', values.remarks || '',
+    !!values.isForeign, !!values.isEmpty,
+  ]);
+}
+
+function rmStudentFingerprint(student) {
+  return rmFingerprint({
+    name: student.name,
+    class: student.class,
+    studentId: student.studentId,
+    remarks: student.remarks,
+    isForeign: student.isForeign,
+    isEmpty: student.isEmpty || !student.name,
+  });
+}
+
+function updateResidentDirtyCount() {
+  const dirtyRows = Array.from(document.querySelectorAll('#rm-table-body tr.is-dirty'));
+  const button = document.getElementById('rm-save-all');
+  const badge = document.getElementById('rm-dirty-count');
+  if (!button || !badge) return;
+  button.disabled = dirtyRows.length === 0 || button.classList.contains('is-saving');
+  badge.hidden = dirtyRows.length === 0;
+  badge.textContent = dirtyRows.length;
+}
+
+window.markResidentRowDirty = function (row) {
+  const student = _rmRenderMap.get(row);
+  if (!student) return;
+  const dirty = rmFingerprint(rmRowValues(row)) !== rmStudentFingerprint(student);
+  row.classList.toggle('is-dirty', dirty);
+  const button = row.querySelector('.rm-row-save');
+  if (button && !_rmSaving.has(student.id)) {
+    button.disabled = !dirty;
+    button.textContent = dirty ? '儲存此列' : '已同步';
+    button.classList.remove('is-saved', 'is-error');
+  }
+  updateResidentDirtyCount();
+};
+
+function residentRowHTML(student, rowNumber) {
+  const isEmpty = student.isEmpty || !student.name;
+  const bedLabel = `${student.room || ''} ${student.bed || ''}`.trim() || `第 ${rowNumber} 列`;
+  return `<tr oninput="markResidentRowDirty(this)" onchange="markResidentRowDirty(this)">
+    <td class="rm-row-number">${rowNumber}</td>
+    <td><input class="rm-cell-input rm-input-name" type="text" value="${sfEsc(student.name || '')}" aria-label="${sfEsc(bedLabel)} 名稱"></td>
+    <td><span class="rm-readonly">${sfEsc(student.room || '')}</span></td>
+    <td><span class="rm-readonly">${sfEsc(student.bed || '')}</span></td>
+    <td><input class="rm-cell-input rm-input-class" type="text" value="${sfEsc(student.class || '')}" aria-label="${sfEsc(bedLabel)} 班別"></td>
+    <td><input class="rm-cell-input rm-input-id" type="text" value="${sfEsc(student.studentId || '')}" aria-label="${sfEsc(bedLabel)} 學號"></td>
+    <td class="rm-check-cell"><label class="rm-check"><span class="sr-only">${sfEsc(bedLabel)} 外籍生</span><input class="rm-input-foreign" type="checkbox" ${student.isForeign ? 'checked' : ''}></label></td>
+    <td class="rm-check-cell"><label class="rm-check"><span class="sr-only">${sfEsc(bedLabel)} 空床</span><input class="rm-input-empty" type="checkbox" ${isEmpty ? 'checked' : ''}></label></td>
+    <td><textarea class="rm-cell-remarks rm-input-remarks" rows="1" aria-label="${sfEsc(bedLabel)} 備註">${sfEsc(student.remarks || '')}</textarea></td>
+    <td class="rm-check-cell"><button type="button" class="rm-row-save" onpointerdown="this.dataset.savePress='1'" onpointerup="if(this.dataset.savePress){delete this.dataset.savePress;saveResidentRow(this)}" onpointerleave="delete this.dataset.savePress" onpointercancel="delete this.dataset.savePress" onclick="saveResidentRow(this)" disabled>已同步</button></td>
+  </tr>`;
+}
+
+function renderResidentManagement() {
+  const body = document.getElementById('rm-table-body');
+  if (!body) return;
+  _rmRenderMap = new WeakMap();
+  // 不額外排序：直接使用 Excel 匯出的 state.students 順序。
+  body.innerHTML = state.students.map((student, index) => residentRowHTML(student, index + 1)).join('');
+  Array.from(body.rows).forEach((row, index) => _rmRenderMap.set(row, state.students[index]));
+  filterResidentManagement();
+  updateResidentDirtyCount();
+}
+
+window.filterResidentManagement = function () {
+  const body = document.getElementById('rm-table-body');
+  if (!body) return;
+  const query = (document.getElementById('rm-search-input')?.value || '').trim().toLowerCase();
+  const status = document.getElementById('rm-status-filter')?.value || 'all';
+  let visible = 0;
+  Array.from(body.rows).forEach(row => {
+    const student = _rmRenderMap.get(row);
+    if (!student) return;
+    const values = rmRowValues(row);
+    const text = [values.name, student.room, student.bed, values.class, values.studentId, values.remarks, student.squad]
+      .join(' ').toLowerCase();
+    const statusMatch = status === 'all' ||
+      (status === 'resident' && !values.isEmpty) ||
+      (status === 'empty' && values.isEmpty) ||
+      (status === 'foreign' && values.isForeign && !values.isEmpty);
+    const show = statusMatch && (!query || text.includes(query));
+    row.hidden = !show;
+    if (show) visible++;
+  });
+  const total = state.students.length;
+  const count = document.getElementById('rm-total-count');
+  const countLabel = document.querySelector('.rm-total span');
+  if (count) count.textContent = visible;
+  if (countLabel) countLabel.textContent = visible === total ? '筆資料' : `筆資料（共 ${total} 筆）`;
+  const empty = document.getElementById('rm-empty-state');
+  if (empty) empty.hidden = visible !== 0;
+};
+
+window.saveResidentRow = async function (row, options = {}) {
+  if (row?.matches?.('.rm-row-save')) row = row.closest('tr');
+  const student = _rmRenderMap.get(row);
+  if (!student || _rmSaving.has(student.id)) return false;
+  const values = rmRowValues(row);
+  if (rmFingerprint(values) === rmStudentFingerprint(student)) return true;
+  _rmSaving.add(student.id);
+  const button = row.querySelector('.rm-row-save');
+  if (button) {
+    button.disabled = true;
+    button.textContent = '儲存中…';
+    button.classList.add('is-saving');
+    button.classList.remove('is-saved', 'is-error');
+  }
+
+  try {
+    const updatePayload = {
+      pageId: student.id,
+      updateProfile: {
+        name: values.isEmpty ? '' : values.name,
+        class: values.class,
+        studentId: values.isEmpty ? '' : values.studentId,
+        isForeign: values.isForeign,
+      },
+      markEmpty: values.isEmpty,
+    };
+    if (values.isEmpty) updatePayload.clearProfile = true;
+    await Promise.all([
+      window._api.updateAttendance([updatePayload]),
+      window._api.updateRemark(student.id, values.remarks),
+    ]);
+
+    student.name = values.isEmpty ? '' : values.name;
+    student.class = values.class;
+    student.studentId = values.isEmpty ? '' : values.studentId;
+    student.remarks = values.remarks;
+    student.isForeign = values.isForeign;
+    student.isEmpty = values.isEmpty;
+    row.querySelector('.rm-input-name').value = student.name;
+    row.querySelector('.rm-input-id').value = student.studentId;
+    row.classList.remove('is-dirty');
+    localStorage.setItem('biyuan_temp_students_update', JSON.stringify(state.students));
+
+    if (button) {
+      button.textContent = '已儲存';
+      button.classList.remove('is-saving');
+      button.classList.add('is-saved');
+      setTimeout(() => {
+        if (!row.classList.contains('is-dirty')) {
+          button.textContent = '已同步';
+          button.classList.remove('is-saved');
+          button.disabled = true;
+        }
+      }, 1200);
+    }
+    filterResidentManagement();
+    if (!options.quiet) showToast(`${student.room || ''} ${student.bed || ''} 資料已儲存`, 'success');
+    return true;
+  } catch (err) {
+    if (button) {
+      button.textContent = '儲存失敗';
+      button.classList.remove('is-saving');
+      button.classList.add('is-error');
+      button.disabled = false;
+    }
+    if (!options.quiet) showToast('儲存失敗：' + err.message, 'error');
+    return false;
+  } finally {
+    _rmSaving.delete(student.id);
+    updateResidentDirtyCount();
+  }
+};
+
+window.saveAllResidentRows = async function () {
+  const rows = Array.from(document.querySelectorAll('#rm-table-body tr.is-dirty'));
+  const button = document.getElementById('rm-save-all');
+  if (!rows.length || !button || button.classList.contains('is-saving')) return;
+  button.classList.add('is-saving');
+  button.disabled = true;
+  const label = button.querySelector('span');
+  if (label) label.textContent = `儲存中 0/${rows.length}`;
+  let saved = 0;
+  for (const row of rows) {
+    if (await saveResidentRow(row, { quiet: true })) saved++;
+    if (label) label.textContent = `儲存中 ${saved}/${rows.length}`;
+  }
+  button.classList.remove('is-saving');
+  if (label) label.textContent = '儲存全部';
+  updateResidentDirtyCount();
+  if (saved === rows.length) showToast(`已儲存 ${saved} 筆住宿生資料`, 'success');
+  else showToast(`已儲存 ${saved} 筆，${rows.length - saved} 筆失敗`, 'error');
+};
+
+window.initResidentManagement = function (resetFilters = true) {
+  const body = document.getElementById('rm-table-body');
+  if (!body) return;
+  // 離開後再返回時保留尚未儲存的儲存格內容。
+  if (body.querySelector('tr.is-dirty')) {
+    filterResidentManagement();
+    return;
+  }
+  if (resetFilters) {
+    const search = document.getElementById('rm-search-input');
+    const filter = document.getElementById('rm-status-filter');
+    if (search) search.value = '';
+    if (filter) filter.value = 'all';
+  }
+  renderResidentManagement();
+};
 
 // ═════════════════════════════════════════════════════════════════════════════
 // ═════════════════════════════════════════════════════════════════════════════
