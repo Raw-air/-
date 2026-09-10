@@ -224,6 +224,14 @@ async function run(engine,viewport){
   assert.ok(Math.abs(centred.x-centred.w/2)<centred.w*.08,'the selected folder is centred: '+JSON.stringify(centred));
   assert.equal(await page.locator('.sf-orbit').count(),0,'the decorative orbit ring is removed');
   assert.ok(await page.locator('#page-student-files').evaluate(e=>parseFloat(getComputedStyle(e).getPropertyValue('--fd-depth'))>=12),'folder shell has visible physical depth');
+  await page.evaluate(()=>state.students.push({id:'synthetic-homophone',name:'合成巧玲',studentId:'SYN-QIAO',class:'合成班',squad:'測試',room:'999',bed:'9',attendance:{},remarks:'合成同音搜尋資料',isForeign:false,isEmpty:false}));
+  await page.locator('#sf-search-input').fill('悄');
+  await page.waitForTimeout(450);
+  assert.equal(await page.evaluate(()=>_sfResults.some(s=>s.name==='合成巧玲')),true,'folder search matches 巧 when the user enters its homophone 悄');
+  assert.equal(await page.locator('.sf-folder.active .fd-name').innerText(),'合成巧玲');
+  await page.evaluate(()=>{state.students=state.students.filter(s=>s.id!=='synthetic-homophone');});
+  await page.locator('#sf-search-input').fill('');
+  await page.waitForTimeout(120);
   const stableTransform=await page.locator('.sf-folder.active').evaluate(e=>e.style.transform);
   await page.locator('#sf-search-input').fill('測試住宿生');
   await page.waitForTimeout(450);
@@ -234,7 +242,27 @@ async function run(engine,viewport){
   // A swipe can begin over the folder front; release settles in one short spring, then the sheet re-opens.
   const front=await page.locator('.sf-folder.active .fd-front').boundingBox();
   await page.mouse.move(front.x+front.width*.7,front.y+front.height*.5);
-  await page.mouse.down();await page.mouse.move(front.x+front.width*.7-180,front.y+front.height*.5,{steps:12});await page.mouse.up();
+  await page.mouse.down();
+  await page.mouse.move(front.x+front.width*.7-180,front.y+front.height*.5,{steps:12});
+  await page.waitForFunction(()=>sfCarousel.state==='dragging'&&_sfActiveIndex>0&&_sfActiveIndex===Math.round(sfCarousel.center));
+  const liveSelection=await page.evaluate(()=>{
+    const active=document.querySelector('.sf-folder.active');
+    const neighbor=document.querySelector('.sf-folder:not(.active):not(.sf-far)');
+    return {
+      index:_sfActiveIndex,
+      cardIndex:Number(active.dataset.index),
+      activeCount:document.querySelectorAll('.sf-folder.active').length,
+      summary:document.getElementById('sf-selection-name').textContent,
+      expected:sfStudentAt(_sfActiveIndex).name||'空床',
+      activeMaterial:getComputedStyle(active.querySelector('.fd-front')).backgroundImage,
+      neighborMaterial:getComputedStyle(neighbor.querySelector('.fd-front')).backgroundImage,
+    };
+  });
+  assert.equal(liveSelection.cardIndex,liveSelection.index,'green selected folder updates before release');
+  assert.equal(liveSelection.activeCount,1);
+  assert.equal(liveSelection.summary,liveSelection.expected,'current resident summary updates during the drag');
+  assert.notEqual(liveSelection.activeMaterial,liveSelection.neighborMaterial,'live selected folder uses the green material');
+  await page.mouse.up();
   await page.waitForTimeout(950);
   assert.ok(await page.evaluate(()=>_sfActiveIndex>0));
   assert.ok(await page.evaluate(()=>Math.abs(_currentX+_sfActiveIndex*_cardWidth)<.5));
@@ -382,6 +410,7 @@ async function offline(){
   await context.setOffline(true);
   await page.reload({waitUntil:'domcontentloaded'});
   assert.ok(await page.evaluate(()=>typeof clearStudentData==='function' && typeof sfDissolve==='object' && typeof setup2DCarouselInteraction==='function'));
+  assert.equal(await page.evaluate(()=>sfPhoneticSearch.matches('合成巧玲','悄')),true,'same-sound name search remains available offline');
   assert.equal(await page.evaluate(()=>typeof THREE),'undefined','three.js is gone');
   console.log('Offline shell, versioned assets and particle-dissolve dependencies PASS');
   await browser.close();

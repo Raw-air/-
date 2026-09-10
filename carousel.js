@@ -160,6 +160,9 @@ function setup2DCarouselInteraction() {
 
   function paint() {
     const n = count();
+    // The selected file follows the folder that is visually crossing the centre,
+    // instead of waiting for the drag/wheel gesture to stop and snap.
+    if (n) _sfActiveIndex = Math.round(c);
     _currentX = -c * _cardWidth;
     sfSyncWindow(c);
     const now = performance.now();
@@ -225,8 +228,7 @@ function setup2DCarouselInteraction() {
       if (summaryName.textContent !== name) summaryName.textContent = name;
       if (summaryMeta.textContent !== meta) summaryMeta.textContent = meta;
     }
-    const index = Math.round(c);
-    if (index !== lastIndex) { haptic('light'); lastIndex = index; }
+    if (_sfActiveIndex !== lastIndex) { haptic('light'); lastIndex = _sfActiveIndex; }
   }
   window._updateContinuousScale = () => paint();
 

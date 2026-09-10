@@ -4464,17 +4464,21 @@ function onStudentFileSearch(query) {
 
   _sfSearchTimer = setTimeout(() => {
     const q = query.trim().toLowerCase();
-    _sfResults = state.students.filter(s => {
+    _sfResults = state.students.map((s, sourceIndex) => {
       const name = (s.name || '').toLowerCase();
       const room = (s.room || '').toLowerCase();
       const bed = (s.bed || '').toLowerCase();
       const studentId = (s.studentId || '').toLowerCase();
       const cls = (s.class || '').toLowerCase();
       const squad = (s.squad || '').toLowerCase();
-      return name.includes(q) || room.includes(q) || bed.includes(q) ||
-        studentId.includes(q) || cls.includes(q) || squad.includes(q) ||
-        (room + bed).includes(q);
-    });
+      const nameMatch = name.includes(q);
+      const detailMatch = room.includes(q) || bed.includes(q) || studentId.includes(q) ||
+        cls.includes(q) || squad.includes(q) || (room + bed).includes(q);
+      const phoneticMatch = !nameMatch && window.sfPhoneticSearch?.matches(name, q);
+      if (!nameMatch && !detailMatch && !phoneticMatch) return null;
+      // Keep literal name matches first, then room/bed/ID matches, then homophones.
+      return { student: s, rank: nameMatch ? 0 : detailMatch ? 1 : 2, sourceIndex };
+    }).filter(Boolean).sort((a, b) => a.rank - b.rank || a.sourceIndex - b.sourceIndex).map(result => result.student);
 
     if (mirror) mirror.style.display = 'none';
     if (scene) scene.classList.remove('is-searching');
@@ -4509,6 +4513,7 @@ function renderStudentFileCards(sweepIn = false) {
     track.innerHTML = `<div class="sf-empty-hint">
       <div style="font-size:48px; margin-bottom:12px;"><svg class="ui-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
       <div style="color:var(--dim); font-size:14px;">找不到符合的住宿生或床位</div>
+      <div style="color:var(--dim); font-size:12px; margin-top:8px; opacity:.8;">可試試同音字、房號或學號</div>
     </div>`;
     return;
   }
