@@ -1610,8 +1610,8 @@ function renderRollCall(skipAnimation = false) {
         <div class="student-info">
           <div class="student-bed" style="background:${getSquadColor(state.currentSquad)}">${s.bed}</div>
           <div>
-            <div class="student-name">${s.isEmpty ? '（空床）' : s.name}${s.isForeign ? ' <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>' : ''}</div>
-            <div class="student-meta">${s.class || ''} ${s.studentId || ''}</div>
+            <div class="student-name">${s.isEmpty ? '（空床）' : s.name}${!s.isEmpty && s.isForeign ? ' <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>' : ''}</div>
+            <div class="student-meta">${s.isEmpty ? '' : `${s.class || ''} ${s.studentId || ''}`}</div>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:6px">
@@ -2451,7 +2451,7 @@ function showPinDialog(squadId, callback, customTitle) {
  * 防止背景輪詢因為 eventual consistency 導致 UI 閃爍
  */
 function applyLocalStateToRoster(rosterStudents) {
-  if (!rosterStudents) return [];
+  if (!Array.isArray(rosterStudents)) return [];
   const now = Date.now();
 
   // 清理過期的 recentSyncs (超過 15 秒)
@@ -2459,7 +2459,13 @@ function applyLocalStateToRoster(rosterStudents) {
     if (now - state.recentSyncs[key].ts > 15000) delete state.recentSyncs[key];
   });
 
-  return rosterStudents.map(s => {
+  return rosterStudents.filter(s => s && typeof s === 'object').map(s => {
+    // 資料庫偶爾會出現「未勾空床，但姓名欄完全沒資料」的殘缺床位。
+    // 前端統一以姓名為住宿生的最低條件，避免這類資料可被點名或算入人數。
+    s.name = String(s.name == null ? '' : s.name).trim();
+    s.isEmpty = !!s.isEmpty || !s.name;
+    if (!s.attendance || typeof s.attendance !== 'object') s.attendance = {};
+
     // 1. 優先處理正在等待同步的變更 (Pending Changes)
     const pending = state.changes.find(c => c.pageId === s.id && c.date === state.currentDate);
     if (pending) {
@@ -4332,7 +4338,9 @@ window.autoSaveStudentFile = async function (elem) {
   const newClass = activeCard.querySelector('.sf-input-class').value.trim();
   const newRemarks = activeCard.querySelector('.sf-input-remarks').value.trim();
   const isForeign = activeCard.querySelector('.sf-chk-foreign').checked;
-  const isEmpty = activeCard.querySelector('.sf-chk-empty').checked;
+  const isEmpty = activeCard.querySelector('.sf-chk-empty').checked || !newName;
+  // 姓名是判定床位有人的必要條件；刪空姓名時自動切成空床。
+  activeCard.querySelector('.sf-chk-empty').checked = isEmpty;
 
   const btn = activeCard.querySelector('.sf-save-action-btn');
   let oldHtml = '';
@@ -4349,9 +4357,9 @@ window.autoSaveStudentFile = async function (elem) {
       pageId: studentObj.id,
       updateProfile: {
         name: isEmpty ? '' : newName,
-        class: newClass,
+        class: isEmpty ? '' : newClass,
         studentId: isEmpty ? '' : newId,
-        isForeign: isForeign
+        isForeign: isEmpty ? false : isForeign
       },
       markEmpty: isEmpty
     };
@@ -4365,10 +4373,10 @@ window.autoSaveStudentFile = async function (elem) {
     // Update Local Cache Reference
     studentObj.name = isEmpty ? '' : newName;
     studentObj.studentId = isEmpty ? '' : newId;
-    studentObj.squad = newClass;
-    studentObj.class = newClass;
+    studentObj.squad = isEmpty ? '' : newClass;
+    studentObj.class = isEmpty ? '' : newClass;
     studentObj.remarks = newRemarks;
-    studentObj.isForeign = isForeign;
+    studentObj.isForeign = isEmpty ? false : isForeign;
     studentObj.isEmpty = isEmpty;
     if (JSON.stringify(_sfDrafts.get(studentObj.id)) === beforeDraft) _sfDrafts.delete(studentObj.id);
 

@@ -10,6 +10,8 @@ const server=http.createServer((req,res)=>{
     res.setHeader('Content-Type',({'.js':'application/javascript','.css':'text/css','.html':'text/html','.svg':'image/svg+xml','.png':'image/png'})[path.extname(file)]||'application/octet-stream');res.end(b);});
 });
 const roster=Array.from({length:90},(_,i)=>({id:'test-'+i,name:'測試住宿生 '+i,studentId:'TEST'+i,class:'測試班',squad:'一單',room:String(101+Math.floor(i/4)*2),bed:String(i%4+1),attendance:{},remarks:'合成資料，不連線正式資料庫',isForeign:false,isEmpty:false}));
+// 模擬資料庫未勾「空床」，但姓名只有空白且還殘留班別/學號的異常資料。
+roster[89].name='   ';roster[89].studentId='STALE-ID';roster[89].class='殘留班別';
 async function run(engine,viewport){
   const browser=await engine.launch({headless:true});
   const context=await browser.newContext({viewport,deviceScaleFactor:2,serviceWorkers:'block',hasTouch:true});
@@ -38,6 +40,24 @@ async function run(engine,viewport){
   await page.addInitScript(()=>{window.__vibrations=[];Object.defineProperty(navigator,'vibrate',{value:p=>{window.__vibrations.push(p);return true;},configurable:true});});
   await page.goto('http://127.0.0.1:'+server.address().port);
   await page.waitForFunction(()=>typeof state!=='undefined'&&!state.loading);
+  const emptyBedChecks=await page.evaluate(()=>{
+    const student=state.students.find(s=>s.id==='test-89');
+    state.currentSquad='一單';renderRollCall(true);
+    const row=document.querySelector('.student-row[data-pid="test-89"]');
+    const before=state.changes.length;
+    toggleStatus('test-89');
+    return {
+      normalized:student.isEmpty&&student.name==='',
+      emptyClass:row.classList.contains('empty-bed'),
+      notClickable:!row.getAttribute('onclick'),
+      emptyLabel:row.querySelector('.student-name').textContent==='（空床）',
+      staleMetaHidden:row.querySelector('.student-meta').textContent==='',
+      noStatusButton:!row.querySelector('.status-badge')&&!!row.querySelector('.empty-tag'),
+      ignoredToggle:state.changes.length===before,
+      shouldAttend:document.getElementById('rc-stat-should').textContent
+    };
+  });
+  assert.deepEqual(emptyBedChecks,{normalized:true,emptyClass:true,notClickable:true,emptyLabel:true,staleMetaHidden:true,noStatusButton:true,ignoredToggle:true,shouldAttend:'89'});
   await page.evaluate(()=>navigateTo('settings'));
   await page.waitForTimeout(900);
   assert.equal(await page.locator('.liquid-nav button').count(),4);
@@ -288,7 +308,7 @@ async function run(engine,viewport){
   await page.evaluate(()=>window.openImportWizard());
   await page.waitForSelector('#imp-modal.visible',{timeout:4000});   // WebKit 忙碌時固定等 200ms 不夠
   await page.evaluate(()=>window._impClose());await page.waitForTimeout(200);
-  const impRows=[[1,'101','1','匯入班','S9001','新生甲','','0911000001','','台北市'],[2,'101','2','','','','','','',''],[3,'101','3','測試班','TEST2','測試住宿生 2','','','',''],[4,'999','1','x','S9','無法比對','','','','']];
+  const impRows=[[1,'101','1','匯入班','S9001','新生甲','','0911000001','','台北市'],[2,'101','2','殘留班別','STALE-ID','','','','',''],[3,'101','3','測試班','TEST2','測試住宿生 2','','','',''],[4,'999','1','x','S9','無法比對','','','','']];
   const impMap={room:1,bed:2,class:3,studentId:4,name:5,phone:7,address:9};
   const impBefore=requests.filter(r=>r.path==='/api/attendance').length;
   const imp1=await page.evaluate(({rows,mapping})=>window._importRows(rows,mapping,{blankAsEmpty:false,noteContact:false,skipUnchanged:true}),{rows:impRows,mapping:impMap});

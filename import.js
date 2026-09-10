@@ -88,10 +88,9 @@
     return String(v).trim();
   }
 
-  // 沒有姓名也沒有學號就是空床；只填了班別 (例如「華語專班」保留床) 不算有人住
+  // 沒有姓名就不是有效住宿生；學號或班別的殘留值不能讓空床變成有人。
   function isBlankRow(row, mapping) {
-    const fields = ['name', 'studentId'];
-    return fields.every(f => mapping[f] < 0 || !cellStr(row[mapping[f]]));
+    return mapping.name < 0 || !cellStr(row[mapping.name]);
   }
 
   // ────────────────────────── 檔案解析 ──────────────────────────
