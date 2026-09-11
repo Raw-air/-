@@ -30,7 +30,7 @@ function setupNav(){
   const LENS_W=84,PAD=8;
   let index=0,lastIndex=-1,travelTimer=0,retryTimer=0,w=0,slot=0,suppressClick=false;
   const pageIndex=()=>{
-    const page=['home','summary','history','settings'].includes(currentPage)?currentPage:currentPage==='rollcall'?'home':'settings';
+    const page=['home','summary','history','settings'].includes(currentPage)?currentPage:currentPage==='rollcall'?'home':currentPage==='summary-detail'?'summary':'settings';
     return Math.max(0,items.findIndex(item=>item.dataset.page===page));
   };
   const xFor=i=>PAD+slot*(i+.5)-LENS_W/2;

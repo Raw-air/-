@@ -1260,6 +1260,8 @@ function initDevChangelog() {
 // ─── 導航 ───────────────────────────────────────────────────────────────────
 let currentPage = 'home';
 let isInitialHomeRender = true;
+let activeSummaryDetail = 'empty';
+let summaryScrollPosition = 0;
 
 // Liquid-glass navigation is defined in navigation.js.
 
@@ -1279,7 +1281,8 @@ function navigateTo(page) {
 
   // 立刻更新導覽列 & 按鈕狀態
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
+  const navPage = page === 'summary-detail' ? 'summary' : page;
+  const navItem = document.querySelector(`.nav-item[data-page="${navPage}"]`);
   if (navItem) navItem.classList.add('active');
   const backBtn = document.getElementById('back-btn');
   backBtn.style.display = (page === 'rollcall') ? 'flex' : 'none';
@@ -1307,6 +1310,9 @@ function navigateTo(page) {
       toEl.style.animation = `${enterAnim} 0.28s cubic-bezier(0.16, 1, 0.3, 1)`;
     }
     renderCurrentPage(true);
+    if (page === 'summary-detail') {
+      requestAnimationFrame(() => document.getElementById('summary-detail-title')?.focus({ preventScroll: true }));
+    }
   }
 
   if (fromEl && fromEl.classList.contains('active')) {
@@ -1322,6 +1328,7 @@ function renderCurrentPage(skipAnimation = false) {
     case 'home': renderHome(); break;
     case 'rollcall': renderRollCall(skipAnimation); break;
     case 'summary': renderSummary(); break;
+    case 'summary-detail': renderSummaryDetail(); break;
     case 'history': renderHistory(); break;
     case 'settings': renderSettings(); break;
     case 'resident-management': initResidentManagement(false); break;
@@ -2145,9 +2152,203 @@ function computeDailyStats(date) {
   return {
     totalBeds, totalEmpty, residents, rate, bedOffset,
     present: gPresent, leave: gLeave, absent: gAbsent,
-    shouldAttend: gShouldAttend, foreign: gForeignCount + foreignOffset,
+    shouldAttend: gShouldAttend, foreign: gForeignCount + foreignOffset, foreignOffset,
     squads,
   };
+}
+
+const SUMMARY_DETAIL_META = {
+  empty: {
+    title: '空床數明細',
+    description: '逐床列出被標記為空床的床位，並顯示設定中的修正值。',
+    label: '空床',
+  },
+  rate: {
+    title: '住宿率計算明細',
+    description: '住宿率以「住宿人數 ÷ 總床數」計算，住宿人數由總床數扣除空床數。',
+    label: '住宿率',
+  },
+  foreign: {
+    title: '外籍生明細',
+    description: '列出目前標記為外籍生、且不是空床的住宿生，並顯示設定修正值。',
+    label: '外籍生',
+  },
+  leave: {
+    title: '請假名單',
+    description: '列出選定日期狀態為「請假」或「特殊」的住宿生。',
+    label: '請假',
+  },
+  absent: {
+    title: '未請假名單',
+    description: '列出選定日期狀態為「未請假」的住宿生。',
+    label: '未請假',
+  },
+};
+
+function openSummaryDetail(kind) {
+  if (!SUMMARY_DETAIL_META[kind]) return;
+  if (currentPage === 'summary') summaryScrollPosition = window.scrollY;
+  activeSummaryDetail = kind;
+  haptic('light');
+  navigateTo('summary-detail');
+}
+
+function closeSummaryDetail() {
+  navigateTo('summary');
+  setTimeout(() => window.scrollTo({ top: summaryScrollPosition, behavior: 'auto' }), 190);
+}
+
+function summaryDetailNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function summaryDetailToday() {
+  return typeof getTodayAttendanceDate === 'function' ? getTodayAttendanceDate() : getTodayColumnName();
+}
+
+function summaryDetailIsToday(date) {
+  return typeof isTodayAttendanceDate === 'function' ? isTodayAttendanceDate(date) : date === getTodayColumnName();
+}
+
+function summaryDetailSquadOrder(squadId) {
+  const index = CONFIG.SQUADS.findIndex(sq => sq.id === squadId);
+  return index < 0 ? CONFIG.SQUADS.length : index;
+}
+
+function summaryDetailEntries(kind, date) {
+  const visible = state.students.filter(student => !student.hidden);
+  let entries = [];
+  if (kind === 'empty') entries = visible.filter(student => student.isEmpty);
+  if (kind === 'foreign') entries = visible.filter(student => !student.isEmpty && student.isForeign);
+  if (kind === 'leave') entries = visible.filter(student => {
+    if (student.isEmpty) return false;
+    const status = student.attendance[date] || '✓';
+    return status === '◎' || status === '△';
+  });
+  if (kind === 'absent') entries = visible.filter(student => !student.isEmpty && (student.attendance[date] || '✓') === '✘');
+
+  return entries.slice().sort((a, b) => {
+    const squadDiff = summaryDetailSquadOrder(a.squad) - summaryDetailSquadOrder(b.squad);
+    if (squadDiff) return squadDiff;
+    return String(a.room || '').localeCompare(String(b.room || ''), 'zh-Hant', { numeric: true }) ||
+      String(a.bed || '').localeCompare(String(b.bed || ''), 'zh-Hant', { numeric: true });
+  });
+}
+
+function summaryDetailCorrection(kind, stats) {
+  if (kind === 'empty') return summaryDetailNumber(stats.bedOffset);
+  if (kind === 'foreign') {
+    if (stats.foreignOffset !== undefined) return summaryDetailNumber(stats.foreignOffset);
+    const squadTotal = (stats.squads || []).reduce((sum, squad) => sum + summaryDetailNumber(squad.foreign), 0);
+    return summaryDetailNumber(stats.foreign) - squadTotal;
+  }
+  return 0;
+}
+
+function summaryDetailExpectedTotal(kind, stats) {
+  return summaryDetailNumber({
+    empty: stats.totalEmpty,
+    foreign: stats.foreign,
+    leave: stats.leave,
+    absent: stats.absent,
+  }[kind]);
+}
+
+function summaryDetailStatus(kind, student) {
+  if (kind === 'empty') return { text: '空床', className: 'empty' };
+  if (kind === 'foreign') return { text: '外籍生', className: 'foreign' };
+  const value = student.attendance[state.currentDate] || '✓';
+  if (value === '△') return { text: '特殊', className: 'special' };
+  if (kind === 'leave') return { text: '請假', className: 'leave' };
+  return { text: '未請假', className: 'absent' };
+}
+
+function summaryDetailRow(kind, student) {
+  const status = summaryDetailStatus(kind, student);
+  const roomBed = `${sfEsc(student.room || '未填房號')} ${sfEsc(student.bed || '未填')}床`;
+  const primary = kind === 'empty' ? roomBed : sfEsc(student.name || '未填姓名');
+  const details = kind === 'empty'
+    ? sfEsc(student.squad || '未分隊')
+    : [roomBed, student.class, student.studentId].filter(Boolean).map(sfEsc).join(' ・ ');
+  return `<li class="summary-detail-row">
+    <div class="summary-detail-row-main">
+      <strong>${primary}</strong>
+      <span>${details || '無其他資料'}</span>
+    </div>
+    <span class="summary-detail-status ${status.className}">${status.text}</span>
+  </li>`;
+}
+
+function summaryDetailGroups(kind, entries) {
+  if (!entries.length) {
+    return `<div class="summary-detail-empty">
+      <svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+      <strong>目前沒有符合的名單</strong>
+      <span>這裡沒有可列出的資料。</span>
+    </div>`;
+  }
+  const groupIds = [...new Set(entries.map(student => student.squad || '未分隊'))];
+  return groupIds.map(squadId => {
+    const members = entries.filter(student => (student.squad || '未分隊') === squadId);
+    return `<section class="summary-detail-group">
+      <div class="summary-detail-group-title"><h2>${sfEsc(squadId)}</h2><span>${members.length} 筆</span></div>
+      <ul>${members.map(student => summaryDetailRow(kind, student)).join('')}</ul>
+    </section>`;
+  }).join('');
+}
+
+function renderSummaryRateDetail(stats) {
+  const displayedRate = summaryDetailNumber(stats.rate);
+  return `<section class="summary-formula-card" aria-label="住宿率公式">
+    <div class="summary-formula-result"><span>住宿率</span><strong>${displayedRate}%</strong></div>
+    <div class="summary-formula-expression">${stats.residents} ÷ ${stats.totalBeds} × 100% = ${displayedRate}%</div>
+    <div class="summary-formula-rows">
+      <div><span>總床數</span><b>${stats.totalBeds}</b></div>
+      <div><span>減：空床數</span><b>− ${stats.totalEmpty}</b></div>
+      <div class="result"><span>住宿人數</span><b>${stats.residents}</b></div>
+    </div>
+    <button type="button" class="summary-detail-related" onclick="openSummaryDetail('empty')">查看空床數明細 <span aria-hidden="true">›</span></button>
+  </section>`;
+}
+
+function renderSummaryDetail() {
+  const kind = SUMMARY_DETAIL_META[activeSummaryDetail] ? activeSummaryDetail : 'empty';
+  const meta = SUMMARY_DETAIL_META[kind];
+  const date = state.currentDate || summaryDetailToday();
+  const stats = computeDailyStats(date);
+  const isLocked = !summaryDetailIsToday(date) && !!state.config['snapshot_' + date];
+  document.getElementById('summary-detail-date').textContent = `${date}${isLocked ? ' ・ 已鎖定快照' : ''}`;
+  document.getElementById('summary-detail-title').textContent = meta.title;
+  document.getElementById('summary-detail-description').textContent = meta.description;
+
+  const content = document.getElementById('summary-detail-content');
+  if (kind === 'rate') {
+    content.innerHTML = renderSummaryRateDetail(stats);
+    return;
+  }
+
+  const entries = summaryDetailEntries(kind, date);
+  const expectedTotal = summaryDetailExpectedTotal(kind, stats);
+  const correction = summaryDetailCorrection(kind, stats);
+  const snapshotDifference = expectedTotal - correction - entries.length;
+  const correctionLabel = kind === 'empty' ? '空床修正值' : '外籍生修正值';
+  const calculationRows = [
+    `<div><span>目前可查名單</span><b>${entries.length}</b></div>`,
+    correction !== 0 ? `<div><span>${correctionLabel}</span><b>${correction > 0 ? '+' : ''}${correction}</b></div>` : '',
+    snapshotDifference !== 0 ? `<div class="snapshot-difference"><span>歷史快照名單差額</span><b>${snapshotDifference > 0 ? '+' : ''}${snapshotDifference}</b></div>` : '',
+    `<div class="result"><span>${meta.label}合計</span><b>${expectedTotal}</b></div>`,
+  ].join('');
+  const notice = snapshotDifference !== 0
+    ? `<div class="summary-detail-notice"><strong>為什麼有差額？</strong><span>這一天的總數已鎖定，但住宿生資料之後曾變動；差額用來讓舊快照總數保持一致。</span></div>`
+    : '';
+  content.innerHTML = `<section class="summary-calculation-card" aria-label="${meta.label}加總方式">
+      <div class="summary-calculation-heading"><span>加總方式</span><strong>${expectedTotal}</strong></div>
+      <div class="summary-formula-rows">${calculationRows}</div>
+    </section>
+    ${notice}
+    <div class="summary-detail-list-heading"><h2>逐筆明細</h2><span>${entries.length} 筆名單</span></div>
+    ${summaryDetailGroups(kind, entries)}`;
 }
 
 function renderSummary() {

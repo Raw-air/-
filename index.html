@@ -10,10 +10,10 @@
   <meta name="theme-color" content="#151518">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=112">
-  <link rel="stylesheet" href="motion.css?v=112">
-  <link rel="stylesheet" href="folder.css?v=112">
-  <link rel="stylesheet" href="liquid-nav.css?v=112">
+  <link rel="stylesheet" href="style.css?v=113">
+  <link rel="stylesheet" href="motion.css?v=113">
+  <link rel="stylesheet" href="folder.css?v=113">
+  <link rel="stylesheet" href="liquid-nav.css?v=113">
   <link rel="manifest" href="manifest.json?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=2">
   <script defer src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -449,10 +449,11 @@
         <div class="big-stat-value" id="total-beds">0</div>
         <div class="big-stat-label">總床數</div>
       </div>
-      <div class="big-stat">
+      <button type="button" class="big-stat summary-stat-link" onclick="openSummaryDetail('empty')" aria-label="查看空床數計算明細">
         <div class="big-stat-value" id="total-empty">0</div>
         <div class="big-stat-label">空床數</div>
-      </div>
+        <span class="summary-stat-hint" aria-hidden="true">查看明細 <b>›</b></span>
+      </button>
       <div class="big-stat">
         <div class="big-stat-value" id="total-residents">0</div>
         <div class="big-stat-label">住宿人數</div>
@@ -461,15 +462,15 @@
 
     <!-- 4-5: 外籍生 / 住宿率 -->
     <div class="summary-row-2">
-      <div class="sm-stat"><span><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg> 外籍生</span><b id="total-foreign">0</b></div>
-      <div class="sm-stat accent"><span><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg> 住宿率</span><b id="total-rate">0%</b></div>
+      <button type="button" class="sm-stat summary-stat-link" onclick="openSummaryDetail('foreign')" aria-label="查看外籍生明細"><span><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg> 外籍生</span><b id="total-foreign">0</b><span class="summary-stat-hint" aria-hidden="true">明細 ›</span></button>
+      <button type="button" class="sm-stat accent summary-stat-link" onclick="openSummaryDetail('rate')" aria-label="查看住宿率計算明細"><span><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg> 住宿率</span><b id="total-rate">0%</b><span class="summary-stat-hint" aria-hidden="true">計算 ›</span></button>
     </div>
 
     <!-- 6-8: 實到 / 請假 / 未請假 -->
     <div class="summary-row-3">
       <div class="sm-stat green"><span>實到</span><b id="total-present">0</b></div>
-      <div class="sm-stat yellow"><span>請假</span><b id="total-leave">0</b></div>
-      <div class="sm-stat red"><span>未請假</span><b id="total-absent">0</b></div>
+      <button type="button" class="sm-stat yellow summary-stat-link" onclick="openSummaryDetail('leave')" aria-label="查看請假名單"><span>請假</span><b id="total-leave">0</b><span class="summary-stat-hint" aria-hidden="true">名單 ›</span></button>
+      <button type="button" class="sm-stat red summary-stat-link" onclick="openSummaryDetail('absent')" aria-label="查看未請假名單"><span>未請假</span><b id="total-absent">0</b><span class="summary-stat-hint" aria-hidden="true">名單 ›</span></button>
     </div>
 
     <!-- 各中隊 -->
@@ -488,6 +489,20 @@
         <img src="./Lp/ICON/RESET.svg" style="width:18px;height:18px;vertical-align:middle;margin-right:6px;">重新整理
       </button>
     </div>
+  </div>
+
+  <!-- ═══════════ 每日總表明細 ═══════════ -->
+  <div id="page-summary-detail" class="page">
+    <header class="summary-detail-header">
+      <button type="button" class="summary-detail-back" onclick="closeSummaryDetail()" aria-label="返回每日總表">
+        <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        返回總表
+      </button>
+      <p id="summary-detail-date" class="summary-detail-date"></p>
+      <h1 id="summary-detail-title" tabindex="-1">明細</h1>
+      <p id="summary-detail-description" class="summary-detail-description"></p>
+    </header>
+    <main id="summary-detail-content" class="summary-detail-content" aria-live="polite"></main>
   </div>
 
   <!-- ═══════════ 工具與選項 ═══════════ -->
@@ -1368,15 +1383,15 @@
     <button type="button" class="nav-item" data-page="settings"><span class="nav-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-label">設定</span></button>
   </nav>
 
-  <script src="config.js?v=112"></script>
-  <script src="api.js?v=112"></script>
-  <script src="phonetic-search.js?v=112"></script>
-  <script src="app.js?v=112"></script>
-  <script src="import.js?v=112"></script>
-  <script src="theme.js?v=112"></script>
-  <script src="carousel.js?v=112"></script>
-  <script src="dissolve.js?v=112"></script>
-  <script src="navigation.js?v=112"></script>
+  <script src="config.js?v=113"></script>
+  <script src="api.js?v=113"></script>
+  <script src="phonetic-search.js?v=113"></script>
+  <script src="app.js?v=113"></script>
+  <script src="import.js?v=113"></script>
+  <script src="theme.js?v=113"></script>
+  <script src="carousel.js?v=113"></script>
+  <script src="dissolve.js?v=113"></script>
+  <script src="navigation.js?v=113"></script>
 
   <!-- 幹部工作手冊 Modal -->
   <div id="duty-manual-modal" class="modal-overlay">

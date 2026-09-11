@@ -58,6 +58,41 @@ async function run(engine,viewport){
     };
   });
   assert.deepEqual(emptyBedChecks,{normalized:true,emptyClass:true,notClickable:true,emptyLabel:true,staleMetaHidden:true,noStatusButton:true,ignoredToggle:true,shouldAttend:'89'});
+  await page.evaluate(()=>{
+    const date=state.currentDate||getTodayColumnName();
+    state.currentDate=date;
+    state.config.total_beds='90';
+    state.config.bed_offset='2';
+    state.config.foreign_offset='1';
+    state.students[0].isForeign=true;
+    state.students[1].attendance[date]='◎';
+    state.students[2].attendance[date]='✘';
+    navigateTo('summary');
+  });
+  await page.waitForTimeout(250);
+  assert.equal(await page.locator('#page-summary .summary-stat-link').count(),5);
+  assert.equal(await page.locator('#total-empty').innerText(),'3');
+  for(const [kind,title,needle] of [
+    ['empty','空床數明細','空床修正值'],
+    ['foreign','外籍生明細','測試住宿生 0'],
+    ['leave','請假名單','測試住宿生 1'],
+    ['absent','未請假名單','測試住宿生 2'],
+    ['rate','住宿率計算明細','87 ÷ 90 × 100% = 96.7%']
+  ]){
+    await page.evaluate(kind=>openSummaryDetail(kind),kind);
+    await page.waitForTimeout(220);
+    assert.equal(await page.locator('#summary-detail-title').innerText(),title);
+    assert.ok((await page.locator('#summary-detail-content').innerText()).includes(needle));
+    assert.equal(await page.locator('.liquid-nav [aria-current="page"]').getAttribute('data-page'),'summary');
+  }
+  await page.evaluate(()=>{
+    const date=state.currentDate||getTodayColumnName();
+    state.config.bed_offset='0';
+    state.config.foreign_offset='0';
+    state.students[0].isForeign=false;
+    state.students[1].attendance[date]='✓';
+    state.students[2].attendance[date]='✓';
+  });
   await page.evaluate(()=>navigateTo('settings'));
   await page.waitForTimeout(900);
   assert.equal(await page.locator('.liquid-nav button').count(),4);
