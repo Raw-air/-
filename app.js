@@ -559,7 +559,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     applyStoredPrefs();
 
-    state.currentDate = getTodayColumnName();
+    state.currentDate = getTodayAttendanceDate();
     setupNav();
     setupPinDialog();
     applyNavIcons();
@@ -593,7 +593,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           const newConfirms = data.confirms ? data.confirms.split(',').filter(Boolean) : [];
           if (newConfirms.join(',') !== state.confirmedSquads.join(',')) {
             state.confirmedSquads = newConfirms;
-            const today = getTodayColumnName();
+            const today = getTodayAttendanceDate();
             state.config['confirm_' + today] = data.confirms || '';
             // 僅重新渲染，不需要 loadData
             if (currentPage === 'summary') renderSummary();
@@ -612,10 +612,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             ]);
             state.students = applyLocalStateToRoster(roster.students || []);
             state.dateColumns = roster.dateColumns || [];
+            state.currentDate = resolveAttendanceDate(state.currentDate || localTodayISO());
             state.config = config || {};
             applyRoomRules();
-            const today = getTodayColumnName();
-            const confVal = state.config['confirm_' + today];
+            const today = getTodayAttendanceDate();
+            const confVal = state.config['confirm_' + today] || state.config['confirm_' + getTodayColumnName()];
             if (confVal) state.confirmedSquads = confVal.split(',').filter(Boolean);
             renderCurrentPage(true);
           } catch (e) { console.warn('[Poll] 背景刷新失敗', e); }
@@ -749,6 +750,7 @@ async function loadData() {
 
     state.students = applyLocalStateToRoster(roster.students || []);
     state.dateColumns = roster.dateColumns || [];
+    state.currentDate = resolveAttendanceDate(state.currentDate || localTodayISO());
     state.config = config || {};
     state.changelogs = changelogs || [];
 
@@ -767,8 +769,8 @@ async function loadData() {
     // 套用全域背景影片設定
     loadGlobalBgVideo();
 
-    const today = getTodayColumnName();
-    const confVal = state.config['confirm_' + today];
+    const today = getTodayAttendanceDate();
+    const confVal = state.config['confirm_' + today] || state.config['confirm_' + getTodayColumnName()];
     if (confVal) state.confirmedSquads = confVal.split(',').filter(Boolean);
     else state.confirmedSquads = [];
 
@@ -1488,13 +1490,13 @@ function enterSquad(squadId) {
   if (pin && pin !== '0000') {
     showPinDialog(squadId, () => {
       state.currentSquad = squadId;
-      state.currentDate = getTodayColumnName();
+      state.currentDate = getTodayAttendanceDate();
       state.changes = [];
       navigateTo('rollcall');
     });
   } else {
     state.currentSquad = squadId;
-    state.currentDate = getTodayColumnName();
+    state.currentDate = getTodayAttendanceDate();
     state.changes = [];
     navigateTo('rollcall');
   }
@@ -1546,15 +1548,15 @@ function closeDatePicker() {
 function renderDatePicker() {
   document.getElementById('rc-date-input').value = dateColumnToISO(state.currentDate) || localTodayISO();
   document.getElementById('rc-date-notice').textContent = state.dateColumns.includes(state.currentDate) ? '可自行選擇任何年月日；下方為已有資料的日期。' : '此日期尚無紀錄。新增日期需後端支援，請確認同步成功後再離開。';
-  const today = getTodayColumnName();
   const list = document.getElementById('date-picker-list');
-  // 倒序排列：最新的在最上面
-  const dates = state.dateColumns.filter(d => dateColumnToISO(d)).sort((a,b) => dateColumnToISO(b).localeCompare(dateColumnToISO(a)));
+  // 今天即使尚無後端欄位也要顯示，避免快速選單停在舊學期最後一天。
+  const dates = getNavigableAttendanceDates().slice().reverse();
   list.innerHTML = dates.map(d => {
     const isActive = d === state.currentDate;
-    const isToday = d === today;
+    const isToday = isTodayAttendanceDate(d);
+    const isAvailable = state.dateColumns.includes(d);
     return `<div class="date-item${isActive ? ' active' : ''}${isToday ? ' today-marker' : ''}"
-                 onclick="selectRollCallDate('${d}')">${formatExportDate(dateColumnToISO(d))}</div>`;
+                 onclick="selectRollCallDate('${d}')">${formatExportDate(dateColumnToISO(d))}${isToday ? ' · 今天' : ''}${!isAvailable ? ' · 尚無資料' : ''}</div>`;
   }).join('');
   // 自動捲到選中的日期
   setTimeout(() => {
@@ -1566,7 +1568,7 @@ function renderDatePicker() {
 function selectRollCallDate(date) {
   const iso = dateColumnToISO(date);
   if (!iso) { showToast('請選擇有效的年月日', 'error'); return; }
-  state.currentDate = getExportColumnEntries().find(e => e.iso === iso)?.column || iso;
+  state.currentDate = resolveAttendanceDate(iso);
   if (!state.dateColumns.includes(state.currentDate)) showToast('此日期尚無紀錄；請確認點名同步成功後再離開。', 'info');
   closeDatePicker();
   renderRollCall(true); // 切換日期時也跳過動畫防止殘影
@@ -1739,7 +1741,7 @@ function updateRollCallStats(skipAnimation = false) {
   animateNumber(document.getElementById('rc-stat-absent'), a, skipAnimation);
 
   const confirmBtn = document.getElementById('rc-confirm-btn');
-  if (state.currentDate === getTodayColumnName()) {
+  if (isTodayAttendanceDate(state.currentDate)) {
     confirmBtn.style.display = 'flex';
     const isConfirmed = state.confirmedSquads.includes(state.currentSquad);
     confirmBtn.className = 'rc-confirm-action' + (isConfirmed ? ' done' : '');
@@ -1771,7 +1773,7 @@ async function toggleSquadConfirm() {
     targetSquads = [...state.confirmedSquads, sq];
   }
 
-  const today = getTodayColumnName();
+  const today = getTodayAttendanceDate();
   try {
     // 儲存到 Notion (系統全域共用)，需等候完成才改變本地狀態
     await window._api.setConfig({ ['confirm_' + today]: targetSquads.join(',') });
@@ -2085,8 +2087,7 @@ function closeModal(id) {
  * 計算某日的全域統計資料（一個函數，renderSummary 和 copySummary 共用）
  */
 function computeDailyStats(date) {
-  const todayStr = getTodayColumnName();
-  if (date !== todayStr) {
+  if (!isTodayAttendanceDate(date)) {
     const snap = state.config['snapshot_' + date];
     if (snap) {
       try {
@@ -2352,11 +2353,10 @@ function renderSummaryDetail() {
 }
 
 function renderSummary() {
-  const date = state.currentDate || getTodayColumnName();
-  const todayStr = getTodayColumnName();
+  const date = state.currentDate || getTodayAttendanceDate();
   const st = computeDailyStats(date);
 
-  if (date !== todayStr && state.config['snapshot_' + date]) {
+  if (!isTodayAttendanceDate(date) && state.config['snapshot_' + date]) {
     document.getElementById('summary-date').textContent = date + ' (已鎖定)';
   } else {
     document.getElementById('summary-date').textContent = date;
@@ -2364,7 +2364,7 @@ function renderSummary() {
 
   // 核心功能：當觀看的是「今天」的總表時，背景自動紀錄快照。
   // 這確保 11 點鐘他們拉開來看數字回報時，系統就會自動存下那瞬間的結果。
-  if (date === todayStr) {
+  if (isTodayAttendanceDate(date)) {
     const snapshotStr = JSON.stringify(st);
     if (state.config['snapshot_' + date] !== snapshotStr) {
       state.config['snapshot_' + date] = snapshotStr;
@@ -2390,7 +2390,7 @@ function renderSummary() {
   // 各中隊
   const grid = document.getElementById('summary-squad-grid');
   grid.innerHTML = st.squads.map(sq => {
-    const isConfirmed = state.confirmedSquads.includes(sq.id) && date === getTodayColumnName();
+    const isConfirmed = state.confirmedSquads.includes(sq.id) && isTodayAttendanceDate(date);
     const confHtml = isConfirmed ? `<div class="sqd-conf-badge-inline"><span class="conf-ring-sm">✓</span>已回報</div>` : '';
     return `
     <div class="sqd-card" style="--sq-c:${sq.color}">
@@ -2415,10 +2415,12 @@ function renderSummary() {
 }
 
 function changeSummaryDate(delta) {
-  const idx = state.dateColumns.indexOf(state.currentDate);
+  const dates = getNavigableAttendanceDates();
+  const currentISO = dateColumnToISO(state.currentDate);
+  const idx = dates.findIndex(date => dateColumnToISO(date) === currentISO);
   const ni = idx + delta;
-  if (ni >= 0 && ni < state.dateColumns.length) {
-    state.currentDate = state.dateColumns[ni];
+  if (idx >= 0 && ni >= 0 && ni < dates.length) {
+    state.currentDate = dates[ni];
     renderSummary();
   }
 }
@@ -2450,9 +2452,10 @@ function renderHistory() {
   let html = '<div class="cal-header">日</div><div class="cal-header">一</div><div class="cal-header">二</div><div class="cal-header">三</div><div class="cal-header">四</div><div class="cal-header">五</div><div class="cal-header">六</div>';
   for (let i = 0; i < firstDay; i++) html += '<div class="cal-cell empty"></div>';
   for (let d = 1; d <= days; d++) {
-    const col = `${month + 1}月${d}日`;
+    const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const col = resolveAttendanceDate(iso);
     const has = state.dateColumns.includes(col);
-    const today = col === getTodayColumnName();
+    const today = iso === localTodayISO();
     let badge = 0;
     if (has) for (const s of state.students) if (!s.isEmpty && s.attendance[col] && s.attendance[col] !== '✓') badge++;
     html += `<div class="cal-cell ${has ? 'has-data' : ''} ${today ? 'today' : ''}" ${has ? `onclick="showDateDetail('${col}')"` : ''}><div class="cal-day">${d}</div>${has && badge ? `<div class="cal-badge">${badge}</div>` : ''}</div>`;
@@ -2941,6 +2944,30 @@ function localTodayISO() {
   return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
 }
 
+// 後端舊欄位只有月日；只在它真的對應到今天時才沿用，
+// 否則使用完整 ISO 日期，避免跨學期後被解讀成去年。
+function resolveAttendanceDate(value) {
+  const iso = dateColumnToISO(value);
+  if (!iso) return '';
+  return getExportColumnEntries().find(entry => entry.iso === iso)?.column || iso;
+}
+
+function getTodayAttendanceDate() {
+  return resolveAttendanceDate(localTodayISO()) || localTodayISO();
+}
+
+function isTodayAttendanceDate(value) {
+  return dateColumnToISO(value) === localTodayISO();
+}
+
+function getNavigableAttendanceDates() {
+  const byISO = new Map();
+  for (const entry of getExportColumnEntries()) byISO.set(entry.iso, entry.column);
+  const today = getTodayAttendanceDate();
+  byISO.set(localTodayISO(), today);
+  return [...byISO.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, column]) => column);
+}
+
 function parseISODate(value) {
   const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return null;
@@ -2984,9 +3011,10 @@ function getAvailableExportRange() {
 
 function getConfiguredExportRange() {
   const available = getAvailableExportRange();
-  let start = parseISODate(state.config[EXPORT_START_KEY]) ? state.config[EXPORT_START_KEY] : available.start;
-  let end = parseISODate(state.config[EXPORT_END_KEY]) ? state.config[EXPORT_END_KEY] : available.end;
-  return start && end && start <= end ? { start, end } : { start: available.start || localTodayISO(), end: available.end || localTodayISO() };
+  const today = localTodayISO();
+  const start = parseISODate(state.config[EXPORT_START_KEY]) ? state.config[EXPORT_START_KEY] : (available.start || today);
+  const end = parseISODate(state.config[EXPORT_END_KEY]) ? state.config[EXPORT_END_KEY] : today;
+  return start && end && start <= end ? { start, end } : { start: today, end: today };
 }
 
 function setExportInputBounds(input, available) {
@@ -3609,7 +3637,7 @@ function openCounterLeaveModal() {
   document.getElementById('cl-search').value = '';
   document.getElementById('cl-handler').value = '';
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = localTodayISO();
   document.getElementById('cl-start-date').value = today;
   document.getElementById('cl-end-date').value = today;
 
@@ -3712,24 +3740,11 @@ async function submitCounterLeave() {
   showLoading(true);
 
   try {
-    // 1. 找出區間對應的 state.dateColumns (點名表的欄位)
-    // 我們需要將 Date string "YYYY-MM-DD" 與 dateColumns "X月Y日" 配對
+    // 1. 以完整年月日配對點名欄位，同時相容舊式的 "X月Y日"。
     const updates = [];
-    const localStart = new Date(startDateStr);
-    const localEnd = new Date(endDateStr);
-
-    // 產生期間內所有日期的 X月Y日
-    const targetDates = [];
-    let cur = new Date(startDateStr);
-    while (cur <= localEnd) {
-      const m = cur.getMonth() + 1;
-      const d = cur.getDate();
-      targetDates.push(`${m}月${d}日`);
-      cur.setDate(cur.getDate() + 1);
-    }
-
-    // 篩選出總表確實存在的欄位
-    const matchedCols = state.dateColumns.filter(c => targetDates.includes(c));
+    const matchedCols = getExportColumnEntries()
+      .filter(entry => entry.iso >= startDateStr && entry.iso <= endDateStr)
+      .map(entry => entry.column);
     if (matchedCols.length > 0) {
       const pageUpdate = { pageId: student.id, dates: {} };
       for (const c of matchedCols) {

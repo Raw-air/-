@@ -5,16 +5,31 @@ async function run(engine){
  const browser=await engine.launch();try{
   const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
-  const students=[{id:'synthetic-date-test',name:'日期測試',room:'101',bed:'1',squad:'一單',class:'測試班',studentId:'TEST',attendance:{'9月9日':'◎','2027-09-09':'✘'}}];
+  const students=[{id:'synthetic-date-test',name:'日期測試',room:'101',bed:'1',squad:'一單',class:'測試班',studentId:'TEST',attendance:{'6月26日':'✓','9月9日':'◎','2027-09-09':'✘'}}];
   await page.route('**/*',route=>{
     const u=new URL(route.request().url());
     if(u.hostname==='dates.test'){const file=path.join(root,u.pathname==='/'?'index.html':u.pathname);return fs.existsSync(file)?route.fulfill({path:file}):route.fulfill({status:404,body:''});}
-    if(u.pathname==='/api/roster')return route.fulfill({json:{students,dateColumns:['9月9日','2027-09-09']}});
+    if(u.pathname==='/api/roster')return route.fulfill({json:{students,dateColumns:['6月26日','9月9日','2027-09-09']}});
     if(u.pathname==='/api/config')return route.fulfill({json:{}});
     if(u.pathname.includes('marked'))return route.fulfill({body:'window.marked={parse:s=>s}',contentType:'application/javascript'});
     return route.fulfill({json:{}});
   });
   await page.goto('https://dates.test/');await page.waitForFunction(()=>!state.loading);
+  const defaults=await page.evaluate(()=>{
+    state.currentSquad='一單';renderRollCall(true);renderDatePicker();initializeExportDateInputs();openCounterLeaveModal();
+    const today=localTodayISO();
+    const result={today,currentDate:state.currentDate,rollcall:document.getElementById('rc-date-input').value,quickDates:[...document.querySelectorAll('#date-picker-list .date-item')].map(e=>e.textContent),exportEnd:document.getElementById('export-end-date').value,counter:[document.getElementById('cl-start-date').value,document.getElementById('cl-end-date').value]};closeModal('counter-leave-modal');
+    state.currentDate=getTodayAttendanceDate();changeSummaryDate(-1);result.summaryPrevious=state.currentDate;
+    const originalDates=state.dateColumns;state.dateColumns=['6月26日'];state.currentDate=getTodayAttendanceDate();changeSummaryDate(-1);result.staleRosterPrevious=state.currentDate;state.dateColumns=originalDates;
+    return result;
+  });
+  assert.equal(defaults.currentDate,defaults.today,'today outside the old semester must keep its full year');
+  assert.equal(defaults.rollcall,defaults.today,'roll-call date defaults to local today');
+  assert.ok(defaults.quickDates.some(label=>label.includes('今天')),'quick date list includes today after the old roster ends');
+  assert.equal(defaults.exportEnd,defaults.today,'unsaved export end defaults to today instead of the stale final column');
+  assert.deepEqual(defaults.counter,[defaults.today,defaults.today],'counter leave uses local today');
+  assert.equal(defaults.summaryPrevious,'9月9日','summary uses chronological order instead of backend property order');
+  assert.equal(defaults.staleRosterPrevious,'6月26日','summary can move from today to a stale roster final date');
   await page.evaluate(()=>{navigateTo('rollcall');state.currentSquad='一單';state.currentDate='9月9日';renderRollCall(true);});
   await page.locator('#rc-date-btn').click();
   await page.keyboard.press('Escape');
