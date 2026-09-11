@@ -1532,6 +1532,7 @@ function toggleDatePicker() {
     renderDatePicker();
     panel.classList.add('open');
     btn.classList.add('open');
+    document.querySelectorAll('#submit-btn, .fab-empty-bed').forEach(el => el.classList.add('date-picker-hidden'));
     btn.setAttribute('aria-expanded', 'true');
     const input = document.getElementById('rc-date-input');
     input.focus();
@@ -1542,12 +1543,13 @@ function toggleDatePicker() {
 function closeDatePicker() {
   document.getElementById('date-picker-panel')?.classList.remove('open');
   document.getElementById('rc-date-btn')?.classList.remove('open');
+  document.querySelectorAll('#submit-btn, .fab-empty-bed').forEach(el => el.classList.remove('date-picker-hidden'));
   document.getElementById('rc-date-btn')?.setAttribute('aria-expanded', 'false');
 }
 
 function renderDatePicker() {
   document.getElementById('rc-date-input').value = dateColumnToISO(state.currentDate) || localTodayISO();
-  document.getElementById('rc-date-notice').textContent = state.dateColumns.includes(state.currentDate) ? '可自行選擇任何年月日；下方為已有資料的日期。' : '此日期尚無紀錄。新增日期需後端支援，請確認同步成功後再離開。';
+  document.getElementById('rc-date-notice').textContent = state.dateColumns.includes(state.currentDate) ? '可自行選擇任何年月日；下方為本學期可選日期。' : '此日期尚未點名；第一次變更狀態後會嘗試建立紀錄。';
   const list = document.getElementById('date-picker-list');
   // 今天即使尚無後端欄位也要顯示，避免快速選單停在舊學期最後一天。
   const dates = getNavigableAttendanceDates().slice().reverse();
@@ -1556,7 +1558,7 @@ function renderDatePicker() {
     const isToday = isTodayAttendanceDate(d);
     const isAvailable = state.dateColumns.includes(d);
     return `<div class="date-item${isActive ? ' active' : ''}${isToday ? ' today-marker' : ''}"
-                 onclick="selectRollCallDate('${d}')">${formatExportDate(dateColumnToISO(d))}${isToday ? ' · 今天' : ''}${!isAvailable ? ' · 尚無資料' : ''}</div>`;
+                 onclick="selectRollCallDate('${d}')">${formatExportDate(dateColumnToISO(d))}${isToday ? ' · 今天' : ''}${!isAvailable ? ' · 尚未點名' : ''}</div>`;
   }).join('');
   // 自動捲到選中的日期
   setTimeout(() => {
@@ -1569,7 +1571,7 @@ function selectRollCallDate(date) {
   const iso = dateColumnToISO(date);
   if (!iso) { showToast('請選擇有效的年月日', 'error'); return; }
   state.currentDate = resolveAttendanceDate(iso);
-  if (!state.dateColumns.includes(state.currentDate)) showToast('此日期尚無紀錄；請確認點名同步成功後再離開。', 'info');
+  if (!state.dateColumns.includes(state.currentDate)) showToast('此日期尚未點名；第一次變更狀態後會嘗試建立紀錄。', 'info');
   closeDatePicker();
   renderRollCall(true); // 切換日期時也跳過動畫防止殘影
 }
@@ -1592,11 +1594,11 @@ function renderRollCall(skipAnimation = false) {
   document.getElementById('rc-squad-name').textContent = state.currentSquad;
   document.getElementById('rc-date').textContent = formatExportDate(dateColumnToISO(state.currentDate)) || state.currentDate;
   const unavailable = !state.dateColumns.includes(state.currentDate);
-  document.getElementById('rc-date-notice').textContent = unavailable ? '此日期尚無紀錄。新增日期需後端支援，請確認同步成功後再離開。' : '';
+  document.getElementById('rc-date-notice').textContent = unavailable ? '此日期尚未點名；第一次變更狀態後會嘗試建立紀錄。' : '';
 
   // 更新提交按鈕顯示目前日期
   const submitBtn = document.getElementById('submit-btn');
-  if (submitBtn) submitBtn.textContent = `<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 提交 ${state.currentDate} 點名`;
+  if (submitBtn) submitBtn.innerHTML = `<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 提交 ${state.currentDate} 點名`;
 
   // 記住捲動位置
   const listEl = document.getElementById('rc-student-list');
@@ -2963,8 +2965,23 @@ function isTodayAttendanceDate(value) {
 function getNavigableAttendanceDates() {
   const byISO = new Map();
   for (const entry of getExportColumnEntries()) byISO.set(entry.iso, entry.column);
-  const today = getTodayAttendanceDate();
-  byISO.set(localTodayISO(), today);
+  const todayISO = localTodayISO();
+  const configured = getConfiguredExportRange();
+  const startDate = parseISODate(configured.start);
+  const todayDate = parseISODate(todayISO);
+  const span = startDate && todayDate ? Math.round((todayDate - startDate) / 86400000) : -1;
+
+  // 新學期的 Notion 欄位可能還沒建立，選單仍應按設定的學期起日連續列出。
+  // 以 400 天為上限，避免錯誤設定造成過大的 DOM 清單。
+  if (span >= 0 && span <= 400) {
+    const cursor = new Date(startDate);
+    for (let i = 0; i <= span; i++) {
+      const iso = cursor.toISOString().slice(0, 10);
+      if (!byISO.has(iso)) byISO.set(iso, iso);
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+  }
+  byISO.set(todayISO, getTodayAttendanceDate());
   return [...byISO.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, column]) => column);
 }
 

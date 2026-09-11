@@ -1352,6 +1352,13 @@ body {
   transform: none
 }
 
+.submit-btn.date-picker-hidden,
+.fab-empty-bed.date-picker-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px)
+}
+
 /* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?绺借〃 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?*/
 .summary-header {
   margin-bottom: 16px
