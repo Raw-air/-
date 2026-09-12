@@ -105,5 +105,34 @@ function makeKV(){const store={};return {store,async get(k,t){const v=store[k];i
   r=await call('/api/config','POST',{long_value:long});assert.equal(r.data.success,true);
   r=await call('/api/config');assert.equal(r.data.long_value.length,4500);
 
-  console.log('worker: semester state, auto date columns, error surfacing, range apply/confirm, archive/new semester, long config PASS');
+  // 7. 人多時 Notion 回 429：要等一下重試，不能直接丟掉這筆點名
+  {
+    const realHandle=notion.handle;let failed=0;
+    notion.handle=async(url,init)=>{if(init.method==='PATCH'&&/\/v1\/pages\//.test(new URL(url).pathname)&&failed<2){failed++;return {ok:false,status:429,headers:{get:()=>'0'},json:async()=>({code:'rate_limited'})};}return realHandle(url,init);};
+    const pid=Object.keys(notion.pages).find(k=>notion.pages[k].db===cur);
+    r=await call('/api/attendance','PATCH',{updates:[{pageId:pid,date:'2027-09-01',value:'◎'}]});
+    notion.handle=realHandle;
+    assert.equal(r.data.success,true,'429 兩次後重試成功');assert.equal(failed,2);assert.equal(notion.pages[pid].props['2027-09-01'].select.name,'◎');
+  }
+
+  // 8. 設定表同名重複列：讀固定取最後編輯那列，寫要全部一起改
+  {
+    const mkCfg=(v,t)=>({db:cfg,props:{'鍵':{type:'title',title:[{text:{content:'confirm_2027-09-01'}}]},'值':{type:'rich_text',rich_text:[{text:{content:v}}]}},t});
+    notion.pages['dupA']=mkCfg('一單','2027-09-01T00:00:05.000Z');notion.pages['dupB']=mkCfg('','2027-09-01T00:00:01.000Z');
+    const realHandle=notion.handle;
+    notion.handle=async(url,init)=>{const res=await realHandle(url,init);if(/\/query$/.test(new URL(url).pathname)){const d=await res.json();d.results.forEach(p=>{if(notion.pages[p.id]&&notion.pages[p.id].t)p.last_edited_time=notion.pages[p.id].t;});return {ok:true,status:200,json:async()=>d};}return res;};
+    r=await call('/api/config');assert.equal(r.data['confirm_2027-09-01'],'一單','取最後編輯的那列');
+    // 9. 點名完成：伺服器合併，不蓋掉別隊
+    r=await call('/api/confirm','POST',{date:'2027-09-01',squad:'二雙',confirmed:true});
+    assert.deepEqual(r.data.confirms,['一單','二雙']);
+    assert.equal(notion.pages.dupA.props['值'].rich_text[0].text.content,'一單,二雙');assert.equal(notion.pages.dupB.props['值'].rich_text[0].text.content,'一單,二雙','重複列一起改');
+    r=await call('/api/confirm','POST',{date:'2027-09-01',squad:'一單',confirmed:false});
+    assert.deepEqual(r.data.confirms,['二雙']);
+    // 10. 點名 PATCH 不會把 confirms 蓋回舊值
+    r=await call('/api/attendance','PATCH',{updates:[{pageId:Object.keys(notion.pages).find(k=>notion.pages[k].db===cur),date:'2027-09-01',value:'✓'}]});
+    r=await call('/api/poll');assert.equal(r.data.confirms,'二雙');assert.equal(r.data.date,'2027-09-01');assert.ok(r.data.att_ts>0);
+    notion.handle=realHandle;
+  }
+
+  console.log('worker: semester state, auto date columns, error surfacing, range apply/confirm, archive/new semester, long config, 429 retry, config duplicates, confirm merge, poll split PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});

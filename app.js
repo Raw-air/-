@@ -594,7 +594,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       const rawUpdate = window._api.updateAttendance.bind(window._api);
       window._api.updateAttendance = (updates, options) => {
         if (state.viewSemester) return Promise.reject(new Error(`正在查看封存學期 ${state.viewSemester}，不能修改`));
-        return rawUpdate(updates, options);
+        return rawUpdate(updates, options).then(result => {
+          rememberRecentSyncs(updates);
+          return result;
+        });
       };
     }
 
@@ -627,7 +630,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!data) return;
 
         // 1. 檢查確認回報狀態是否有更新
-        if (data.ts > _lastPollTs) {
+        // 新後端會帶 date：別天的回報不要套到今天
+        if (data.ts > _lastPollTs && (!data.date || data.date === getTodayAttendanceDate())) {
           _lastPollTs = data.ts;
           const newConfirms = data.confirms ? data.confirms.split(',').filter(Boolean) : [];
           if (newConfirms.join(',') !== state.confirmedSquads.join(',')) {
@@ -643,27 +647,76 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 2. 檢查出席資料是否有更新（其他中隊提交了點名）
         if (data.att_ts > _lastAttTs && _lastAttTs > 0) {
           _lastAttTs = data.att_ts;
-          // 靜默觸發完整刷新（不顯示 loading 畫面）
-          try {
-            const [roster, config] = await Promise.all([
-              window._api.getRoster(state.viewSemester || ''),
-              window._api.getConfig(),
-            ]);
-            state.rosterSemester = roster.semester || null;
-            state.students = applyLocalStateToRoster(roster.students || [], roster.dateColumns || []);
-            state.dateColumns = roster.dateColumns || [];
-            state.currentDate = resolveAttendanceDate(state.currentDate || localTodayISO());
-            state.config = config || {};
-            applyRoomRules();
-            const today = getTodayAttendanceDate();
-            const confVal = state.config['confirm_' + today] || state.config['confirm_' + getTodayColumnName()];
-            if (confVal) state.confirmedSquads = confVal.split(',').filter(Boolean);
-            renderCurrentPage(true);
-          } catch (e) { console.warn('[Poll] 背景刷新失敗', e); }
+          scheduleBackgroundRefresh();
         } else if (_lastAttTs === 0) {
           _lastAttTs = data.att_ts || 0; // 首次初始化
         }
       } catch (e) { /* 輪詢失敗靜默跳過 */ } finally { _pollBusy = false; }
+    }
+
+    // 背景刷新：以前每個裝置一偵測到變動就立刻抓整張總表 + 設定表，
+    // 20 台同時開總表 = 同一秒打 Notion 上百次 → Notion 回「太忙」，別人的點名請假就寫不進去。
+    // 現在：隨機錯開 1.5~4 秒 (讓後端快取先建好)、同一台最快 8 秒刷一次、設定表 60 秒才重抓一次。
+    let _bgRefreshTimer = null;
+    let _bgRefreshBusy = false;
+    let _bgRefreshAgain = false;
+    let _lastBgRefreshAt = 0;
+    let _lastBgConfigAt = Date.now();
+    let _lastRenderSig = '';
+
+    function rosterSignature() {
+      const parts = [state.confirmedSquads.join(','), (state.dateColumns || []).length];
+      for (const s of state.students) {
+        parts.push(s.id, s.name, s.isEmpty ? 1 : 0, s.squad, s.room, s.bed, JSON.stringify(s.attendance || {}));
+      }
+      return parts.join('|');
+    }
+
+    function scheduleBackgroundRefresh() {
+      if (_bgRefreshBusy) { _bgRefreshAgain = true; return; }
+      if (_bgRefreshTimer) return;
+      const minGap = 8000 - (Date.now() - _lastBgRefreshAt);
+      const delay = Math.max(minGap, 1500 + Math.random() * 2500);
+      _bgRefreshTimer = setTimeout(runBackgroundRefresh, delay);
+    }
+
+    async function runBackgroundRefresh() {
+      _bgRefreshTimer = null;
+      _bgRefreshBusy = true;
+      _lastBgRefreshAt = Date.now();
+      try {
+        const wantConfig = Date.now() - _lastBgConfigAt > 60000;
+        const [roster, config] = await Promise.all([
+          window._api.getRoster(state.viewSemester || ''),
+          wantConfig ? window._api.getConfig() : Promise.resolve(null),
+        ]);
+        state.rosterSemester = roster.semester || null;
+        state.students = applyLocalStateToRoster(roster.students || [], roster.dateColumns || []);
+        state.dateColumns = roster.dateColumns || [];
+        state.currentDate = resolveAttendanceDate(state.currentDate || localTodayISO());
+        if (config) {
+          _lastBgConfigAt = Date.now();
+          // 點名完成狀態以即時信號為準，不拿 (可能較舊的) 設定表覆蓋，否則「已回報」會一閃一閃
+          const today = getTodayAttendanceDate();
+          const keepConfirm = state.config['confirm_' + today];
+          const keepSnapshot = state.config['snapshot_' + today];
+          state.config = config || {};
+          if (keepConfirm !== undefined) state.config['confirm_' + today] = keepConfirm;
+          if (keepSnapshot !== undefined) state.config['snapshot_' + today] = keepSnapshot;
+        }
+        applyRoomRules();
+        // 資料跟上次畫的一模一樣就不重畫，避免整塊畫面閃一下
+        const sig = rosterSignature();
+        if (sig !== _lastRenderSig) {
+          _lastRenderSig = sig;
+          renderCurrentPage(true);
+        }
+      } catch (e) {
+        console.warn('[Poll] 背景刷新失敗', e);
+      } finally {
+        _bgRefreshBusy = false;
+        if (_bgRefreshAgain) { _bgRefreshAgain = false; scheduleBackgroundRefresh(); }
+      }
     }
 
     function startPoll() {
@@ -1877,8 +1930,15 @@ async function toggleSquadConfirm() {
 
   const today = getTodayAttendanceDate();
   try {
-    // 儲存到 Notion (系統全域共用)，需等候完成才改變本地狀態
-    await window._api.setConfig({ ['confirm_' + today]: targetSquads.join(',') });
+    // 儲存到 Notion (系統全域共用)，需等候完成才改變本地狀態。
+    // 新後端只加/減自己這隊，不會蓋掉別隊同時按的回報；舊後端沒有 /api/confirm 才退回整串寫入
+    try {
+      const res = await window._api.confirmSquad(today, sq, !isCurrentlyConfirmed);
+      if (Array.isArray(res && res.confirms)) targetSquads = res.confirms;
+    } catch (err) {
+      if (err && err.status === 404) await window._api.setConfig({ ['confirm_' + today]: targetSquads.join(',') });
+      else throw err;
+    }
 
     // 如果沒有拋出錯誤，代表網路更新成功！
     state.confirmedSquads = targetSquads;
@@ -2454,6 +2514,25 @@ function renderSummaryDetail() {
     ${summaryDetailGroups(kind, entries)}`;
 }
 
+// 快照以前是「每畫一次總表、數字有變就寫一次設定表」，人多時每台裝置每幾秒都在寫，
+// 把 Notion 塞爆。現在同一台 45 秒內最多寫一次 (只寫最後的數字)。
+let _snapshotTimer = null;
+let _snapshotPending = null;
+let _snapshotLastAt = 0;
+function scheduleSnapshotSave(date, snapshotStr) {
+  _snapshotPending = { date, snapshotStr };
+  if (_snapshotTimer) return;
+  const wait = Math.max(0, 45000 - (Date.now() - _snapshotLastAt));
+  _snapshotTimer = setTimeout(() => {
+    _snapshotTimer = null;
+    const job = _snapshotPending;
+    _snapshotPending = null;
+    if (!job || state.viewSemester) return;
+    _snapshotLastAt = Date.now();
+    window._api.setConfig({ ['snapshot_' + job.date]: job.snapshotStr }).catch(e => console.error('Auto snapshot failed', e));
+  }, wait);
+}
+
 function renderSummary() {
   const date = state.currentDate || getTodayAttendanceDate();
   const st = computeDailyStats(date);
@@ -2482,8 +2561,7 @@ function renderSummary() {
     const snapshotStr = JSON.stringify(st);
     if (state.config['snapshot_' + date] !== snapshotStr) {
       state.config['snapshot_' + date] = snapshotStr;
-      // 靜默儲存到 Notion DB 的設定表裡
-      window._api.setConfig({ ['snapshot_' + date]: snapshotStr }).catch(e => console.error('Auto snapshot failed', e));
+      scheduleSnapshotSave(date, snapshotStr);
     }
   }
 
@@ -3251,13 +3329,40 @@ function showPinDialog(squadId, callback, customTitle) {
  * 將從伺服器抓回來的 Roster 與本地尚未同步(changes)或剛同步(recentSyncs)的狀態合併
  * 防止背景輪詢因為 eventual consistency 導致 UI 閃爍
  */
+// 所有成功送出的點名/請假 (任何日期、任何入口) 都記下來。
+// Notion 寫入後幾秒內查詢可能還是舊值，背景刷新會把剛按的請假洗掉，看起來像「沒按到」。
+const RECENT_SYNC_MS = 60000;
+function rememberRecentSyncs(updates) {
+  const now = Date.now();
+  for (const u of updates || []) {
+    if (!u || !u.pageId) continue;
+    if (u.date) state.recentSyncs[u.pageId + '_' + u.date] = { value: u.value || '', ts: now };
+    if (u.dates && typeof u.dates === 'object') {
+      for (const [date, value] of Object.entries(u.dates)) state.recentSyncs[u.pageId + '_' + date] = { value: value || '', ts: now };
+    }
+  }
+}
+
 function applyLocalStateToRoster(rosterStudents, rosterDateColumns) {
   if (!Array.isArray(rosterStudents)) return [];
   const now = Date.now();
 
-  // 清理過期的 recentSyncs (超過 15 秒)
+  // 清理過期的 recentSyncs
   Object.keys(state.recentSyncs).forEach(key => {
-    if (now - state.recentSyncs[key].ts > 15000) delete state.recentSyncs[key];
+    if (now - state.recentSyncs[key].ts > RECENT_SYNC_MS) delete state.recentSyncs[key];
+  });
+  // 剛送出的值蓋回伺服器資料 (所有日期)；伺服器已經讀得到同樣的值就不用再保護
+  const byId = new Map();
+  for (const s of rosterStudents) if (s && s.id) byId.set(s.id, s);
+  Object.keys(state.recentSyncs).forEach(key => {
+    const cut = key.lastIndexOf('_');
+    const student = byId.get(key.slice(0, cut));
+    if (!student) return;
+    const date = key.slice(cut + 1);
+    if (!student.attendance || typeof student.attendance !== 'object') student.attendance = {};
+    const want = state.recentSyncs[key].value || '';
+    if ((student.attendance[date] || '') === want) { delete state.recentSyncs[key]; return; }
+    if (want) student.attendance[date] = want; else delete student.attendance[date];
   });
 
   const merged = rosterStudents.filter(s => s && typeof s === 'object').map(s => {

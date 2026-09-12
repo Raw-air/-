@@ -67,8 +67,14 @@ class ApiClient {
 
   // 批次更新出席狀態
   // updates: [{ pageId, date, value }]
+  // 人多時後端會等 Notion 空檔重試，15 秒常常不夠：前端先放棄、後端其實寫成功，畫面就對不上
   updateAttendance(updates, options) {
-    return this._fetch('/api/attendance', 'PATCH', { updates }, options);
+    return this._fetch('/api/attendance', 'PATCH', { updates }, { timeoutMs: 45000, ...(options || {}) });
+  }
+
+  // 點名完成回報：只加/減自己這一隊，由伺服器合併 (回傳 { confirms: [...] })
+  confirmSquad(date, squad, confirmed) {
+    return this._fetch('/api/confirm', 'POST', { date, squad, confirmed }, { timeoutMs: 45000 });
   }
 
   // 取得系統設定

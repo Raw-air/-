@@ -25,21 +25,40 @@ function sleep(ms) {
 // ─── Notion API ────────────────────────────────────────────────────────────────
 const NOTION_BASE = 'https://api.notion.com/v1';
 
+// Notion 整個整合每秒只給約 3 個請求；很多人同時用時會回 429 (太忙) 或 409 (同時改同一頁)。
+// 以前直接丟錯，點名/請假就這樣沒寫進去；現在照 Retry-After 等一下再試，最多 5 次。
+const NOTION_RETRY_STATUS = new Set([409, 429, 500, 502, 503, 504]);
 async function notion(path, method, body, env) {
-  const res = await fetch(`${NOTION_BASE}${path}`, {
-    method,
-    headers: {
-      'Authorization': `Bearer ${env.NOTION_TOKEN}`,
-      'Notion-Version': '2022-06-28',
-      'Content-Type': 'application/json',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const data = await res.json();
-  if (!res.ok) {
+  for (let attempt = 0; ; attempt++) {
+    let res;
+    try {
+      res = await fetch(`${NOTION_BASE}${path}`, {
+        method,
+        headers: {
+          'Authorization': `Bearer ${env.NOTION_TOKEN}`,
+          'Notion-Version': '2022-06-28',
+          'Content-Type': 'application/json',
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    } catch (err) {
+      if (attempt >= 4) throw err;
+      await sleep(600 * (attempt + 1));
+      continue;
+    }
+    let data;
+    try { data = await res.json(); } catch (_) { data = {}; }
+    if (res.ok) return data;
+    // 建立新頁 (POST /pages) 除了 429 以外不重試：伺服器錯誤時可能其實建好了，重送會多一列
+    const safeToRetry = res.status === 429 || method !== 'POST' || /\/query$/.test(path);
+    if (attempt < 4 && safeToRetry && NOTION_RETRY_STATUS.has(res.status)) {
+      const after = Number(res.headers && res.headers.get && res.headers.get('Retry-After'));
+      const wait = Number.isFinite(after) && after > 0 ? Math.min(after * 1000, 8000) : 500 * 2 ** attempt;
+      await sleep(wait + Math.floor(Math.random() * 250));
+      continue;
+    }
     throw new Error(`Notion ${res.status}: ${JSON.stringify(data)}`);
   }
-  return data;
 }
 
 /** 查詢資料庫所有頁面（自動分頁） */
@@ -238,20 +257,63 @@ async function resolveSemesterDbId(name, env) {
 }
 
 // ─── KV 即時同步信號層 ─────────────────────────────────────────────────────────
+// 出席變動與點名完成分開存兩個鍵：以前共用 poll_state「讀出來→改→寫回」，
+// 點名 PATCH 同時發生時會把剛寫進去的 confirms 蓋回舊值，總表的「已回報」就一閃一閃。
 async function updatePollSignal(env, updates = {}) {
   if (!env.POLL_KV) return; // KV 未綁定時靜默跳過
   try {
-    const existing = await env.POLL_KV.get('poll_state', 'json') || {};
-    const newState = {
-      ts: Date.now(),
-      confirms: existing.confirms || '',
-      att_ts: existing.att_ts || 0,
-      ...updates,
-    };
-    await env.POLL_KV.put('poll_state', JSON.stringify(newState));
+    if (updates.att_ts !== undefined) {
+      await env.POLL_KV.put('poll_att', JSON.stringify({ att_ts: updates.att_ts }));
+    }
+    if (updates.confirms !== undefined) {
+      await env.POLL_KV.put('poll_confirms', JSON.stringify({ ts: Date.now(), confirms: updates.confirms || '', date: updates.date || '' }));
+    }
   } catch (e) {
     console.error('KV update failed:', e);
   }
+}
+
+async function readPollState(env) {
+  if (!env.POLL_KV) return { ts: 0, confirms: '', att_ts: 0 };
+  const [att, conf, legacy] = await Promise.all([
+    env.POLL_KV.get('poll_att', 'json'),
+    env.POLL_KV.get('poll_confirms', 'json'),
+    env.POLL_KV.get('poll_state', 'json'),
+  ]);
+  const old = legacy || {};
+  return {
+    ts: conf ? conf.ts : (old.ts || 0),
+    confirms: conf ? conf.confirms : (old.confirms || ''),
+    date: conf ? (conf.date || '') : '',
+    att_ts: Math.max(att ? att.att_ts || 0 : 0, old.att_ts || 0),
+  };
+}
+
+// 總表快取 (Cloudflare 邊緣快取，不佔 KV 寫入額度)。
+// 快取鍵含 att_ts：任何人寫入點名 att_ts 就變，舊快取自然作廢。
+// 寫入後 3 秒內 Notion 查詢可能還讀到舊值，這段時間不存快取，免得把舊資料存起來。
+const ROSTER_CACHE_SETTLE_MS = 3000;
+function rosterCacheKey(dbId, attTs) {
+  return new Request(`https://roster-cache.biyuan.internal/${encodeURIComponent(dbId)}/${attTs}`);
+}
+async function getRosterCached(env, dbId) {
+  const cache = typeof caches !== 'undefined' && caches.default ? caches.default : null;
+  if (!cache || !env.POLL_KV) return handleGetRoster(env, dbId);
+  const { att_ts } = await readPollState(env);
+  const key = rosterCacheKey(dbId, att_ts);
+  try {
+    const hit = await cache.match(key);
+    if (hit) return await hit.json();
+  } catch (e) { console.error('roster cache read failed', e); }
+  const roster = await handleGetRoster(env, dbId);
+  if (Date.now() - att_ts > ROSTER_CACHE_SETTLE_MS) {
+    try {
+      await cache.put(key, new Response(JSON.stringify(roster), {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=120' },
+      }));
+    } catch (e) { console.error('roster cache write failed', e); }
+  }
+  return roster;
 }
 
 // ─── 路由 ──────────────────────────────────────────────────────────────────────
@@ -275,9 +337,7 @@ export default {
 
       // ⚡ 即時輪詢端點 — 僅讀取 KV，不觸碰 Notion，回應時間 < 5ms
       if (path === '/api/poll' && request.method === 'GET') {
-        if (!env.POLL_KV) return json({ ts: 0, confirms: '', att_ts: 0 });
-        const state = await env.POLL_KV.get('poll_state', 'json');
-        return json(state || { ts: 0, confirms: '', att_ts: 0 });
+        return json(await readPollState(env));
       }
 
       if (path === '/api/init-db' && request.method === 'POST') {
@@ -287,13 +347,15 @@ export default {
 
       if (path === '/api/import-batch' && request.method === 'POST') {
         const data = await request.json();
-        return json(await handleImportBatch(data, env));
+        const result = await handleImportBatch(data, env);
+        await updatePollSignal(env, { att_ts: Date.now() });
+        return json(result);
       }
 
       if (path === '/api/roster' && request.method === 'GET') {
         const semester = url.searchParams.get('semester') || '';
         const target = await resolveSemesterDbId(semester, env);
-        const roster = await handleGetRoster(env, target.dbId);
+        const roster = target.isCurrent ? await getRosterCached(env, target.dbId) : await handleGetRoster(env, target.dbId);
         roster.semester = { name: target.semester.name, start: target.semester.start, end: target.semester.end, isCurrent: target.isCurrent };
         return json(roster);
       }
@@ -325,7 +387,15 @@ export default {
 
       if (path === '/api/swap-beds' && request.method === 'POST') {
         const data = await request.json();
-        return json(await handleSwapBeds(data, env));
+        const result = await handleSwapBeds(data, env);
+        await updatePollSignal(env, { att_ts: Date.now() });
+        return json(result);
+      }
+
+      // 點名完成回報：伺服器端讀最新值再加/減中隊，避免兩個中隊同時按互相蓋掉
+      if (path === '/api/confirm' && request.method === 'POST') {
+        const data = await request.json();
+        return json(await handleConfirmSquad(data, env));
       }
 
       if (path === '/api/config' && request.method === 'GET') {
@@ -337,7 +407,7 @@ export default {
         // ⚡ 若寫入的是 confirm_ 欄位，同步更新 KV 信號
         const confirmKey = Object.keys(data).find(k => k.startsWith('confirm_'));
         if (confirmKey) {
-          await updatePollSignal(env, { confirms: data[confirmKey] || '' });
+          await updatePollSignal(env, { confirms: data[confirmKey] || '', date: confirmKey.slice('confirm_'.length) });
         }
         return json(result);
       }
@@ -910,10 +980,15 @@ async function handleGetConfig(env) {
 
   const pages = await queryAll(dbId, null, null, env);
   const config = {};
+  const editedAt = {};
   for (const page of pages) {
     const key = getTitle(page.properties['鍵']);
     const value = getText(page.properties['值']);
-    if (key) config[key] = value;
+    if (!key) continue;
+    // 兩個人同時第一次寫同一個鍵，Notion 會多出同名列；Notion 回傳順序不固定，
+    // 以前每次刷新可能拿到不同列 → 「已回報」一閃一閃。現在固定取最後編輯的那列。
+    const t = Date.parse(page.last_edited_time || '') || 0;
+    if (!(key in config) || t >= editedAt[key]) { config[key] = value; editedAt[key] = t; }
   }
   return config;
 }
@@ -926,16 +1001,19 @@ async function handleSetConfig(data, env) {
   const existing = {};
   for (const page of pages) {
     const key = getTitle(page.properties['鍵']);
-    if (key) existing[key] = page.id;
+    if (key) (existing[key] = existing[key] || []).push(page.id);
   }
 
   const results = {};
   for (const [key, value] of Object.entries(data)) {
     await sleep(340);
     if (existing[key]) {
-      await notion(`/pages/${existing[key]}`, 'PATCH', {
-        properties: { '值': { rich_text: richTextChunks(value) } },
-      }, env);
+      // 同名重複列全部一起改，不管讀的時候拿到哪一列都一樣
+      for (const pageId of existing[key]) {
+        await notion(`/pages/${pageId}`, 'PATCH', {
+          properties: { '值': { rich_text: richTextChunks(value) } },
+        }, env);
+      }
       results[key] = 'updated';
     } else {
       await notion('/pages', 'POST', {
@@ -950,6 +1028,30 @@ async function handleSetConfig(data, env) {
   }
 
   return { success: true, results };
+}
+
+/**
+ * 點名完成回報 { date, squad, confirmed }。
+ * 以前前端用「自己手上的名單」整串寫回，兩個中隊差不多時間按，後寫的會把先寫的蓋掉。
+ * 現在伺服器讀最新值只加/減自己這一隊，寫完再讀一次確認，被別人蓋掉就重做 (最多 3 次)。
+ */
+async function handleConfirmSquad(data, env) {
+  const { date, squad } = data || {};
+  const confirmed = !!(data && data.confirmed);
+  if (!date || !squad) throw new Error('缺少 date 或 squad');
+  const key = 'confirm_' + date;
+  let list = [];
+  for (let round = 0; round < 3; round++) {
+    const cfg = await handleGetConfig(env);
+    list = String(cfg[key] || '').split(',').filter(Boolean);
+    if (round > 0 && list.includes(squad) === confirmed) break;
+    list = list.filter(s => s !== squad);
+    if (confirmed) list.push(squad);
+    await handleSetConfig({ [key]: list.join(',') }, env);
+    await updatePollSignal(env, { confirms: list.join(','), date });
+    await sleep(400);
+  }
+  return { success: true, confirms: list };
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
