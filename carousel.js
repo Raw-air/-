@@ -98,7 +98,8 @@ function setup2DCarouselInteraction() {
   let startX = 0, startY = 0, startC = 0, lastX = 0, lastTime = 0, velocity = 0;
   const wheel = { acc: 0, timer: 0, lastStep: 0 };
   const count = () => _sfResults.length;
-  const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // 省電模式也算「減少動態」→ 3D 資料夾輪播直接跳到最終狀態，不跑 rAF 動畫
+  const reduced = () => (window.sfReduceMotion ? window.sfReduceMotion() : matchMedia('(prefers-reduced-motion: reduce)').matches);
 
   function moving(on) { page.classList.toggle('sf-moving', on); area.classList.toggle('is-dragging', on); }
   function requestFrame() { if (!frame) frame = requestAnimationFrame(tick); }

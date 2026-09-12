@@ -39,7 +39,8 @@ function toggleWhiteMode(el){
   root.classList.remove('vt-active','theme-reveal','theme-shrink');
   const {x,y}=_themeTapPoint(el),radius=_themeEndRadius(x,y);
   if(typeof _themeHaptic==='function')_themeHaptic();else haptic('medium');
-  if(matchMedia('(prefers-reduced-motion: reduce)').matches){performAppearanceChange(light);return;}
+  // 省電模式：主題直接換，不跑圓形擴散的 View Transition
+  if(window.sfReduceMotion?window.sfReduceMotion():matchMedia('(prefers-reduced-motion: reduce)').matches){performAppearanceChange(light);return;}
   if(!document.startViewTransition){_themeFallbackTransition(light,x,y);return;}
   // Define the reveal BEFORE snapshot creation. WebKit can silently ignore WAAPI
   // pseudoElement animation on the first transition; CSS starts at frame zero.

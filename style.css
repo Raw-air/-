@@ -5071,17 +5071,28 @@ body.light-mode .sf-save-action-btn:hover {
 }
 
 /* ========================================================
-   POWER SAVE MODE 鈥?Full Effect
+   POWER SAVE MODE — 省電順暢模式
+   原則：只留下「看得懂現在發生什麼事」需要的東西。
+   毛玻璃、光暈、背景動畫、3D 鏡片、無限迴圈動畫全部關掉，
+   只保留讀取中的轉圈 (不轉的轉圈會讓人以為當機)。
    ======================================================== */
-body.power-save-mode * {
+
+/* 1. 毛玻璃：整頁關閉，連 ::before / ::after 圖層一起 */
+body.power-save-mode *,
+body.power-save-mode *::before,
+body.power-save-mode *::after {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-body.power-save-mode .home-anim-bg { display: none !important; }
-body.power-save-mode #custom-video-bg { display: none !important; }
-body.power-save-mode .blob { animation: none !important; }
-body.power-save-mode .anim-line::after { animation: none !important; }
-body.power-save-mode .bottom-nav-glow { display: none !important; }
+
+/* 2. 純裝飾的背景層：直接不畫 */
+body.power-save-mode .home-anim-bg,
+body.power-save-mode #custom-video-bg,
+body.power-save-mode .bottom-nav-glow,
+body.power-save-mode .blob,
+body.power-save-mode .anim-line { display: none !important; }
+
+/* 3. 陰影改細框 (大面積陰影在手機上很吃 GPU) */
 body.power-save-mode .sf-form-group input,
 body.power-save-mode .sf-form-group textarea,
 body.power-save-mode .sf-save-action-btn,
@@ -5090,15 +5101,58 @@ body.power-save-mode .sq-card,
 body.power-save-mode .sqd-card,
 body.power-save-mode .sf-fake-card,
 body.power-save-mode .sm-stat,
-body.power-save-mode .big-stat,
-body.power-save-mode .nav-item {
+body.power-save-mode .big-stat {
   box-shadow: none !important;
   border: 1px solid var(--border2) !important;
 }
-/* 鐪侀浕妯″紡涓嬪嫊鐣笡閫熷埌骞句箮鐒℃劅 */
-body.power-save-mode *:not(.page):not(.toast) {
+
+/* 4. 動畫：一次性的瞬間完成、無限迴圈的一次都不跑 */
+body.power-save-mode *:not(.page):not(.toast),
+body.power-save-mode *:not(.page):not(.toast)::before,
+body.power-save-mode *:not(.page):not(.toast)::after {
   animation-duration: 0s !important;
-  transition-duration: 0.1s !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.08s !important;
+  transition-delay: 0s !important;
+  will-change: auto !important;
+}
+/* 例外：讀取中的轉圈要繼續轉，不然看起來像當機 */
+body.power-save-mode .btn-loading::after {
+  animation-duration: 0.6s !important;
+  animation-iteration-count: infinite !important;
+}
+
+/* ── 底部導覽：實心膠囊 + 扁平指示塊，不要玻璃鏡片 ───────────────── */
+body.power-save-mode .bottom-nav.liquid-nav {
+  background: #17171c;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+  --lens-time: 0s;
+}
+body.light-mode.power-save-mode .bottom-nav.liquid-nav {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+/* 玻璃膠囊層關掉，底色改由導覽列自己畫 */
+body.power-save-mode .liquid-nav::before { display: none !important; }
+/* 放大鏡片整個拿掉：它是三層疊加 + backdrop-filter，是這頁最耗電的一塊 */
+body.power-save-mode .liquid-lens { display: none !important; }
+/* 原本鏡片後方的光暈，改成一塊扁平的紫色指示塊 */
+body.power-save-mode .liquid-nav::after {
+  box-shadow: none;
+  background: rgba(191, 90, 242, 0.18);
+}
+body.light-mode.power-save-mode .liquid-nav::after { background: rgba(191, 90, 242, 0.12); }
+/* 鏡片沒了就不用挖洞，四顆圖示要一直看得到 */
+body.power-save-mode .liquid-nav .nav-row {
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+}
+/* 導覽鍵不要被外框規則畫成四顆分開的藥丸 */
+body.power-save-mode .liquid-nav .nav-item {
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 /* ========================================================
@@ -5730,3 +5784,333 @@ body.light-mode .rm-table tbody tr.is-dirty { --rm-row-bg: rgba(48, 209, 88, .10
 .sem-remove-list { text-align: left; max-height: 180px; overflow-y: auto; margin: 8px 0; padding-left: 18px; font-size: 12px; }
 #semester-card.is-unavailable .export-date-grid, #semester-card.is-unavailable button, #semester-card.is-unavailable .sem-divider,
 #semester-card.is-unavailable .sem-carry-label, #semester-card.is-unavailable #sem-archive-list, #semester-card.is-unavailable #sem-range-summary { display: none; }
+
+/* ═══════════ 個人請假查詢 ═══════════ */
+.ll-search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--dim);
+}
+.ll-search-box input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+}
+.ll-search-box input::placeholder { color: var(--dim); opacity: .8; }
+.ll-result-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform .16s ease, border-color .16s ease;
+}
+.ll-result-btn:active { transform: scale(.985); }
+.ll-result-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ll-result-main strong { font-size: 16px; font-weight: 700; }
+.ll-result-main span { font-size: 13px; color: var(--dim); }
+.ll-result-arrow { font-size: 20px; color: var(--dim); flex: 0 0 auto; }
+.ll-person-card {
+  padding: 16px;
+  margin-bottom: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+.ll-person-top { display: flex; align-items: center; gap: 12px; }
+.ll-person-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ll-person-main strong { font-size: 20px; font-weight: 800; color: var(--text); }
+.ll-person-main span { font-size: 13px; color: var(--dim); }
+.ll-change-btn {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--dim);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.ll-change-btn:active { transform: scale(.96); }
+.ll-hint {
+  padding: 22px 16px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px dashed var(--border);
+  color: var(--dim);
+  font-size: 14px;
+  text-align: center;
+  line-height: 1.7;
+}
+.ll-hint-error { color: #ff6961; border-color: rgba(255, 105, 97, .5); }
+body.light-mode .ll-search-box,
+body.light-mode .ll-result-btn,
+body.light-mode .ll-person-card,
+body.light-mode .ll-hint { background: #fff; border-color: rgba(0, 0, 0, .1); }
+.ll-back {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  margin: 0 0 14px;
+  padding: 8px 12px 8px 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--glass-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color .2s ease, border-color .2s ease, opacity .2s ease;
+}
+.ll-back:hover { background: var(--card-h); border-color: var(--border2); }
+.ll-back:active { opacity: .7; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   系統穩定度：設定頁入口 + 詳情視窗
+   ══════════════════════════════════════════════════════════════════════════ */
+.health-entry {
+  --hc: var(--dim);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border2);
+  background: color-mix(in srgb, var(--hc) 10%, transparent);
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .18s ease, background .25s ease, border-color .25s ease;
+}
+
+.health-entry[data-status="ok"] { --hc: var(--green); }
+.health-entry[data-status="warn"] { --hc: var(--yellow); }
+.health-entry[data-status="bad"] { --hc: var(--red); }
+.health-entry[data-status="loading"] { --hc: var(--dim); }
+
+.health-entry:active { transform: scale(.98); }
+
+.health-entry-dot {
+  --hc: var(--dim);
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--hc);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--hc) 22%, transparent);
+}
+
+.health-entry-dot[data-status="ok"] { --hc: var(--green); animation: health-pulse 2.4s ease-in-out infinite; }
+.health-entry-dot[data-status="warn"] { --hc: var(--yellow); animation: health-pulse 1.6s ease-in-out infinite; }
+.health-entry-dot[data-status="bad"] { --hc: var(--red); animation: health-pulse .9s ease-in-out infinite; }
+.health-entry-dot[data-status="loading"] { --hc: var(--dim); animation: health-pulse 1.2s ease-in-out infinite; }
+
+@keyframes health-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--hc) 26%, transparent); }
+  50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--hc) 6%, transparent); }
+}
+
+body.power-save-mode .health-entry-dot { animation: none !important; }
+
+.health-entry-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+
+.health-entry-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--hc);
+}
+
+.health-entry-sub {
+  font-size: 11.5px;
+  color: var(--dim);
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.health-entry-arrow { flex: 0 0 auto; color: var(--dim); }
+
+/* ── 詳情視窗 ── */
+.health-card {
+  max-width: 420px;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  padding: 18px 16px 16px;
+}
+
+.health-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.health-head h3 { margin: 0; font-size: 17px; }
+
+.health-close {
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.health-overall {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 2px;
+}
+
+.health-ring {
+  --hc: var(--dim);
+  --pct: 0;
+  flex: 0 0 auto;
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background:
+    conic-gradient(var(--hc) calc(var(--pct) * 1%), color-mix(in srgb, var(--dim) 22%, transparent) 0);
+  transition: background .4s ease;
+}
+
+.health-ring[data-status="ok"] { --hc: var(--green); }
+.health-ring[data-status="warn"] { --hc: var(--yellow); }
+.health-ring[data-status="bad"] { --hc: var(--red); }
+
+.health-ring > span {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: var(--bg2);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--hc);
+}
+
+.health-overall-text { flex: 1 1 auto; min-width: 0; }
+.health-overall-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.health-overall-sub { font-size: 11.5px; color: var(--dim); line-height: 1.5; }
+
+.health-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 4px;
+  margin-top: 2px;
+}
+
+.health-empty { font-size: 12px; color: var(--dim); padding: 20px 0; text-align: center; }
+
+.health-group { margin-bottom: 14px; }
+
+.health-group-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  color: var(--dim);
+  margin: 0 0 6px 2px;
+}
+
+.health-row {
+  --hc: var(--dim);
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--hc);
+  margin-bottom: 6px;
+}
+
+.health-row[data-status="ok"] { --hc: var(--green); }
+.health-row[data-status="warn"] { --hc: var(--yellow); }
+.health-row[data-status="bad"] { --hc: var(--red); }
+.health-row[data-status="na"] { --hc: var(--muted); }
+
+.health-row-dot {
+  --hc: var(--dim);
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 5px;
+  background: var(--hc);
+}
+
+.health-row-dot[data-status="ok"] { --hc: var(--green); }
+.health-row-dot[data-status="warn"] { --hc: var(--yellow); }
+.health-row-dot[data-status="bad"] { --hc: var(--red); }
+.health-row-dot[data-status="na"] { --hc: var(--muted); }
+
+.health-row-main { flex: 1 1 auto; min-width: 0; }
+
+.health-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.health-row-label { font-size: 13px; font-weight: 600; }
+
+.health-row-tag {
+  --hc: var(--dim);
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--hc);
+  background: color-mix(in srgb, var(--hc) 14%, transparent);
+}
+
+.health-row-tag[data-status="ok"] { --hc: var(--green); }
+.health-row-tag[data-status="warn"] { --hc: var(--yellow); }
+.health-row-tag[data-status="bad"] { --hc: var(--red); }
+.health-row-tag[data-status="na"] { --hc: var(--muted); }
+
+.health-row-value { font-size: 12.5px; color: var(--text); margin-top: 3px; word-break: break-word; }
+.health-row-hint { font-size: 11px; color: var(--dim); margin-top: 3px; line-height: 1.45; }
+
+.health-actions { display: flex; gap: 8px; margin-top: 12px; }
+.health-actions .modal-btn { flex: 1; }
+
+body.light-mode .health-card { background: rgba(255, 255, 255, 0.94); }

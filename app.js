@@ -106,6 +106,17 @@ function setPref(key, value) {
   return v;
 }
 
+// 省電模式 = 等同系統設定裡的「減少動態」。
+// 各個動畫模組 (theme.js / carousel.js / dissolve.js / navigation.js) 都改問這個函式，
+// 所以打開省電模式就會自動走它們原本就有的「不做動畫、直接跳到結果」那條路。
+window.sfReduceMotion = function sfReduceMotion() {
+  try {
+    if (document.body && document.body.classList.contains('power-save-mode')) return true;
+    if (localStorage.getItem('power_save_mode') === 'true') return true;   // body 還沒就緒時的備援
+    return matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch (_) { return false; }
+};
+
 // 開機還原：cookie 是同步的，所以在這裡（檔案最頂端，早於下方 DOMContentLoaded 的初始化邏輯執行）
 // 就先把 localStorage 缺的 key 補回去，避免畫面先閃一次錯誤主題再跳回來。
 (function _prefsRestoreFromCookie() {
@@ -561,6 +572,7 @@ function applyStoredPrefs() {
   document.body.classList.toggle('power-save-mode', isPS);
   const psToggle = document.getElementById('setting-powerSave');
   if (psToggle) psToggle.checked = isPS;
+  if (isPS) window._psStopHackingLog = true;
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -703,8 +715,25 @@ function togglePanzi(el) {
 function togglePowerSave(el) {
   const isPS = el.checked;
   setPref('power_save_mode', isPS);
-  if (isPS) document.body.classList.add('power-save-mode');
-  else document.body.classList.remove('power-save-mode');
+  document.body.classList.toggle('power-save-mode', isPS);
+  applyPowerSaveRuntime(isPS);
+}
+
+// 切換省電模式時，那些「已經在跑」的 JS 動畫也要當場處理，
+// 不然要重開 App 才會生效。
+function applyPowerSaveRuntime(isPS) {
+  try {
+    if (isPS) {
+      // 3D 資料夾輪播：立刻停在目前位置，關掉自動展開
+      if (typeof window._sfStopMotion === 'function') window._sfStopMotion();
+      // 載入畫面的假終端機日誌 (每 20~60ms 重寫一次) 直接停掉
+      window._psStopHackingLog = true;
+    } else {
+      // 關掉省電模式：把剛剛沒建立的刪除特效補建起來
+      if (window.sfDissolve && typeof window.sfDissolve.init === 'function') window.sfDissolve.init();
+      window._psStopHackingLog = false;
+    }
+  } catch (_) {}
 }
 
 function performAppearanceChange(isLight) {
@@ -1288,6 +1317,20 @@ let summaryScrollPosition = 0;
 
 // Liquid-glass navigation is defined in navigation.js.
 
+// 子頁面該讓底部導覽列的哪一顆維持highlight（依照該頁「返回」會回到哪裡）
+const NAV_TAB_OF = {
+  rollcall: 'home', management: 'home', review: 'home',
+  'repair-review': 'home', 'feedback-form': 'home',
+  'summary-detail': 'summary', tools: 'summary', 'leave-records': 'summary',
+  'student-files': 'summary', 'resident-management': 'summary', 'repair-form': 'summary',
+  'leave-lookup': 'summary',
+  'feedback-review': 'settings', 'database-setup': 'settings',
+};
+const NAV_TABS = ['home', 'summary', 'history', 'settings'];
+function navTabFor(page) {
+  return NAV_TABS.includes(page) ? page : (NAV_TAB_OF[page] || 'home');
+}
+
 function navigateTo(page) {
   if (page === currentPage) { renderCurrentPage(true); return; }
 
@@ -1304,7 +1347,7 @@ function navigateTo(page) {
 
   // 立刻更新導覽列 & 按鈕狀態
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  const navPage = page === 'summary-detail' ? 'summary' : page;
+  const navPage = navTabFor(page);
   const navItem = document.querySelector(`.nav-item[data-page="${navPage}"]`);
   if (navItem) navItem.classList.add('active');
   const backBtn = document.getElementById('back-btn');
@@ -1355,6 +1398,7 @@ function renderCurrentPage(skipAnimation = false) {
     case 'history': renderHistory(); break;
     case 'settings': renderSettings(); break;
     case 'resident-management': initResidentManagement(false); break;
+    case 'leave-lookup': renderLeaveLookup(); break;
   }
 }
 
@@ -2635,19 +2679,330 @@ async function saveRoleAppearance(roleId) {
 }
 
 async function testWorkerConnection() {
-  const el = document.getElementById('conn-status');
-  if (!el) return;
-  el.textContent = '測試連線中...';
-  el.style.background = 'rgba(255,255,255,.05)'; el.style.color = 'var(--dim)';
+  return refreshSystemHealth();
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 系統穩定度（設定頁「系統狀態」→ 點進去看全部檢測項目）
+// ═════════════════════════════════════════════════════════════════════════════
+const HEALTH_RANK = { ok: 0, na: 1, warn: 2, bad: 3 };
+const HEALTH_WORD = { ok: '正常', warn: '注意', bad: '異常', na: '無法偵測' };
+const healthUI = { report: null, running: false, pending: null, liveTimer: null, open: false };
+
+function measureFps(ms = 600) {
+  return new Promise(resolve => {
+    if (typeof requestAnimationFrame !== 'function' || document.hidden) return resolve(null);
+    let frames = 0, done = false;
+    const t0 = performance.now();
+    const finish = v => { if (!done) { done = true; clearTimeout(guard); resolve(v); } };
+    // 分頁被切到背景時瀏覽器會停掉 requestAnimationFrame，沒有保險就會永遠卡住
+    const guard = setTimeout(() => finish(null), ms + 1200);
+    const tick = () => {
+      if (done) return;
+      frames++;
+      const dt = performance.now() - t0;
+      if (dt >= ms) finish(Math.round(frames * 1000 / dt));
+      else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+function healthEsc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function formatBytes(n) {
+  if (!Number.isFinite(n)) return '—';
+  const u = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return `${n >= 10 || i === 0 ? Math.round(n) : n.toFixed(1)} ${u[i]}`;
+}
+
+async function collectSystemHealth() {
+  const items = [];
+  const add = o => items.push(o);
+
+  // ── 連線 ──
+  const online = navigator.onLine !== false;
+  const netInfo = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  const slow = ['slow-2g', '2g'].includes(netInfo && netInfo.effectiveType);
+  let netValue = online ? '已連上網路' : '目前離線';
+  if (online && netInfo && netInfo.effectiveType) {
+    const q = { 'slow-2g': '很慢', '2g': '慢', '3g': '普通', '4g': '良好' }[netInfo.effectiveType] || netInfo.effectiveType;
+    netValue = `已連上網路 · 訊號${q}`;
+    if (netInfo.downlink) netValue += `（約 ${netInfo.downlink} Mbps）`;
+  }
+  add({
+    group: '連線', label: '網路', value: netValue,
+    status: online ? (slow ? 'warn' : 'ok') : 'bad',
+    hint: online ? (slow ? '網路很慢，同步可能要等比較久' : '這台裝置本身的上網狀況') : '這台裝置沒有網路，所有同步都會失敗'
+  });
+
+  let pingMs = null, pingErr = null;
+  const t0 = performance.now();
   try {
     await window._api.ping();
-    el.innerHTML = '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Worker 連線正常';
-    el.style.background = 'rgba(34,197,94,.1)'; el.style.color = 'var(--green)';
+    pingMs = Math.round(performance.now() - t0);
   } catch (err) {
-    el.textContent = '連線失敗';
-    el.style.background = 'rgba(239,68,68,.1)'; el.style.color = 'var(--red)';
+    pingErr = (err && err.message) ? err.message : String(err);
+  }
+  add({
+    group: '連線', label: '雲端主機（Worker）',
+    value: pingErr ? '連不上' : `正常 · 回應 ${pingMs} 毫秒`,
+    status: pingErr ? 'bad' : (pingMs > 2000 ? 'warn' : 'ok'),
+    hint: pingErr ? `錯誤訊息：${pingErr}` : (pingMs > 2000 ? '主機回得慢，點名送出會卡一下' : '存放全部點名資料的後端主機')
+  });
+
+  // ── 資料 ──
+  const visible = (state.students || []).filter(s => !s.hidden);
+  add({
+    group: '資料', label: '住宿生名單',
+    value: visible.length ? `${visible.length} 位學生 · ${(state.dateColumns || []).length} 個日期欄位` : '一位學生都沒讀到',
+    status: visible.length ? ((state.dateColumns || []).length ? 'ok' : 'warn') : 'bad',
+    hint: visible.length
+      ? ((state.dateColumns || []).length ? '名單與點名表都有抓到' : '名單有了，但點名表還沒有任何日期欄位')
+      : '名單是空的，通常是連線失敗或學期選錯'
+  });
+
+  let pendingCount = 0;
+  for (const iso of Object.keys(state.pendingByDate || {})) {
+    pendingCount += Object.keys(state.pendingByDate[iso] || {}).length;
+  }
+  add({
+    group: '資料', label: '暫存在這台裝置的點名',
+    value: pendingCount ? `${pendingCount} 筆還沒寫回雲端` : '沒有待同步資料',
+    status: pendingCount ? 'warn' : 'ok',
+    hint: pendingCount ? '後端還沒有那天的欄位，資料先存在這台裝置，等欄位開好會自動補上' : '所有點名都已經進到雲端'
+  });
+
+  const changeCount = (state.changes || []).length;
+  add({
+    group: '資料', label: '未送出的變更',
+    value: changeCount ? `${changeCount} 筆改了還沒按提交` : '沒有未送出的變更',
+    status: changeCount ? 'warn' : 'ok',
+    hint: changeCount ? '現在關掉頁面這些會不見，記得回點名頁按提交' : '畫面上的修改都已經送出'
+  });
+
+  const semName = (state.semester && state.semester.current && state.semester.current.name) || '';
+  add({
+    group: '資料', label: '目前學期',
+    value: state.viewSemester ? `唯讀：封存學期 ${state.viewSemester}` : (semName || '本學期（未命名）'),
+    status: state.viewSemester ? 'warn' : 'ok',
+    hint: state.viewSemester ? '正在看舊學期，所有寫入動作都會被擋下來' : '正在使用本學期的資料，可以正常點名'
+  });
+
+  // ── 快取與儲存 ──
+  let swValue = '這個瀏覽器不支援', swStatus = 'na', swHint = '離線快取功能無法使用';
+  if ('serviceWorker' in navigator) {
+    try {
+      const scope = new URL('./', location.href).href;
+      const regs = await navigator.serviceWorker.getRegistrations();
+      const reg = regs.find(r => r.scope === scope);
+      const names = ('caches' in window) ? await caches.keys() : [];
+      const ver = names.filter(n => n.startsWith('biyuan-')).sort().pop();
+      if (!reg) {
+        swValue = '沒有安裝'; swStatus = 'warn';
+        swHint = '離線時打不開系統，重新整理一次通常就會裝回來';
+      } else if (reg.waiting) {
+        swValue = `有新版本等待套用${ver ? ` · 目前 ${ver}` : ''}`; swStatus = 'warn';
+        swHint = '關掉所有分頁重開，或按下面的強制清除快取，就會換到新版';
+      } else {
+        swValue = `運作中${ver ? ` · ${ver}` : ''}`; swStatus = 'ok';
+        swHint = '離線也能打開系統，畫面檔案存在本機';
+      }
+    } catch (err) {
+      swValue = '查不到'; swStatus = 'na';
+      swHint = (err && err.message) ? err.message : '瀏覽器拒絕讀取快取狀態';
+    }
+  }
+  add({ group: '快取與儲存', label: '離線快取', value: swValue, status: swStatus, hint: swHint });
+
+  let stValue = '無法偵測', stStatus = 'na', stHint = '這個瀏覽器不給看儲存空間';
+  if (navigator.storage && navigator.storage.estimate) {
+    try {
+      const est = await navigator.storage.estimate();
+      if (Number.isFinite(est.usage) && Number.isFinite(est.quota) && est.quota > 0) {
+        const pct = Math.round(est.usage / est.quota * 100);
+        stValue = `已用 ${formatBytes(est.usage)} / ${formatBytes(est.quota)}（${pct}%）`;
+        stStatus = pct >= 90 ? 'bad' : (pct >= 75 ? 'warn' : 'ok');
+        stHint = pct >= 75 ? '空間快滿了，瀏覽器可能會自己清掉快取' : '這個系統在裝置上佔的空間';
+      }
+    } catch (_) { /* 保持無法偵測 */ }
+  }
+  add({ group: '快取與儲存', label: '裝置儲存空間', value: stValue, status: stStatus, hint: stHint });
+
+  // ── 效能 ──
+  const fps = await measureFps();
+  add({
+    group: '效能', label: '畫面流暢度',
+    value: fps == null ? '無法偵測' : `${fps} FPS`,
+    // 流暢度只算「注意」不算異常：畫面頓不影響資料正確性，不該讓整體亮紅燈
+    status: fps == null ? 'na' : (fps >= 50 ? 'ok' : 'warn'),
+    hint: fps == null ? '瀏覽器沒給量測' : (fps >= 50 ? '滑動很順' : '會頓，可以開「省電順暢模式」把特效關掉')
+  });
+
+  const mem = performance.memory;
+  add({
+    group: '效能', label: '記憶體用量',
+    value: mem ? `${formatBytes(mem.usedJSHeapSize)} / 上限 ${formatBytes(mem.jsHeapSizeLimit)}` : '無法偵測（非 Chrome 核心）',
+    status: mem ? (mem.usedJSHeapSize / mem.jsHeapSizeLimit > 0.8 ? 'warn' : 'ok') : 'na',
+    hint: mem ? '超過八成瀏覽器可能會把分頁砍掉重載' : 'Safari／Firefox 不提供這個數字'
+  });
+
+  const navEntry = (performance.getEntriesByType && performance.getEntriesByType('navigation')[0]) || null;
+  const boot = navEntry && navEntry.duration ? Math.round(navEntry.duration) : null;
+  add({
+    group: '效能', label: '這次開啟耗時',
+    value: boot == null ? '無法偵測' : `${boot} 毫秒`,
+    status: boot == null ? 'na' : (boot <= 3000 ? 'ok' : (boot <= 6000 ? 'warn' : 'bad')),
+    hint: boot == null ? '瀏覽器沒給量測' : '從按下開啟到畫面能用的時間'
+  });
+
+  const ps = localStorage.getItem('power_save_mode') === 'true';
+  add({
+    group: '效能', label: '省電順暢模式',
+    value: ps ? '已開啟（特效全關）' : '關閉（完整特效）',
+    status: 'ok',
+    hint: ps ? '畫面比較樸素但最順' : '如果會頓，可以到上面的顯示設定把它打開'
+  });
+
+  // ── 總結 ──
+  let score = 0, counted = 0, worst = 'ok';
+  for (const it of items) {
+    if (it.status === 'na') continue;
+    counted++;
+    score += it.status === 'ok' ? 1 : (it.status === 'warn' ? 0.5 : 0);
+    if (HEALTH_RANK[it.status] > HEALTH_RANK[worst]) worst = it.status;
+  }
+  const percent = counted ? Math.round(score / counted * 100) : 100;
+  const bad = items.filter(i => i.status === 'bad');
+  const warn = items.filter(i => i.status === 'warn');
+  let summary;
+  if (bad.length) summary = `${bad.length} 項異常：${bad.map(i => i.label).join('、')}`;
+  else if (warn.length) summary = `${warn.length} 項要注意：${warn.map(i => i.label).join('、')}`;
+  else summary = '全部檢測項目都正常';
+
+  return { items, overall: worst, percent, summary, checkedAt: new Date(), badCount: bad.length, warnCount: warn.length };
+}
+
+function renderHealthEntry(report) {
+  const entry = document.getElementById('health-entry');
+  if (!entry) return;
+  const dot = document.getElementById('health-entry-dot');
+  const title = document.getElementById('health-entry-title');
+  const sub = document.getElementById('health-entry-sub');
+  if (!report) {
+    entry.dataset.status = 'loading';
+    if (dot) dot.dataset.status = 'loading';
+    if (title) title.textContent = '檢查中…';
+    if (sub) sub.textContent = '正在讀取系統狀態';
+    return;
+  }
+  const head = { ok: '系統一切正常', warn: '系統可用，有幾項要注意', bad: '系統有異常', na: '系統狀態' }[report.overall];
+  entry.dataset.status = report.overall;
+  if (dot) dot.dataset.status = report.overall;
+  if (title) title.textContent = `${head} · 穩定度 ${report.percent}%`;
+  if (sub) sub.textContent = report.summary;
+}
+
+function renderHealthModal(report) {
+  const listEl = document.getElementById('health-list');
+  if (!listEl) return;
+  const ringEl = document.getElementById('health-ring');
+  const pctEl = document.getElementById('health-percent');
+  const titleEl = document.getElementById('health-overall-title');
+  const subEl = document.getElementById('health-overall-sub');
+
+  if (!report) {
+    listEl.innerHTML = '<div class="health-empty">檢測中…</div>';
+    if (pctEl) pctEl.textContent = '—';
+    if (titleEl) titleEl.textContent = '檢測中…';
+    if (subEl) subEl.textContent = '正在逐項檢查';
+    if (ringEl) { ringEl.dataset.status = 'loading'; ringEl.style.setProperty('--pct', '0'); }
+    return;
+  }
+
+  if (ringEl) { ringEl.dataset.status = report.overall; ringEl.style.setProperty('--pct', String(report.percent)); }
+  if (pctEl) pctEl.textContent = `${report.percent}%`;
+  if (titleEl) titleEl.textContent = { ok: '一切正常', warn: '可以用，但要注意', bad: '有異常要處理', na: '系統狀態' }[report.overall];
+  if (subEl) {
+    const t = report.checkedAt;
+    const hh = String(t.getHours()).padStart(2, '0');
+    const mm = String(t.getMinutes()).padStart(2, '0');
+    const ss = String(t.getSeconds()).padStart(2, '0');
+    subEl.textContent = `${report.summary} · 檢測於 ${hh}:${mm}:${ss}`;
+  }
+
+  const groups = [];
+  for (const it of report.items) {
+    let g = groups.find(x => x.name === it.group);
+    if (!g) { g = { name: it.group, rows: [] }; groups.push(g); }
+    g.rows.push(it);
+  }
+  listEl.innerHTML = groups.map(g => `
+    <div class="health-group">
+      <div class="health-group-title">${g.name}</div>
+      ${g.rows.map(r => `
+        <div class="health-row" data-status="${r.status}">
+          <span class="health-row-dot" data-status="${r.status}"></span>
+          <div class="health-row-main">
+            <div class="health-row-top">
+              <span class="health-row-label">${healthEsc(r.label)}</span>
+              <span class="health-row-tag" data-status="${r.status}">${HEALTH_WORD[r.status]}</span>
+            </div>
+            <div class="health-row-value">${healthEsc(r.value)}</div>
+            <div class="health-row-hint">${healthEsc(r.hint)}</div>
+          </div>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+async function refreshSystemHealth() {
+  // 同時被呼叫時共用同一次檢測，不要回傳還沒填好的舊結果
+  if (healthUI.running) return healthUI.pending;
+  healthUI.running = true;
+  let settle;
+  healthUI.pending = new Promise(r => { settle = r; });
+  const btn = document.getElementById('health-recheck');
+  if (btn) { btn.disabled = true; btn.textContent = '檢測中…'; }
+  if (!healthUI.report) { renderHealthEntry(null); if (healthUI.open) renderHealthModal(null); }
+  try {
+    const report = await collectSystemHealth();
+    healthUI.report = report;
+    renderHealthEntry(report);
+    if (healthUI.open) renderHealthModal(report);
+    return report;
+  } finally {
+    healthUI.running = false;
+    settle(healthUI.report);
+    healthUI.pending = null;
+    if (btn) { btn.disabled = false; btn.textContent = '重新檢測'; }
   }
 }
+
+function openHealthModal() {
+  const m = document.getElementById('health-modal');
+  if (!m) return;
+  healthUI.open = true;
+  renderHealthModal(healthUI.report);
+  m.classList.add('visible');
+  refreshSystemHealth();
+  clearInterval(healthUI.liveTimer);
+  healthUI.liveTimer = setInterval(() => { if (healthUI.open) refreshSystemHealth(); }, 15000);
+}
+
+function closeHealthModal() {
+  const m = document.getElementById('health-modal');
+  if (m) m.classList.remove('visible');
+  healthUI.open = false;
+  clearInterval(healthUI.liveTimer);
+  healthUI.liveTimer = null;
+}
+
+window.addEventListener('online', () => { if (document.getElementById('health-entry')) refreshSystemHealth(); });
+window.addEventListener('offline', () => { if (document.getElementById('health-entry')) refreshSystemHealth(); });
 
 async function saveGlobalPinAuth() {
   const isEnabled = document.getElementById('dev-global-pin-auth').checked;
@@ -2834,7 +3189,7 @@ function animateNumber(el, newValue, skipAnimation = false, customContainer = nu
   const container = customContainer || el.parentElement;
 
   // 1. 快速跳過檢查
-  if (skipAnimation || matchMedia('(prefers-reduced-motion: reduce)').matches || (oldVal === newValue && container?.querySelector(`.stepper-anim-box[data-target-id="${el.id}"]`))) {
+  if (skipAnimation || window.sfReduceMotion() || (oldVal === newValue && container?.querySelector(`.stepper-anim-box[data-target-id="${el.id}"]`))) {
     setVal(newValue);
     el.style.transition = '';
     el.classList.remove('number-anim-hiding');
@@ -4258,6 +4613,298 @@ window.handleCounterLeaveSearch = handleCounterLeaveSearch;
 window.submitCounterLeave = submitCounterLeave;
 window.viewLeaveRecords = viewLeaveRecords;
 window.renderLeaveRecordsList = renderLeaveRecordsList;
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 個人請假查詢：挑一位住宿生，看他這學期每一天的請假狀況
+// ═════════════════════════════════════════════════════════════════════════════
+const LEAVE_LOOKUP_STATUS = {
+  '◎': { text: '請假', className: 'leave' },
+  '△': { text: '特殊', className: 'special' },
+  '✘': { text: '未請假', className: 'absent' },
+};
+
+let leaveLookupStudentId = null;
+let leaveLookupQuery = '';
+let _llSearchTimer = 0;
+let _llRecordsCache = null;   // 電話請假紀錄整份快取 (同一次進頁面只抓一次)
+let _llRecordsError = '';
+let _llRecordsLoading = false;
+
+function openLeaveLookup() {
+  leaveLookupStudentId = null;
+  leaveLookupQuery = '';
+  navigateTo('leave-lookup');
+  const input = document.getElementById('ll-search-input');
+  if (input) {
+    input.value = '';
+    setTimeout(() => { try { input.focus(); } catch (_) {} }, 320);
+  }
+  renderLeaveLookup();
+}
+
+function onLeaveLookupSearch(value) {
+  clearTimeout(_llSearchTimer);
+  _llSearchTimer = setTimeout(() => {
+    leaveLookupQuery = value;
+    leaveLookupStudentId = null;
+    renderLeaveLookup();
+  }, 140);
+}
+
+function selectLeaveLookupStudent(id) {
+  leaveLookupStudentId = id;
+  haptic('light');
+  renderLeaveLookup();
+  ensureLeaveLookupRecords();
+  const panel = document.getElementById('ll-detail');
+  if (panel) setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 40);
+}
+
+function clearLeaveLookupStudent() {
+  leaveLookupStudentId = null;
+  haptic('light');
+  renderLeaveLookup();
+}
+
+// 姓名／房號／床號／學號／班別皆可；姓名另外吃同音字 (跟資料微動查詢同一套)
+function leaveLookupMatches(query) {
+  const raw = String(query || '').trim();
+  if (!raw) return [];
+  const q = raw.toLowerCase();
+  const phonetic = window.sfPhoneticSearch;
+  return state.students.filter(s => {
+    if (s.hidden) return false;
+    if (s.isEmpty) return false;
+    const txt = `${s.name || ''} ${s.room || ''} ${s.bed || ''} ${s.studentId || ''} ${s.class || ''}`.toLowerCase();
+    if (txt.includes(q)) return true;
+    return !!(phonetic && phonetic.matches(s.name || '', raw));
+  }).slice(0, 30);
+}
+
+// 這位學生的逐日狀態：以點名欄位為主，再補上只存在本機的暫存日期
+function leaveLookupTimeline(student) {
+  const byIso = new Map();
+  for (const entry of getExportColumnEntries()) {
+    byIso.set(entry.iso, { iso: entry.iso, column: entry.column, status: student.attendance[entry.column] || '✓' });
+  }
+  for (const [key, value] of Object.entries(student.attendance || {})) {
+    if (!parseISODate(key)) continue;
+    if (byIso.has(key)) { if (value) byIso.get(key).status = value; continue; }
+    byIso.set(key, { iso: key, column: key, status: value || '✓', localOnly: true });
+  }
+  return [...byIso.values()].sort((a, b) => a.iso.localeCompare(b.iso));
+}
+
+function leaveLookupDaysBetween(fromIso, toIso) {
+  const a = parseISODate(fromIso);
+  const b = parseISODate(toIso);
+  if (!a || !b) return Infinity;
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+
+// 連續幾天同一種狀態就併成一段；中間隔超過 3 天 (例如寒暑假) 就拆開
+function leaveLookupRanges(timeline) {
+  const out = [];
+  let previous = null;
+  for (const day of timeline) {
+    if (!LEAVE_LOOKUP_STATUS[day.status]) { previous = day; continue; }
+    const last = out[out.length - 1];
+    const contiguous = !!(last && previous && last.endIso === previous.iso &&
+      leaveLookupDaysBetween(last.endIso, day.iso) <= 3);
+    if (last && last.status === day.status && contiguous) {
+      last.endIso = day.iso;
+      last.days++;
+    } else {
+      out.push({ status: day.status, startIso: day.iso, endIso: day.iso, days: 1 });
+    }
+    previous = day;
+  }
+  return out.reverse(); // 最近的排最上面
+}
+
+function leaveLookupDateLabel(iso) {
+  const d = parseISODate(iso);
+  if (!d) return iso;
+  const week = ['日', '一', '二', '三', '四', '五', '六'][d.getUTCDay()];
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()} (${week})`;
+}
+
+function leaveLookupRangeRow(range) {
+  const meta = LEAVE_LOOKUP_STATUS[range.status] || { text: '其他', className: 'empty' };
+  const single = range.startIso === range.endIso;
+  const label = single
+    ? leaveLookupDateLabel(range.startIso)
+    : `${leaveLookupDateLabel(range.startIso)} ～ ${leaveLookupDateLabel(range.endIso)}`;
+  const detail = single ? sfEsc(range.startIso) : `${sfEsc(range.startIso)} 至 ${sfEsc(range.endIso)} ・ ${range.days} 天`;
+  return `<li class="summary-detail-row">
+    <div class="summary-detail-row-main">
+      <strong>${sfEsc(label)}</strong>
+      <span>${detail}</span>
+    </div>
+    <span class="summary-detail-status ${meta.className}">${meta.text}</span>
+  </li>`;
+}
+
+function leaveLookupGroup(title, ranges, emptyText) {
+  if (!ranges.length) {
+    return `<section class="summary-detail-group">
+      <div class="summary-detail-group-title"><h2>${sfEsc(title)}</h2><span>0 筆</span></div>
+      <ul><li class="summary-detail-row"><div class="summary-detail-row-main"><strong>${sfEsc(emptyText)}</strong></div></li></ul>
+    </section>`;
+  }
+  const totalDays = ranges.reduce((sum, r) => sum + r.days, 0);
+  return `<section class="summary-detail-group">
+    <div class="summary-detail-group-title"><h2>${sfEsc(title)}</h2><span>${ranges.length} 段 ・ ${totalDays} 天</span></div>
+    <ul>${ranges.map(leaveLookupRangeRow).join('')}</ul>
+  </section>`;
+}
+
+async function ensureLeaveLookupRecords() {
+  if (_llRecordsCache || _llRecordsLoading) { renderLeaveLookupRecords(); return; }
+  _llRecordsLoading = true;
+  _llRecordsError = '';
+  renderLeaveLookupRecords();
+  try {
+    const res = await fetch(CONFIG.WORKER_URL + '/api/leave-records');
+    if (!res.ok) throw new Error('API 回應錯誤');
+    const data = await res.json();
+    _llRecordsCache = Array.isArray(data) ? data : [];
+  } catch (err) {
+    _llRecordsError = err.message || '載入失敗';
+  } finally {
+    _llRecordsLoading = false;
+    renderLeaveLookupRecords();
+  }
+}
+
+function leaveLookupRecordsFor(student) {
+  if (!_llRecordsCache) return [];
+  const name = String(student.name || '').trim();
+  const room = String(student.room || '').trim();
+  return _llRecordsCache.filter(r => {
+    if (String(r.name || '').trim() !== name) return false;
+    const roomBed = String(r.roomBed || '');
+    if (room && roomBed && !roomBed.includes(room)) return false; // 同名不同房就排除
+    return true;
+  }).sort((a, b) => String(b.dateStart || '').localeCompare(String(a.dateStart || '')));
+}
+
+function renderLeaveLookupRecords() {
+  const box = document.getElementById('ll-records');
+  if (!box) return;
+  const student = leaveLookupStudentId ? state.students.find(s => s.id === leaveLookupStudentId) : null;
+  if (!student) { box.innerHTML = ''; return; }
+  if (_llRecordsLoading) {
+    box.innerHTML = '<div class="ll-hint">正在讀取電話請假紀錄…</div>';
+    return;
+  }
+  if (_llRecordsError) {
+    box.innerHTML = `<div class="ll-hint ll-hint-error">電話請假紀錄載入失敗：${sfEsc(_llRecordsError)}</div>`;
+    return;
+  }
+  const records = leaveLookupRecordsFor(student);
+  if (!records.length) {
+    box.innerHTML = `<section class="summary-detail-group">
+      <div class="summary-detail-group-title"><h2>電話／櫃台請假紀錄</h2><span>0 筆</span></div>
+      <ul><li class="summary-detail-row"><div class="summary-detail-row-main"><strong>沒有替這位同學留下的通報紀錄</strong><span>總表上的請假仍以上面的逐日紀錄為準</span></div></li></ul>
+    </section>`;
+    return;
+  }
+  box.innerHTML = `<section class="summary-detail-group">
+    <div class="summary-detail-group-title"><h2>電話／櫃台請假紀錄</h2><span>${records.length} 筆</span></div>
+    <ul>${records.map(r => `<li class="summary-detail-row">
+      <div class="summary-detail-row-main">
+        <strong>${sfEsc(r.dateStart || '')} ～ ${sfEsc(r.dateEnd || '')}</strong>
+        <span>處理人：${sfEsc(r.handler || '未填寫')}${r.createdAt ? ' ・ 登記於 ' + sfEsc(formatLeaveStamp(r.createdAt)) : ''}</span>
+      </div>
+      <span class="summary-detail-status leave">通報</span>
+    </li>`).join('')}</ul>
+  </section>`;
+}
+
+function renderLeaveLookupDetail(student) {
+  const timeline = leaveLookupTimeline(student);
+  const counts = { '✓': 0, '◎': 0, '△': 0, '✘': 0 };
+  for (const day of timeline) counts[day.status] = (counts[day.status] || 0) + 1;
+  const leaveTotal = counts['◎'] + counts['△'];
+  const ranges = leaveLookupRanges(timeline);
+  const leaveRanges = ranges.filter(r => r.status === '◎' || r.status === '△');
+  const absentRanges = ranges.filter(r => r.status === '✘');
+  const recorded = timeline.length;
+  const rate = recorded > 0 ? Math.round((leaveTotal / recorded) * 100 * 10) / 10 : 0;
+  const info = [student.class, student.studentId, student.squad].filter(Boolean).map(sfEsc).join(' ・ ');
+
+  return `<section class="ll-person-card">
+      <div class="ll-person-top">
+        <div class="ll-person-main">
+          <strong>${sfEsc(student.name || '未填姓名')}</strong>
+          <span>${sfEsc(student.room || '未填房號')} ${sfEsc(student.bed || '未填')}床${info ? ' ・ ' + info : ''}</span>
+        </div>
+        <button type="button" class="ll-change-btn" onclick="clearLeaveLookupStudent()">換一位</button>
+      </div>
+    </section>
+    <section class="summary-calculation-card" aria-label="請假統計">
+      <div class="summary-calculation-heading"><span>請假天數</span><strong>${leaveTotal}</strong></div>
+      <div class="summary-formula-rows">
+        <div><span>請假 ◎</span><b>${counts['◎']}</b></div>
+        <div><span>特殊 △</span><b>${counts['△']}</b></div>
+        <div><span>未請假 ✘</span><b>${counts['✘']}</b></div>
+        <div><span>正常在宿 ✓</span><b>${counts['✓']}</b></div>
+        <div class="result"><span>已記錄天數 ・ 請假佔比</span><b>${recorded} 天 ・ ${rate}%</b></div>
+      </div>
+    </section>
+    <div class="summary-detail-list-heading"><h2>逐段明細</h2><span>${ranges.length} 段</span></div>
+    ${leaveLookupGroup('請假／特殊', leaveRanges, '這學期沒有請過假')}
+    ${leaveLookupGroup('未請假', absentRanges, '沒有未請假紀錄')}
+    <div id="ll-records"></div>`;
+}
+
+function renderLeaveLookup() {
+  const subtitle = document.getElementById('ll-subtitle');
+  const resultsEl = document.getElementById('ll-results');
+  const detailEl = document.getElementById('ll-detail');
+  if (!resultsEl || !detailEl) return;
+
+  const recordedDays = getExportColumnEntries().length;
+  if (subtitle) {
+    const sem = activeSemesterName();
+    subtitle.textContent = `${sem ? sem + ' ・ ' : ''}目前共有 ${recordedDays} 天點名紀錄`;
+  }
+
+  const student = leaveLookupStudentId ? state.students.find(s => s.id === leaveLookupStudentId) : null;
+  if (student) {
+    resultsEl.innerHTML = '';
+    detailEl.innerHTML = renderLeaveLookupDetail(student);
+    renderLeaveLookupRecords();
+    return;
+  }
+
+  detailEl.innerHTML = '';
+  const raw = String(leaveLookupQuery || '').trim();
+  if (!raw) {
+    resultsEl.innerHTML = '<div class="ll-hint">先在上面輸入姓名、房號、床號或學號，再從清單挑一位同學。</div>';
+    return;
+  }
+  const matches = leaveLookupMatches(raw);
+  if (!matches.length) {
+    resultsEl.innerHTML = `<div class="ll-hint">找不到「${sfEsc(raw)}」這位住宿生。</div>`;
+    return;
+  }
+  resultsEl.innerHTML = `<div class="summary-detail-list-heading"><h2>搜尋結果</h2><span>${matches.length} 位</span></div>
+    ${matches.map(s => `<button type="button" class="ll-result-btn" onclick="selectLeaveLookupStudent('${sfEsc(s.id)}')">
+      <div class="ll-result-main">
+        <strong>${sfEsc(s.name || '未填姓名')}</strong>
+        <span>${sfEsc(s.room || '未填房號')} ${sfEsc(s.bed || '未填')}床${s.class ? ' ・ ' + sfEsc(s.class) : ''}${s.studentId ? ' ・ ' + sfEsc(s.studentId) : ''}</span>
+      </div>
+      <span class="ll-result-arrow" aria-hidden="true">›</span>
+    </button>`).join('')}`;
+}
+
+window.openLeaveLookup = openLeaveLookup;
+window.onLeaveLookupSearch = onLeaveLookupSearch;
+window.selectLeaveLookupStudent = selectLeaveLookupStudent;
+window.clearLeaveLookupStudent = clearLeaveLookupStudent;
+window.renderLeaveLookup = renderLeaveLookup;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 通知報修系統

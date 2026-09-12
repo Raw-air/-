@@ -99,6 +99,8 @@
 
   function init() {
     if (canvas) return;
+    // 省電模式：完全不建立 WebGL context / shader / 粒子池 (省一次開機時的暖機繪製)
+    if (window.sfReduceMotion && window.sfReduceMotion()) return;
     canvas = document.createElement('canvas');
     canvas.className = 'sf-dissolve-canvas';
     canvas.setAttribute('aria-hidden', 'true');
@@ -490,7 +492,8 @@
       if (sceneEl) sceneEl.inert = true;
       document.addEventListener('visibilitychange', onVisibility);
       window.addEventListener('app:navigate', onNavigation);
-      if (matchMedia('(prefers-reduced-motion: reduce)').matches) { haptic('medium'); resetFields(); showToast('床位已清空，按「儲存修改」同步', 'info'); return; }
+      // 省電模式：跳過 WebGL 粉塵/黑洞，直接清空欄位
+      if (window.sfReduceMotion ? window.sfReduceMotion() : matchMedia('(prefers-reduced-motion: reduce)').matches) { haptic('medium'); resetFields(); showToast('床位已清空，按「儲存修改」同步', 'info'); return; }
       haptic('medium');
       handle = run(folder);
       // 粉塵大約飛到一半 (350ms) 就開始補位：清空欄位、資料夾以空床長回來，兩段動畫重疊
