@@ -10,10 +10,10 @@
   <meta name="theme-color" content="#151518">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=120">
-  <link rel="stylesheet" href="motion.css?v=120">
-  <link rel="stylesheet" href="folder.css?v=120">
-  <link rel="stylesheet" href="liquid-nav.css?v=120">
+  <link rel="stylesheet" href="style.css?v=121">
+  <link rel="stylesheet" href="motion.css?v=121">
+  <link rel="stylesheet" href="folder.css?v=121">
+  <link rel="stylesheet" href="liquid-nav.css?v=121">
   <link rel="manifest" href="manifest.json?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=2">
   <script defer src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -456,7 +456,6 @@
       <button type="button" class="big-stat summary-stat-link" onclick="openSummaryDetail('empty')" aria-label="查看空床數計算明細">
         <div class="big-stat-value" id="total-empty">0</div>
         <div class="big-stat-label">空床數</div>
-        <span class="summary-stat-hint" aria-hidden="true">查看明細 <b>›</b></span>
       </button>
       <div class="big-stat">
         <div class="big-stat-value" id="total-residents">0</div>
@@ -466,15 +465,15 @@
 
     <!-- 4-5: 外籍生 / 住宿率 -->
     <div class="summary-row-2">
-      <button type="button" class="sm-stat summary-stat-link" onclick="openSummaryDetail('foreign')" aria-label="查看外籍生明細"><span><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg> 外籍生</span><b id="total-foreign">0</b><span class="summary-stat-hint" aria-hidden="true">明細 ›</span></button>
-      <button type="button" class="sm-stat accent summary-stat-link" onclick="openSummaryDetail('rate')" aria-label="查看住宿率計算明細"><span><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg> 住宿率</span><b id="total-rate">0%</b><span class="summary-stat-hint" aria-hidden="true">計算 ›</span></button>
+      <button type="button" class="sm-stat summary-stat-link" onclick="openSummaryDetail('foreign')" aria-label="查看外籍生明細"><span><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg> 外籍生</span><b id="total-foreign">0</b></button>
+      <button type="button" class="sm-stat accent summary-stat-link" onclick="openSummaryDetail('rate')" aria-label="查看住宿率計算明細"><span><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg> 住宿率</span><b id="total-rate">0%</b></button>
     </div>
 
     <!-- 6-8: 實到 / 請假 / 未請假 -->
     <div class="summary-row-3">
       <div class="sm-stat green"><span>實到</span><b id="total-present">0</b></div>
-      <button type="button" class="sm-stat yellow summary-stat-link" onclick="openSummaryDetail('leave')" aria-label="查看請假名單"><span>請假</span><b id="total-leave">0</b><span class="summary-stat-hint" aria-hidden="true">名單 ›</span></button>
-      <button type="button" class="sm-stat red summary-stat-link" onclick="openSummaryDetail('absent')" aria-label="查看未請假名單"><span>未請假</span><b id="total-absent">0</b><span class="summary-stat-hint" aria-hidden="true">名單 ›</span></button>
+      <button type="button" class="sm-stat yellow summary-stat-link" onclick="openSummaryDetail('leave')" aria-label="查看請假名單"><span>請假</span><b id="total-leave">0</b></button>
+      <button type="button" class="sm-stat red summary-stat-link" onclick="openSummaryDetail('absent')" aria-label="查看未請假名單"><span>未請假</span><b id="total-absent">0</b></button>
     </div>
 
     <!-- 各中隊 -->
@@ -1444,15 +1443,15 @@
     <button type="button" class="nav-item" data-page="settings"><span class="nav-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-label">設定</span></button>
   </nav>
 
-  <script src="config.js?v=120"></script>
-  <script src="api.js?v=120"></script>
-  <script src="phonetic-search.js?v=120"></script>
-  <script src="app.js?v=120"></script>
-  <script src="import.js?v=120"></script>
-  <script src="theme.js?v=120"></script>
-  <script src="carousel.js?v=120"></script>
-  <script src="dissolve.js?v=120"></script>
-  <script src="navigation.js?v=120"></script>
+  <script src="config.js?v=121"></script>
+  <script src="api.js?v=121"></script>
+  <script src="phonetic-search.js?v=121"></script>
+  <script src="app.js?v=121"></script>
+  <script src="import.js?v=121"></script>
+  <script src="theme.js?v=121"></script>
+  <script src="carousel.js?v=121"></script>
+  <script src="dissolve.js?v=121"></script>
+  <script src="navigation.js?v=121"></script>
 
   <!-- 幹部工作手冊 Modal -->
   <div id="duty-manual-modal" class="modal-overlay">

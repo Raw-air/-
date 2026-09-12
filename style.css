@@ -1519,7 +1519,7 @@ body {
   cursor: pointer;
   min-height: 48px;
   position: relative;
-  transition: background-color .2s ease, border-color .2s ease, box-shadow .2s ease, opacity .2s ease;
+  transition: background-color .2s ease, border-color .2s ease, box-shadow .2s ease, opacity .2s ease, transform .12s ease;
 }
 
 .summary-stat-link:hover {
@@ -1528,7 +1528,11 @@ body {
 }
 
 .summary-stat-link:active {
-  opacity: .72;
+  transform: scale(.955);
+  background: var(--card-h);
+  border-color: var(--border2);
+  box-shadow: inset 0 3px 10px rgba(0, 0, 0, .28);
+  opacity: .9;
 }
 
 .summary-stat-link:focus-visible,
@@ -1536,26 +1540,6 @@ body {
 .summary-detail-related:focus-visible {
   outline: 3px solid rgba(10, 132, 255, .72);
   outline-offset: 3px;
-}
-
-.summary-stat-link .summary-stat-hint {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  color: #64b5ff;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1.2;
-  margin-top: 6px;
-}
-
-.summary-stat-link .summary-stat-hint b {
-  color: inherit;
-  display: inline;
-  font-size: 15px;
-  line-height: 10px;
-  margin: 0;
 }
 
 /* 每日總表下鑽明細 */
@@ -3772,6 +3756,11 @@ body.light-mode .sm-stat {
   border-color: rgba(0, 0, 0, 0.08);
 }
 
+body.light-mode .summary-stat-link:active {
+  background: rgba(0, 0, 0, .05);
+  box-shadow: inset 0 3px 10px rgba(0, 0, 0, .12);
+}
+
 body.light-mode .summary-stat-link:hover,
 body.light-mode .summary-detail-back:hover,
 body.light-mode .summary-detail-related:hover {
@@ -3794,7 +3783,6 @@ body.light-mode .summary-formula-expression {
   background: rgba(139, 92, 246, .09);
 }
 
-body.light-mode .summary-stat-link .summary-stat-hint,
 body.light-mode .summary-detail-date,
 body.light-mode .summary-detail-related,
 body.light-mode .summary-detail-status.foreign {
@@ -5716,6 +5704,7 @@ body.light-mode .rm-table tbody tr.is-dirty { --rm-row-bg: rgba(48, 209, 88, .10
   .summary-stat-link,
   .summary-detail-back,
   .summary-detail-related { transition: none; }
+  .summary-stat-link:active { transform: none; }
 }
 
 /* ─── 學期管理 ─── */
