@@ -201,7 +201,11 @@ async function run(engine,viewport){
   assert.equal(await page.locator('#rm-table-body tr').count(),roster.length);
   const firstRmRow=page.locator('#rm-table-body tr').first();
   assert.deepEqual(await firstRmRow.locator('.rm-readonly').allTextContents(),[roster[0].room,roster[0].bed]);
-  await firstRmRow.locator('.rm-input-name').fill('測試住宿生 0A');
+  // 觸控裝置上輸入框預設唯讀 (手指滑動不會誤進編輯)，要先點一下解鎖
+  const rmNameCell=firstRmRow.locator('.rm-input-name');
+  await rmNameCell.click();
+  assert.equal(await rmNameCell.evaluate(el=>el.readOnly),false);
+  await rmNameCell.fill('測試住宿生 0A');
   assert.equal(await firstRmRow.locator('.rm-row-save').isEnabled(),true);
   assert.equal(await page.locator('#rm-dirty-count').textContent(),'1');
   await page.locator('.rm-table-shell').evaluate(shell=>{shell.scrollLeft=shell.scrollWidth;});

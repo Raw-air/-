@@ -4731,6 +4731,76 @@ function residentRowHTML(student, rowNumber) {
   </tr>`;
 }
 
+// ─── 觸控守門員 ───────────────────────────────────────────────────────────────
+// 手機上手指在表格裡滑動，很容易被瀏覽器判成「點進某個輸入框」，鍵盤跳出來、畫面也跟著彈。
+// 做法：觸控裝置上所有輸入框先設成唯讀 (唯讀 = 手指按著拖曳只會捲動，不會聚焦、不會彈鍵盤)，
+// 真的是「原地點一下」才解開唯讀並聚焦。拖過的手勢連勾選框與按鈕也一併擋掉。
+const RM_TAP_SLOP = 10;     // 位移超過 10px 就算是在滑動，不是在點
+const RM_TAP_MS = 700;      // 按太久也不算單點
+let _rmTouchGuardBound = false;
+let _rmTouch = null;
+let _rmMoved = false;
+
+function rmIsTouchDevice() {
+  return window.matchMedia?.('(pointer: coarse)')?.matches || 'ontouchstart' in window;
+}
+
+function rmLockEditors(scope) {
+  if (!rmIsTouchDevice()) return;
+  for (const el of scope.querySelectorAll('.rm-cell-input, .rm-cell-remarks')) {
+    if (document.activeElement !== el) el.readOnly = true;
+  }
+}
+
+function rmUnlockEditor(el) {
+  if (!el || !el.readOnly) return;
+  el.readOnly = false;
+  el.focus({ preventScroll: true });
+  // 點哪裡游標就在哪裡；解開唯讀當下 selection 會跑掉，補回文字尾端比較符合直覺
+  const end = el.value.length;
+  try { el.setSelectionRange(end, end); } catch (_) { }
+}
+
+function rmBindTouchGuard() {
+  const shell = document.querySelector('.rm-table-shell');
+  if (!shell || _rmTouchGuardBound) return;
+  _rmTouchGuardBound = true;
+
+  shell.addEventListener('touchstart', e => {
+    const t = e.touches[0];
+    _rmTouch = { x: t.clientX, y: t.clientY, at: Date.now() };
+    _rmMoved = false;
+  }, { passive: true });
+
+  shell.addEventListener('touchmove', e => {
+    if (!_rmTouch) return;
+    const t = e.touches[0];
+    if (Math.abs(t.clientX - _rmTouch.x) > RM_TAP_SLOP || Math.abs(t.clientY - _rmTouch.y) > RM_TAP_SLOP) _rmMoved = true;
+  }, { passive: true });
+
+  shell.addEventListener('touchend', () => {
+    if (_rmTouch && Date.now() - _rmTouch.at > RM_TAP_MS) _rmMoved = true;
+  }, { passive: true });
+
+  // 捕獲階段：滑動途中產生的點擊 (誤觸勾選框、誤按儲存) 直接吃掉
+  shell.addEventListener('click', e => {
+    if (!_rmMoved) {
+      const editor = e.target.closest?.('.rm-cell-input, .rm-cell-remarks');
+      if (editor) rmUnlockEditor(editor);
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    _rmMoved = false;
+  }, true);
+
+  // 離開欄位就重新上鎖，下一次滑動才不會又被攔截
+  shell.addEventListener('focusout', e => {
+    const el = e.target;
+    if (rmIsTouchDevice() && el?.matches?.('.rm-cell-input, .rm-cell-remarks')) el.readOnly = true;
+  });
+}
+
 function renderResidentManagement() {
   const body = document.getElementById('rm-table-body');
   if (!body) return;
@@ -4738,6 +4808,8 @@ function renderResidentManagement() {
   // 不額外排序：直接使用 Excel 匯出的 state.students 順序。
   body.innerHTML = state.students.map((student, index) => residentRowHTML(student, index + 1)).join('');
   Array.from(body.rows).forEach((row, index) => _rmRenderMap.set(row, state.students[index]));
+  rmBindTouchGuard();
+  rmLockEditors(body);
   filterResidentManagement();
   updateResidentDirtyCount();
 }
