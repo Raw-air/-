@@ -2980,8 +2980,8 @@ async function removeSquadCustom() {
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 客製化選單 (設定 → 顯示自訂客製化 → 客製化選單)
-// 首頁背景：key custom_bg_img / custom_bg_opacity，儲存要幹部密碼 (pin_admin)
-// 中隊卡片：沿用上面的 squad_img_<中隊>，儲存前要該中隊密碼
+// 首頁背景：key custom_bg_img / custom_bg_opacity
+// 中隊卡片：沿用上面的 squad_img_<中隊>
 // 全部存雲端設定，所有人下次開 App 就會拿到；看不看得到由各自的開關決定。
 // ═════════════════════════════════════════════════════════════════════════════
 const CUST_BG_KEY = 'custom_bg_img';
@@ -3092,7 +3092,7 @@ function saveCustomBg() {
   if (state.viewSemester) { showToast('正在查看封存學期，不能修改', 'error'); return; }
   if (!_custBg.dataUrl) { showToast('請先選一張照片', 'error'); return; }
   if (!_custBg.imgChanged && !_custBg.opChanged) { showToast('沒有變更', 'info'); return; }
-  showPinDialog('admin', doSaveCustomBg, '輸入幹部密碼以更換背景');
+  doSaveCustomBg();
 }
 
 async function doSaveCustomBg() {
@@ -3118,30 +3118,28 @@ async function doSaveCustomBg() {
   }
 }
 
-function removeCustomBg() {
+async function removeCustomBg() {
   if (_custBg.busy) return;
   if (state.viewSemester) { showToast('正在查看封存學期，不能修改', 'error'); return; }
   if (!confirm('要移除自訂背景，恢復預設嗎？所有人都會一起恢復。')) return;
-  showPinDialog('admin', async () => {
-    _custBg.busy = true;
-    try {
-      await window._api.setConfig({ [CUST_BG_KEY]: '' });
-      state.config[CUST_BG_KEY] = '';
-      _custBg.dataUrl = null;
-      _custBg.imgChanged = false;
-      loadGlobalBgVideo();
-      renderCustomBgPreview();
-      showToast('已恢復預設背景', 'success');
-    } catch (err) {
-      showToast('移除失敗：' + err.message, 'error');
-    } finally {
-      _custBg.busy = false;
-    }
-  }, '輸入幹部密碼以移除背景');
+  _custBg.busy = true;
+  try {
+    await window._api.setConfig({ [CUST_BG_KEY]: '' });
+    state.config[CUST_BG_KEY] = '';
+    _custBg.dataUrl = null;
+    _custBg.imgChanged = false;
+    loadGlobalBgVideo();
+    renderCustomBgPreview();
+    showToast('已恢復預設背景', 'success');
+  } catch (err) {
+    showToast('移除失敗：' + err.message, 'error');
+  } finally {
+    _custBg.busy = false;
+  }
 }
 
 function editSquadCard(squadId) {
-  showPinDialog(squadId, () => openSquadCustomModal(squadId), squadId + ' 中隊密碼');
+  openSquadCustomModal(squadId);
 }
 
 async function testWorkerConnection() {
