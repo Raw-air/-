@@ -66,7 +66,7 @@ async function run(engine){
   assert.deepEqual(result.writes.map(w=>w.date).sort(),['2027-09-09','9月9日']);
   assert.equal(result.failedNewDateRetained,true,'failed new-date writes remain pending and are not falsely marked as saved');
   assert.deepEqual(result.rows[0].slice(5),['9月9日','2026-09-10','2026-09-11','2026-09-12']);
-  assert.deepEqual(result.rows[1].slice(6),['','',''],'unknown future dates are blank, not present');
+  assert.deepEqual(result.rows[1].slice(6),['✓','✓','✓'],'unknown future dates default to present (✓) in the export');
   assert.ok(result.bounds.every(b=>b[0]===''&&b[1]===''&&!b[2]&&!b[3]));
   assert.equal(result.leap.columns.length,3);assert.ok(result.inverted.error);assert.equal(result.invalid,null);
   assert.deepEqual(result.configured,{start:'2026-09-09',end:'2026-09-12'});

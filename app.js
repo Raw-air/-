@@ -151,6 +151,8 @@ const state = {
   calMonth: new Date(),
   confirmedSquads: [],
   recentSyncs: {}, // 用於保護剛同步成功的狀態，避免 eventual consistency 導致閃爍
+  // 後端點名表沒有該日期欄位時，本機暫存的點名 { [iso日期]: { [pageId]: 狀態 } }
+  pendingByDate: {},
 };
 
 // ─── 觸覺回饋 (iOS Taptic 開關 + 進階波形引擎 Web Audio API) ─────────────────
@@ -558,6 +560,7 @@ function applyStoredPrefs() {
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     applyStoredPrefs();
+    loadPendingAttendance();
 
     state.currentDate = getTodayAttendanceDate();
     setupNav();
@@ -610,7 +613,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               window._api.getRoster(),
               window._api.getConfig(),
             ]);
-            state.students = applyLocalStateToRoster(roster.students || []);
+            state.students = applyLocalStateToRoster(roster.students || [], roster.dateColumns || []);
             state.dateColumns = roster.dateColumns || [];
             state.currentDate = resolveAttendanceDate(state.currentDate || localTodayISO());
             state.config = config || {};
@@ -748,7 +751,7 @@ async function loadData() {
       });
     }
 
-    state.students = applyLocalStateToRoster(roster.students || []);
+    state.students = applyLocalStateToRoster(roster.students || [], roster.dateColumns || []);
     state.dateColumns = roster.dateColumns || [];
     state.currentDate = resolveAttendanceDate(state.currentDate || localTodayISO());
     state.config = config || {};
@@ -1549,7 +1552,7 @@ function closeDatePicker() {
 
 function renderDatePicker() {
   document.getElementById('rc-date-input').value = dateColumnToISO(state.currentDate) || localTodayISO();
-  document.getElementById('rc-date-notice').textContent = state.dateColumns.includes(state.currentDate) ? '可自行選擇任何年月日；下方為本學期可選日期。' : '此日期尚未點名；第一次變更狀態後會嘗試建立紀錄。';
+  document.getElementById('rc-date-notice').textContent = state.dateColumns.includes(state.currentDate) ? '可自行選擇任何年月日；下方為本學期可選日期。' : '後端點名表還沒有這一天的欄位；這裡的變更會暫存在這台裝置，等欄位建立後自動補送。';
   const list = document.getElementById('date-picker-list');
   // 今天即使尚無後端欄位也要顯示，避免快速選單停在舊學期最後一天。
   const dates = getNavigableAttendanceDates().slice().reverse();
@@ -1571,7 +1574,7 @@ function selectRollCallDate(date) {
   const iso = dateColumnToISO(date);
   if (!iso) { showToast('請選擇有效的年月日', 'error'); return; }
   state.currentDate = resolveAttendanceDate(iso);
-  if (!state.dateColumns.includes(state.currentDate)) showToast('此日期尚未點名；第一次變更狀態後會嘗試建立紀錄。', 'info');
+  if (!state.dateColumns.includes(state.currentDate)) showToast('後端點名表還沒有這一天的欄位；這裡的變更會暫存在這台裝置，等欄位建立後自動補送。', 'info');
   closeDatePicker();
   renderRollCall(true); // 切換日期時也跳過動畫防止殘影
 }
@@ -1594,7 +1597,7 @@ function renderRollCall(skipAnimation = false) {
   document.getElementById('rc-squad-name').textContent = state.currentSquad;
   document.getElementById('rc-date').textContent = formatExportDate(dateColumnToISO(state.currentDate)) || state.currentDate;
   const unavailable = !state.dateColumns.includes(state.currentDate);
-  document.getElementById('rc-date-notice').textContent = unavailable ? '此日期尚未點名；第一次變更狀態後會嘗試建立紀錄。' : '';
+  document.getElementById('rc-date-notice').textContent = unavailable ? '後端點名表還沒有這一天的欄位；這裡的變更會暫存在這台裝置，等欄位建立後自動補送。' : '';
 
   // 更新提交按鈕顯示目前日期
   const submitBtn = document.getElementById('submit-btn');
@@ -1663,6 +1666,15 @@ function toggleStatus(pageId) {
   if (idx >= 0) state.changes[idx] = change;
   else state.changes.push(change);
 
+  // 後端沒有這一天的欄位：先存在本機，背景刷新不會把它洗掉，欄位建立後自動補送
+  if (!serverHasDateColumn(state.currentDate)) {
+    recordPendingAttendance(pageId, state.currentDate, next);
+    if (toggleStatus._warnedDate !== state.currentDate) {
+      toggleStatus._warnedDate = state.currentDate;
+      showToast('後端點名表還沒有這一天的欄位，變更先暫存在這台裝置', 'info');
+    }
+  }
+
   // 即時更新局部的 UI，不重新渲染整個列表以保留點擊動畫
   const row = document.querySelector(`.student-row[data-pid="${pageId}"]`);
   if (row) {
@@ -1692,7 +1704,6 @@ function toggleStatus(pageId) {
   _syncTimers[timerKey] = setTimeout(async () => {
     try {
       await window._api.updateAttendance([change]);
-      if (!state.dateColumns.includes(change.date)) state.dateColumns.push(change.date);
       // 同步成功：移除 changes 中已成功的那筆
       const i = state.changes.findIndex(c => c.pageId === pageId && c.date === change.date && c.value === next);
       if (i >= 0) state.changes.splice(i, 1);
@@ -2360,6 +2371,8 @@ function renderSummary() {
 
   if (!isTodayAttendanceDate(date) && state.config['snapshot_' + date]) {
     document.getElementById('summary-date').textContent = date + ' (已鎖定)';
+  } else if (!serverHasDateColumn(date)) {
+    document.getElementById('summary-date').textContent = date + ' (後端無此日欄位，僅本機暫存)';
   } else {
     document.getElementById('summary-date').textContent = date;
   }
@@ -2657,7 +2670,7 @@ function showPinDialog(squadId, callback, customTitle) {
  * 將從伺服器抓回來的 Roster 與本地尚未同步(changes)或剛同步(recentSyncs)的狀態合併
  * 防止背景輪詢因為 eventual consistency 導致 UI 閃爍
  */
-function applyLocalStateToRoster(rosterStudents) {
+function applyLocalStateToRoster(rosterStudents, rosterDateColumns) {
   if (!Array.isArray(rosterStudents)) return [];
   const now = Date.now();
 
@@ -2666,7 +2679,7 @@ function applyLocalStateToRoster(rosterStudents) {
     if (now - state.recentSyncs[key].ts > 15000) delete state.recentSyncs[key];
   });
 
-  return rosterStudents.filter(s => s && typeof s === 'object').map(s => {
+  const merged = rosterStudents.filter(s => s && typeof s === 'object').map(s => {
     // 資料庫偶爾會出現「未勾空床，但姓名欄完全沒資料」的殘缺床位。
     // 前端統一以姓名為住宿生的最低條件，避免這類資料可被點名或算入人數。
     s.name = String(s.name == null ? '' : s.name).trim();
@@ -2690,6 +2703,89 @@ function applyLocalStateToRoster(rosterStudents) {
 
     return s;
   });
+  applyPendingAttendance(merged, Array.isArray(rosterDateColumns) ? rosterDateColumns : state.dateColumns);
+  return merged;
+}
+
+// ─── 後端缺日期欄位時的本機暫存 ───────────────────────────────────────────
+// Notion 點名總表只有建檔時那個學期的日期欄位；沒有欄位的日期，後端不會保存任何變更。
+// 這裡把這些變更留在本機 (localStorage)，每次背景刷新都重新蓋回去，等欄位出現後自動補送。
+const PENDING_ATT_KEY = 'biyuan_pending_attendance';
+let _pendingReplayBusy = false;
+
+function loadPendingAttendance() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PENDING_ATT_KEY) || '{}');
+    state.pendingByDate = raw && typeof raw === 'object' ? raw : {};
+  } catch (_) { state.pendingByDate = {}; }
+}
+
+function savePendingAttendance() {
+  try { localStorage.setItem(PENDING_ATT_KEY, JSON.stringify(state.pendingByDate)); } catch (_) {}
+}
+
+function pendingDateKey(dateKey) {
+  return dateColumnToISO(dateKey) || String(dateKey || '');
+}
+
+// 後端是否已有這個日期的欄位 (接受 ISO 或 "X月Y日")
+function serverHasDateColumn(dateKey) {
+  const iso = pendingDateKey(dateKey);
+  return getExportColumnEntries().some(entry => entry.iso === iso);
+}
+
+function recordPendingAttendance(pageId, dateKey, value) {
+  const iso = pendingDateKey(dateKey);
+  if (!iso || !pageId) return;
+  if (!state.pendingByDate[iso]) state.pendingByDate[iso] = {};
+  state.pendingByDate[iso][pageId] = value;
+  savePendingAttendance();
+}
+
+function pendingAttendanceCount(dateKey) {
+  const bucket = state.pendingByDate[pendingDateKey(dateKey)];
+  return bucket ? Object.keys(bucket).length : 0;
+}
+
+function applyPendingAttendance(students, columns) {
+  // 用「這次伺服器回傳」的欄位判斷，因為呼叫時 state.dateColumns 還是舊的
+  const byISO = new Map();
+  for (const column of columns || []) { const iso = dateColumnToISO(column); if (iso && !byISO.has(iso)) byISO.set(iso, column); }
+  const replay = [];
+  for (const iso of Object.keys(state.pendingByDate)) {
+    const bucket = state.pendingByDate[iso];
+    if (!bucket || typeof bucket !== 'object') { delete state.pendingByDate[iso]; continue; }
+    const column = byISO.get(iso) || iso;
+    for (const pageId of Object.keys(bucket)) {
+      const student = students.find(st => st.id === pageId);
+      if (!student) continue;
+      if (!student.attendance) student.attendance = {};
+      student.attendance[column] = bucket[pageId];
+      if (byISO.has(iso)) replay.push({ pageId, date: column, value: bucket[pageId], iso });
+    }
+  }
+  if (replay.length) replayPendingAttendance(replay);
+}
+
+async function replayPendingAttendance(replay) {
+  if (_pendingReplayBusy) return;
+  _pendingReplayBusy = true;
+  try {
+    for (let i = 0; i < replay.length; i += 45) {
+      const sent = replay.slice(i, i + 45);
+      await window._api.updateAttendance(sent.map(({ pageId, date, value }) => ({ pageId, date, value })));
+      for (const item of sent) {
+        const bucket = state.pendingByDate[item.iso];
+        if (bucket && bucket[item.pageId] === item.value) delete bucket[item.pageId];
+        if (bucket && !Object.keys(bucket).length) delete state.pendingByDate[item.iso];
+        state.recentSyncs[item.pageId + '_' + item.date] = { value: item.value, ts: Date.now() };
+      }
+      savePendingAttendance();
+    }
+    showToast(`後端已建立日期欄位，補送了 ${replay.length} 筆暫存點名`, 'success');
+  } catch (e) {
+    console.warn('補送暫存點名失敗', e);
+  } finally { _pendingReplayBusy = false; }
 }
 
 // ─── 老虎機數字捲動動畫 ───────────────────────────────────────────
@@ -3117,7 +3213,8 @@ function exportExcel() {
     const headers = ['名稱', '寢床號', '床號', '班別', '學號', ...range.columns];
     const rows = state.students.map(s => {
       const r = [s.name, s.room, s.bed, s.class, s.studentId];
-      for (const d of range.columns) r.push(s.attendance[d] ?? (state.dateColumns.includes(d) ? '✓' : ''));
+      // 預設每個人每一天都是 ✓ (在宿舍)，沒有紀錄或後端沒有該日欄位也一樣
+      for (const d of range.columns) r.push(s.attendance[d] || '✓');
       return r;
     });
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
@@ -3762,6 +3859,22 @@ async function submitCounterLeave() {
     const matchedCols = getExportColumnEntries()
       .filter(entry => entry.iso >= startDateStr && entry.iso <= endDateStr)
       .map(entry => entry.column);
+    // 後端沒有欄位的日期：只能先存在這台裝置 (總表會顯示，等欄位建立後自動補送)
+    let localOnlyDays = 0;
+    {
+      const cursor = parseISODate(startDateStr);
+      const endDate = parseISODate(endDateStr);
+      const known = new Set(getExportColumnEntries().map(entry => entry.iso));
+      while (cursor && endDate && cursor <= endDate && localOnlyDays < 400) {
+        const iso = cursor.toISOString().slice(0, 10);
+        if (!known.has(iso)) {
+          student.attendance[iso] = '◎';
+          recordPendingAttendance(student.id, iso, '◎');
+          localOnlyDays++;
+        }
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+    }
     if (matchedCols.length > 0) {
       const pageUpdate = { pageId: student.id, dates: {} };
       for (const c of matchedCols) {
@@ -3774,6 +3887,8 @@ async function submitCounterLeave() {
       for (let i = 0; i < updates.length; i += 45) {
         await window._api.updateAttendance(updates.slice(i, i + 45));
       }
+    } else if (localOnlyDays > 0) {
+      showToast(`後端點名表還沒有這 ${localOnlyDays} 天的欄位，請假先暫存在這台裝置的總表`, 'info');
     } else {
       showToast('警告：選擇的請假範圍未涵蓋目前點名表的任何一天！將只記錄歷史，不修改總表。', 'info');
     }
