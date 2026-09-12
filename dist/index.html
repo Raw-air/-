@@ -10,10 +10,10 @@
   <meta name="theme-color" content="#151518">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=122">
-  <link rel="stylesheet" href="motion.css?v=122">
-  <link rel="stylesheet" href="folder.css?v=122">
-  <link rel="stylesheet" href="liquid-nav.css?v=122">
+  <link rel="stylesheet" href="style.css?v=100">
+  <link rel="stylesheet" href="motion.css?v=100">
+  <link rel="stylesheet" href="folder.css?v=100">
+  <link rel="stylesheet" href="liquid-nav.css?v=100">
   <link rel="manifest" href="manifest.json?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=2">
   <script defer src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -264,11 +264,6 @@
       <!-- 日期選擇器面板 -->
       <div id="date-picker-panel" class="date-picker-panel">
         <div class="date-picker-header"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg> 選擇點名日期</div>
-        <div style="padding:12px 16px;font-size:13px">
-          <label for="rc-date-input">點名日期（年／月／日）</label>
-          <input type="date" id="rc-date-input" class="styled-input" onchange="selectRollCallDate(this.value)" style="width:100%;min-height:44px;margin:8px 0">
-          <p id="rc-date-notice" role="status" style="font-size:12px;color:var(--dim);margin:8px 0"></p>
-        </div>
         <div id="date-picker-list" class="date-picker-list"></div>
       </div>
       <div class="rc-stats">
@@ -442,10 +437,6 @@
         <button id="summary-next-date" class="nav-arrow">›</button>
       </div>
     </div>
-    <div id="summary-archive-banner" class="summary-archive-banner" role="status" hidden>
-      <span>正在查看封存學期 <b id="summary-archive-name"></b>（唯讀，不能點名）</span>
-      <button type="button" class="action-btn" onclick="exitArchiveView()">回到本學期</button>
-    </div>
 
     <!-- 1-3: 總床數 / 空床數 / 住宿人數 -->
     <div class="big-stats">
@@ -453,10 +444,10 @@
         <div class="big-stat-value" id="total-beds">0</div>
         <div class="big-stat-label">總床數</div>
       </div>
-      <button type="button" class="big-stat summary-stat-link" onclick="openSummaryDetail('empty')" aria-label="查看空床數計算明細">
+      <div class="big-stat">
         <div class="big-stat-value" id="total-empty">0</div>
         <div class="big-stat-label">空床數</div>
-      </button>
+      </div>
       <div class="big-stat">
         <div class="big-stat-value" id="total-residents">0</div>
         <div class="big-stat-label">住宿人數</div>
@@ -465,15 +456,15 @@
 
     <!-- 4-5: 外籍生 / 住宿率 -->
     <div class="summary-row-2">
-      <button type="button" class="sm-stat summary-stat-link" onclick="openSummaryDetail('foreign')" aria-label="查看外籍生明細"><span><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg> 外籍生</span><b id="total-foreign">0</b></button>
-      <button type="button" class="sm-stat accent summary-stat-link" onclick="openSummaryDetail('rate')" aria-label="查看住宿率計算明細"><span><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg> 住宿率</span><b id="total-rate">0%</b></button>
+      <div class="sm-stat"><span><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg> 外籍生</span><b id="total-foreign">0</b></div>
+      <div class="sm-stat accent"><span><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg> 住宿率</span><b id="total-rate">0%</b></div>
     </div>
 
     <!-- 6-8: 實到 / 請假 / 未請假 -->
     <div class="summary-row-3">
       <div class="sm-stat green"><span>實到</span><b id="total-present">0</b></div>
-      <button type="button" class="sm-stat yellow summary-stat-link" onclick="openSummaryDetail('leave')" aria-label="查看請假名單"><span>請假</span><b id="total-leave">0</b></button>
-      <button type="button" class="sm-stat red summary-stat-link" onclick="openSummaryDetail('absent')" aria-label="查看未請假名單"><span>未請假</span><b id="total-absent">0</b></button>
+      <div class="sm-stat yellow"><span>請假</span><b id="total-leave">0</b></div>
+      <div class="sm-stat red"><span>未請假</span><b id="total-absent">0</b></div>
     </div>
 
     <!-- 各中隊 -->
@@ -492,20 +483,6 @@
         <img src="./Lp/ICON/RESET.svg" style="width:18px;height:18px;vertical-align:middle;margin-right:6px;">重新整理
       </button>
     </div>
-  </div>
-
-  <!-- ═══════════ 每日總表明細 ═══════════ -->
-  <div id="page-summary-detail" class="page">
-    <header class="summary-detail-header">
-      <button type="button" class="summary-detail-back" onclick="closeSummaryDetail()" aria-label="返回每日總表">
-        <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
-        返回總表
-      </button>
-      <p id="summary-detail-date" class="summary-detail-date"></p>
-      <h1 id="summary-detail-title" tabindex="-1">明細</h1>
-      <p id="summary-detail-description" class="summary-detail-description"></p>
-    </header>
-    <main id="summary-detail-content" class="summary-detail-content" aria-live="polite"></main>
   </div>
 
   <!-- ═══════════ 工具與選項 ═══════════ -->
@@ -565,37 +542,24 @@
       <span class="eb-arrow">›</span>
     </button>
 
-    <!-- 資料微動查詢 -->
+    <!-- 住宿生檔案管理 -->
     <button class="empty-bed-action" onclick="navigateTo('student-files'); initStudentFiles()">
       <span class="eb-icon"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg></span>
       <div class="eb-content">
-        <span class="eb-title" style="color:#6366f1">資料微動查詢</span>
-        <span class="eb-desc">以動態資料卡搜尋、瀏覽住宿生資料</span>
-      </div>
-      <span class="eb-arrow">›</span>
-    </button>
-
-    <!-- 住宿生檔案管理（Excel 表格） -->
-    <button class="empty-bed-action" onclick="navigateTo('resident-management')">
-      <span class="eb-icon"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16M15 4v16"/></svg></span>
-      <div class="eb-content">
-        <span class="eb-title" style="color:#34c759">住宿生檔案管理</span>
-        <span class="eb-desc">用 Excel 表格檢視與批次修改住宿資料</span>
+        <span class="eb-title" style="color:#6366f1">住宿生檔案管理</span>
+        <span class="eb-desc">搜尋住宿生，瀏覽與編輯個人資料卡</span>
       </div>
       <span class="eb-arrow">›</span>
     </button>
   </div>
 
-  <!-- ═══════════ 資料微動查詢 ═══════════ -->
+  <!-- ═══════════ 住宿生檔案管理 ═══════════ -->
   <div id="page-student-files" class="page">
-    <header class="sf-archive-header">
-      <button class="back-btn" onclick="navigateTo('tools')">‹ 返回工具</button>
-      <span class="sf-eyebrow">BIYUAN / RESIDENT ARCHIVE</span>
-      <span class="sf-archive-status"><i></i> 住宿資料庫</span>
-    </header>
-    <div class="sf-archive-heading">
-      <div><p class="sf-eyebrow">每一份檔案，都有自己的位置</p><h1>資料微動查詢<span>Resident data motion</span></h1></div>
+    <div style="position: relative; margin-bottom: 16px; display: flex; justify-content: center; align-items: center; padding-top: 8px;">
+      <button class="back-btn" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin-top: 0;" onclick="navigateTo('tools')">‹ 返回</button>
+      <h1 style="font-size: 20px; font-weight: 800; letter-spacing:1px; margin:0; color: var(--text);"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg> 住宿生檔案</h1>
     </div>
+
     <!-- Gooey Search Bar -->
     <div class="search-orb-container" id="sf-search-container">
       <div class="gooey-background-layer">
@@ -611,7 +575,8 @@
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
         </div>
-        <input type="text" class="modern-input" id="sf-search-input" aria-label="搜尋姓名、同音字、床號或學號" placeholder="搜尋姓名／同音字／床號／學號" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" oninput="onStudentFileSearch(this.value)" />
+        <input type="text" class="modern-input" id="sf-search-input" placeholder="搜尋住宿生 (姓名/床號/學號)" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" oninput="onStudentFileSearch(this.value)" />
+        <div class="focus-indicator"></div>
       </div>
       <svg class="gooey-svg-filter" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -626,7 +591,6 @@
 
     <!-- 2D Carousel & Search Blur Overlay -->
     <div id="sf-scene" class="sf-scene-2d">
-      <button class="sf-selection" onclick="sfCarousel?.openSheet()" aria-label="開啟目前住宿生檔案"><span>目前選取 <b>↗</b></span><strong id="sf-selection-name">住宿生檔案</strong><small id="sf-selection-meta">選取檔案以查看資料</small><i></i></button>
       <!-- Search Mirror Overlay -->
       <div id="sf-search-mirror" class="sf-search-mirror" style="display:none;">
         <div class="loader">
@@ -680,66 +644,11 @@
     </div>
 
     <!-- Indicator Dots -->
-    <div class="sf-archive-footer"><span id="sf-result-count" role="status" aria-live="polite"></span><span class="sf-gesture-hint">左右拖曳瀏覽 · 點選綠色檔案編輯</span><div class="sf-rail-controls"><button aria-label="上一份檔案" onclick="sfCarousel?.previous()">←</button><button aria-label="下一份檔案" onclick="sfCarousel?.next()">→</button></div></div>
+    <aside id="sf-inspector" class="sf-editor fd-sheet" role="dialog" aria-label="住宿生詳細資料" hidden></aside>
+    <p class="sf-archive-help">左右滑動瀏覽檔案 · 點選已抽出的資料夾編輯</p>
     <div id="sf-card-dots" class="sf-card-dots"></div>
 
     <!-- Auto-save enabled: no manual save button needed -->
-  </div>
-
-  <!-- ═══════════ 住宿生檔案管理（Excel 表格） ═══════════ -->
-  <div id="page-resident-management" class="page resident-management-page">
-    <header class="rm-header">
-      <button class="back-btn" onclick="navigateTo('tools')">‹ 返回工具</button>
-      <div class="rm-heading">
-        <span class="rm-eyebrow">BIYUAN / RESIDENT DATABASE</span>
-        <h1>住宿生檔案管理</h1>
-        <p>依 Excel 欄位順序呈現，不包含任何請假或點名日期資料。</p>
-      </div>
-      <div class="rm-total" aria-label="資料總數"><strong id="rm-total-count">0</strong><span>筆資料</span></div>
-    </header>
-
-    <div class="rm-toolbar" role="search">
-      <label class="rm-search">
-        <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        <span class="sr-only">搜尋住宿生資料</span>
-        <input id="rm-search-input" type="search" placeholder="搜尋姓名、寢床號、班別或學號" autocomplete="off" oninput="filterResidentManagement()">
-      </label>
-      <label class="rm-filter-label" for="rm-status-filter">顯示</label>
-      <select id="rm-status-filter" class="rm-status-filter" onchange="filterResidentManagement()" aria-label="篩選住宿狀態">
-        <option value="all">全部床位</option>
-        <option value="resident">住宿生</option>
-        <option value="empty">空床</option>
-        <option value="foreign">外籍生</option>
-      </select>
-      <button id="rm-save-all" class="rm-save-all" type="button" onclick="saveAllResidentRows()" disabled>
-        <svg class="ui-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
-        <span>儲存全部</span><b id="rm-dirty-count" hidden>0</b>
-      </button>
-    </div>
-
-    <div class="rm-table-shell" tabindex="0" aria-label="住宿生檔案表格，可左右捲動">
-      <table class="rm-table">
-        <thead>
-          <tr>
-            <th scope="col" class="rm-col-number">#</th>
-            <th scope="col" class="rm-col-name">名稱</th>
-            <th scope="col">寢床號</th>
-            <th scope="col">床號</th>
-            <th scope="col">班別</th>
-            <th scope="col">學號</th>
-            <th scope="col">電話</th>
-            <th scope="col" class="rm-col-address">住址</th>
-            <th scope="col">外籍</th>
-            <th scope="col">空床</th>
-            <th scope="col" class="rm-col-remarks">備註</th>
-            <th scope="col" class="rm-col-action">修改</th>
-          </tr>
-        </thead>
-        <tbody id="rm-table-body"></tbody>
-      </table>
-      <div id="rm-empty-state" class="rm-empty-state" hidden>找不到符合的住宿生或床位</div>
-    </div>
-    <p class="rm-help"><span><i></i> 綠點代表尚未儲存</span><span>寢床號與床號請使用「住宿生換床位」調整</span></p>
   </div>
 
   <!-- ═══════════ 報修填寫頁面 ═══════════ -->
@@ -1067,23 +976,7 @@
 
     <div class="settings-card">
       <div class="settings-card-header"><img src="./Lp/ICON/COPY.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">匯出 Excel</div>
-      <p class="settings-hint">自動套用本學期的預設時段；這次匯出也可以臨時調整，不會改到預設值。</p>
-      <div class="export-date-field export-semester-field" hidden>
-        <label for="export-semester">學期</label>
-        <select id="export-semester" class="styled-select" onchange="updateExportDateSummary()"></select>
-      </div>
-      <div class="export-date-grid">
-        <div class="export-date-field">
-          <label for="export-start-date">資料開始日期</label>
-          <input type="date" id="export-start-date" class="styled-input" oninput="updateExportDateSummary()">
-        </div>
-        <div class="export-date-field">
-          <label for="export-end-date">資料結束日期</label>
-          <input type="date" id="export-end-date" class="styled-input" oninput="updateExportDateSummary()">
-        </div>
-      </div>
-      <p id="export-date-summary" class="export-date-summary" aria-live="polite"></p>
-      <button id="export-btn" class="action-btn wide" onclick="exportExcel()"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> 匯出所選時段 Excel</button>
+      <button id="export-btn" class="action-btn wide" onclick="exportExcel()"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> 匯出完整 Excel</button>
     </div>
 
     <div class="settings-card">
@@ -1100,75 +993,8 @@
 
     <!-- 開發者面板（需要密碼） -->
     <div id="dev-panel" class="dev-panel">
-      <div class="dev-card" id="semester-card">
-        <div class="dev-card-header"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="m9 16 2 2 4-4"/></svg> 學期管理</div>
-        <p class="dev-card-hint" id="semester-hint">載入中…</p>
-        <div class="export-date-grid">
-          <div class="export-date-field">
-            <label for="sem-name">學期名稱</label>
-            <input type="text" id="sem-name" class="styled-input" placeholder="例如 115-1" autocomplete="off">
-          </div>
-        </div>
-        <div class="export-date-grid">
-          <div class="export-date-field">
-            <label for="sem-start">學期開始日</label>
-            <input type="date" id="sem-start" class="styled-input">
-          </div>
-          <div class="export-date-field">
-            <label for="sem-end">學期結束日</label>
-            <input type="date" id="sem-end" class="styled-input">
-          </div>
-        </div>
-        <p id="sem-range-summary" class="export-date-summary" aria-live="polite"></p>
-        <p class="dev-card-hint">套用後，雲端總表會補上範圍內每一天的欄位。之後改日期再套用一次：範圍變大就補欄位；範圍縮小會先列出要刪掉的日期與裡面的紀錄數，確認後才刪。</p>
-        <button id="sem-apply-btn" class="action-btn wide save-btn" onclick="applySemesterDates()">套用學期日期範圍</button>
-
-        <div class="sem-divider"></div>
-        <div class="dev-card-header">封存本學期並建立新學期</div>
-        <p class="dev-card-hint">目前總表原封不動保留供日後查看，另外建立一張新學期總表。床位照抄；勾選「帶入目前住宿生」會連姓名、班級、學號一起帶過去，之後再用匯入精靈更新名單即可。</p>
-        <div class="export-date-grid">
-          <div class="export-date-field">
-            <label for="sem-new-name">新學期名稱</label>
-            <input type="text" id="sem-new-name" class="styled-input" placeholder="例如 115-2" autocomplete="off">
-          </div>
-        </div>
-        <div class="export-date-grid">
-          <div class="export-date-field">
-            <label for="sem-new-start">新學期開始日</label>
-            <input type="date" id="sem-new-start" class="styled-input">
-          </div>
-          <div class="export-date-field">
-            <label for="sem-new-end">新學期結束日</label>
-            <input type="date" id="sem-new-end" class="styled-input">
-          </div>
-        </div>
-        <label class="sem-carry-label"><input type="checkbox" id="sem-carry" checked> 帶入目前住宿生名單</label>
-        <button id="sem-archive-btn" class="action-btn wide warning" onclick="archiveSemester()">封存本學期並建立新學期</button>
-        <p id="sem-archive-progress" class="export-date-summary" aria-live="polite" hidden></p>
-
-        <div class="sem-divider"></div>
-        <div class="dev-card-header">已封存的學期</div>
-        <div id="sem-archive-list"></div>
-      </div>
-
-      <div class="dev-card" style="margin-top:16px;">
-        <div class="dev-card-header"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg> Excel 匯出預設時段</div>
-        <p class="dev-card-hint">設定本學期常用的資料起訖日。儲存後，所有使用者開啟匯出功能時都會自動帶入此區間。</p>
-        <div class="export-date-grid">
-          <div class="export-date-field">
-            <label for="dev-export-start-date">預設開始日期</label>
-            <input type="date" id="dev-export-start-date" class="styled-input">
-          </div>
-          <div class="export-date-field">
-            <label for="dev-export-end-date">預設結束日期</label>
-            <input type="date" id="dev-export-end-date" class="styled-input">
-          </div>
-        </div>
-        <button id="save-export-range-btn" class="action-btn wide save-btn" onclick="saveDefaultExportRange()">儲存預設匯出時段</button>
-      </div>
-
       <!-- 幹部按鈕自訂 + 密碼 -->
-      <div class="dev-card" style="margin-top:16px;">
+      <div class="dev-card">
         <div class="dev-card-header"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/></svg> 幹部專區設定</div>
         <p class="dev-card-hint">設定首頁幹部按鈕的 EMOJI、名稱與登入密碼，儲存後即時同步至雲端。</p>
 
@@ -1443,15 +1269,14 @@
     <button type="button" class="nav-item" data-page="settings"><span class="nav-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-label">設定</span></button>
   </nav>
 
-  <script src="config.js?v=122"></script>
-  <script src="api.js?v=122"></script>
-  <script src="phonetic-search.js?v=122"></script>
-  <script src="app.js?v=122"></script>
-  <script src="import.js?v=122"></script>
-  <script src="theme.js?v=122"></script>
-  <script src="carousel.js?v=122"></script>
-  <script src="dissolve.js?v=122"></script>
-  <script src="navigation.js?v=122"></script>
+  <script src="config.js?v=100"></script>
+  <script src="api.js?v=100"></script>
+  <script src="app.js?v=100"></script>
+  <script src="import.js?v=100"></script>
+  <script src="theme.js?v=100"></script>
+  <script src="carousel.js?v=100"></script>
+  <script src="dissolve.js?v=100"></script>
+  <script src="navigation.js?v=100"></script>
 
   <!-- 幹部工作手冊 Modal -->
   <div id="duty-manual-modal" class="modal-overlay">
