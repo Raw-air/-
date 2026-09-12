@@ -93,7 +93,7 @@ async function run(engine){
     await exportExcel();
     return {rows,file};
   });
-  assert.deepEqual(r5.rows[0].slice(5),['6月26日','6月27日','2026-06-28']);assert.deepEqual(r5.rows[1].slice(5),['◎','✓','✓']);assert.match(r5.file,/114-2_20260626-20260628/);
+  assert.deepEqual(r5.rows[0].slice(5),['6/26','6/27','6/28']);assert.deepEqual(r5.rows[1].slice(5),['◎','✓','✓']);assert.match(r5.file,/114-2_20260626-20260628/);
 
   // 6. 回到本學期
   await page.evaluate(()=>exitArchiveView());

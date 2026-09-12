@@ -4132,6 +4132,33 @@ function buildExportRows(students, columns) {
   });
 }
 
+// Excel 表頭只顯示「月/日」，不帶年份
+function exportDateHeader(column, semesterName) {
+  const iso = dateColumnToISOFor(column, semesterName);
+  if (!iso) return column;
+  const [, m, d] = iso.split('-');
+  return `${Number(m)}/${Number(d)}`;
+}
+
+// 全部儲存格置中、表頭粗體、欄寬放寬 (樣式由 xlsx-js-style 寫入)
+function styleExportSheet(ws, rowCount, colCount) {
+  const colName = i => { let s = ''; for (i++; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; };
+  const border = { style: 'thin', color: { rgb: 'D0D0D0' } };
+  for (let r = 0; r < rowCount; r++) {
+    for (let c = 0; c < colCount; c++) {
+      const cell = ws[colName(c) + (r + 1)];
+      if (!cell) continue;
+      cell.s = {
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: { top: border, bottom: border, left: border, right: border },
+        ...(r === 0 ? { font: { bold: true }, fill: { fgColor: { rgb: 'F2F2F2' } } } : {}),
+      };
+    }
+  }
+  ws['!cols'] = [{ wch: 10 }, { wch: 8 }, { wch: 6 }, { wch: 14 }, { wch: 13 }, ...Array(Math.max(0, colCount - 5)).fill({ wch: 6 })];
+  ws['!freeze'] = { xSplit: 5, ySplit: 1 };
+}
+
 async function exportExcel() {
   const range = readExportRange('export-start-date', 'export-end-date');
   if (range.error) { showToast(range.error, 'error'); return; }
@@ -4148,9 +4175,10 @@ async function exportExcel() {
       label = semester;
     }
     if (!students.length) { showToast('沒有資料', 'error'); return; }
-    const headers = ['名稱', '寢床號', '床號', '班別', '學號', ...columns];
+    const headers = ['名稱', '寢床號', '床號', '班別', '學號', ...columns.map(c => exportDateHeader(c, label))];
     const rows = buildExportRows(students, columns);
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    styleExportSheet(ws, rows.length + 1, headers.length);
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '點名總表');
     const fileRange = `${range.start.replaceAll('-', '')}-${range.end.replaceAll('-', '')}`;
     XLSX.writeFile(wb, `碧苑點名_${label || 'semester'}_${fileRange}.xlsx`);

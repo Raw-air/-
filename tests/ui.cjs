@@ -170,7 +170,7 @@ async function run(engine,viewport){
     exported=null;document.getElementById('export-start-date').value='2026-06-25';document.getElementById('export-end-date').value='2026-02-20';exportExcel();
     return {firstHeaders,firstRow,fileName,savedRange,appliedRange,invalidBlocked:exported===null,exportGridColumns,exportInputHeight,firstSemesterDates};
   });
-  assert.deepEqual(exportChecks.firstHeaders,['名稱','寢床號','床號','班別','學號','2月20日','2月21日','2月22日']);
+  assert.deepEqual(exportChecks.firstHeaders,['名稱','寢床號','床號','班別','學號','2/20','2/21','2/22']);
   assert.deepEqual(exportChecks.firstRow.slice(-3),['✓','◎','✘']);
   assert.equal(exportChecks.fileName,'碧苑點名_114-2_20260220-20260222.xlsx');
   assert.deepEqual(exportChecks.savedRange,['2026-02-21','2026-06-25']);
