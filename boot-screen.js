@@ -4,6 +4,8 @@
 (function () {
   var root = document.getElementById('rawair-boot');
   if (!root) return;
+  // 自動化測試 (Playwright) 不播開機動畫，免得擋住測試的點擊
+  if (navigator.webdriver) { root.parentNode.removeChild(root); return; }
   var body = document.body;
   body.classList.add('rawair-booting');
 
