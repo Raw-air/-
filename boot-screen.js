@@ -252,11 +252,14 @@
     var students = (S && S.students) || [];
     var live = students.filter(function (s) { return !s.isEmpty && !s.hidden; });
     L.push([live.length ? 'ok' : 'warn', live.length ? 'Roster applied - ' + live.length + ' residents / ' + students.length + ' beds' : 'Roster sync returned no records']);
+    // 每層樓一行：單數房 / 雙數房 的 人數/床位
+    var floors = {};
     (C.SQUADS || []).forEach(function (sq) {
       var beds = students.filter(function (s) { return s.squad === sq.id; });
       var n = beds.filter(function (s) { return !s.isEmpty && !s.hidden; }).length;
-      L.push(['ok', 'Mounted squad ' + sq.id + ' ' + sq.floor + 'F ' + (sq.odd ? 'odd ' : 'even') + '  ' + n + '/' + beds.length + ' beds']);
+      floors[sq.floor] = (floors[sq.floor] || '') + '  ' + (sq.odd ? 'odd ' : 'even ') + n + '/' + beds.length;
     });
+    Object.keys(floors).sort().forEach(function (f) { L.push(['ok', 'Mounted floor ' + f + 'F' + floors[f]]); });
     if (S) {
       var today = S.currentDate || '';
       var leave = 0, absent = 0;
@@ -272,27 +275,12 @@
       L.push(['ok', 'Loaded ' + (S.changelogs || []).length + ' changelog entries']);
       L.push([(S.changes || []).length ? 'warn' : 'ok', 'Pending offline changes: ' + (S.changes || []).length]);
     }
-    L.push(['ok', 'Duty roster ' + (C.DUTY_ROSTER || []).length + ' weeks loaded']);
-    L.push(['ok', 'Room rules: ' + (C.DOUBLE_ROOMS || []).length + ' double rooms, ' + (C.STORAGE_ROOMS || []).length + ' storage masked']);
-    L.push(['ok', 'Theme: ' + (body.classList.contains('light-mode') ? 'light' : 'dark') + '  power save: ' + (fast ? 'on' : 'off')]);
-    L.push(['ok', 'Display ' + window.innerWidth + 'x' + window.innerHeight + ' @' + (window.devicePixelRatio || 1) + 'x']);
     var cn = navigator.connection;
     if (cn && cn.effectiveType) L.push(['ok', 'Network ' + cn.effectiveType + (cn.downlink ? '  ' + cn.downlink + ' Mbps' : '') + (cn.rtt != null ? '  rtt ' + cn.rtt + 'ms' : '')]);
-    L.push([navigator.serviceWorker && navigator.serviceWorker.controller ? 'ok' : 'warn', 'Service Worker ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'active' : 'not controlling yet') + (extra.caches ? '  cache ' + extra.caches : '')]);
-    if (extra.storage) L.push(['ok', 'Storage ' + fmt(extra.storage.usage || 0) + ' used / ' + fmt(extra.storage.quota || 0)]);
-    try {
-      var nav = performance.getEntriesByType('navigation')[0];
-      if (nav) L.push(['ok', 'DOM ready in ' + Math.round(nav.domContentLoadedEventEnd) + 'ms']);
-    } catch (_) {}
     var apiMs = 0, apiBytes = 0;
     reqs.forEach(function (r) { apiBytes += r.loaded; });
     if (reqs.length) apiMs = Date.now() - reqs[0].t;
     L.push(['ok', 'Data sync ' + fmt(apiBytes) + ' in ' + apiMs + 'ms']);
-    L.push(['ok', 'Started realtime KV poll listener']);
-    // 還沒寫滿就接著列出每間房 (真實房號與人數)
-    var rooms = {};
-    live.forEach(function (s) { if (s.room) rooms[s.room] = (rooms[s.room] || 0) + 1; });
-    Object.keys(rooms).sort().forEach(function (r) { L.push(['ok', 'Indexed room ' + r + '  ' + rooms[r] + ' residents']); });
     return L;
   }
   function maybeFinish() {
@@ -309,8 +297,15 @@
       setTimeout(function () {
         setLine(line, TAGS[item[0]] + esc(item[1]));
         nextInfo();
-      }, fast ? 0 : 35 + Math.random() * 90);
+      }, fast ? 0 : jitter());
     })();
+  }
+  // 卡卡的節奏：大多一閃而過，偶爾停一下，偶爾整個卡住轉圈
+  function jitter() {
+    var r = Math.random();
+    if (r < 0.15) return 450 + Math.random() * 500;
+    if (r < 0.4) return 140 + Math.random() * 180;
+    return 8 + Math.random() * 35;
   }
   // 螢幕寫滿了沒：再多一行就會超出畫面
   function isFull() {
