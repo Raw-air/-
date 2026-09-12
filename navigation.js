@@ -74,13 +74,16 @@ function setupNav(){
     if(e.button!==0||drag.active||!pressed)return;
     measure();if(w<120)return;
     Object.assign(drag,{active:true,moved:false,id:e.pointerId,item:pressed,startX:e.clientX,lastX:e.clientX,lastT:performance.now(),v:0,hover:index,startLens:lensX()});
-    try{nav.setPointerCapture(e.pointerId);}catch(_){}
+    // 先不抓 pointer capture：一抓住，瀏覽器就會把 click 改派給 nav，.nav-item 收不到點擊。
+    // 等真的拖了才抓 (見 pointermove)，單純點一下維持原生 click 流程。
     nav.classList.add('is-pressing');
   });
   nav.addEventListener('pointermove',e=>{
     if(!drag.active||e.pointerId!==drag.id)return;
     const dx=e.clientX-drag.startX;
-    if(!drag.moved){if(Math.abs(dx)<4)return;drag.moved=true;nav.classList.add('is-dragging');lens.classList.remove('is-travelling');}
+    if(!drag.moved){if(Math.abs(dx)<4)return;drag.moved=true;
+      try{nav.setPointerCapture(e.pointerId);}catch(_){}
+      nav.classList.add('is-dragging');lens.classList.remove('is-travelling');}
     const now=performance.now(),dt=now-drag.lastT;
     if(dt>0)drag.v=.7*((e.clientX-drag.lastX)/dt*1000)+.3*drag.v;
     drag.lastX=e.clientX;drag.lastT=now;
@@ -95,15 +98,14 @@ function setupNav(){
     nav.classList.remove('is-pressing','is-dragging');
     nav.style.removeProperty('--lens-sx');nav.style.removeProperty('--lens-sy');
     try{nav.releasePointerCapture(e.pointerId);}catch(_){}
-    // 有 pointer capture 時，瀏覽器會把 click 改派給 nav 而不是被按的 .nav-item，
-    // 所以純點擊不能等原生 click，直接用按下時記住的按鈕自己導頁。
-    suppressClick=true;setTimeout(()=>suppressClick=false,0);
+    const hit=drag.item;drag.item=null;
     if(!drag.moved){
-      const hit=drag.item;drag.item=null;
-      if(!cancelled&&hit)navigateTo(hit.dataset.page);
-      update();return;
+      // 沒拖動 → 沒抓過 capture，原生 click 會正常送到 .nav-item。
+      // 但少數瀏覽器 (含被 capture 影響時) 不送 click，這裡補一個保險。
+      if(!cancelled&&hit)setTimeout(()=>{if(currentPage!==hit.dataset.page&&navTabFor(currentPage)!==hit.dataset.page){navigateTo(hit.dataset.page);update();}},0);
+      return;
     }
-    drag.item=null;
+    suppressClick=true;setTimeout(()=>suppressClick=false,0);
     const target=cancelled?index:slotAt(lensX());
     if(target!==index)navigateTo(items[target].dataset.page); // 會廣播 app:navigate → update()
     update(); // 已離開拖曳狀態，transition 恢復 → 彈簧吸附
