@@ -19,18 +19,18 @@
   --nav-fill:rgba(40,40,48,.28);--nav-rim:rgba(255,255,255,.16);--nav-top:rgba(255,255,255,.2);
   --nav-shadow:0 14px 34px rgba(0,0,0,.3),0 2px 6px rgba(0,0,0,.18);
   --nav-ink:#8e8e96;--nav-ink-active:var(--purple);
-  --lens-fill:rgba(255,255,255,.05);--lens-ring:rgba(255,255,255,.38);--lens-bright:1.14;
-  --rim-top:rgba(255,255,255,.32);--rim-bevel:rgba(255,255,255,.12);--rim-hi:rgba(255,255,255,.16);
+  --lens-fill:rgba(255,255,255,.018);--lens-ring:rgba(255,255,255,.42);--lens-bright:1.05;
+  --rim-top:rgba(255,255,255,.38);--rim-bevel:rgba(255,255,255,.07);--rim-hi:rgba(255,255,255,.09);
   --rim-bottom:rgba(0,0,0,.16);
   --halo:0 8px 22px rgba(0,0,0,.12),0 0 18px rgba(255,255,255,.08);
-  --lens-shadow:0 6px 14px rgba(0,0,0,.18);
+  --lens-shadow:0 5px 12px rgba(0,0,0,.12);
 }
 body.light-mode .bottom-nav.liquid-nav {
   --nav-fill:rgba(255,255,255,.42);--nav-rim:rgba(255,255,255,.9);--nav-top:#fff;
   --nav-shadow:0 18px 40px rgba(60,70,100,.16),0 2px 6px rgba(60,70,100,.08);
   --nav-ink:#8a8a8e;--nav-ink-active:var(--purple);
-  --lens-fill:rgba(255,255,255,.16);--lens-ring:rgba(255,255,255,.85);--lens-bright:1.1;
-  --rim-top:rgba(255,255,255,.75);--rim-bevel:rgba(255,255,255,.35);--rim-hi:rgba(255,255,255,.42);
+  --lens-fill:rgba(255,255,255,.07);--lens-ring:rgba(255,255,255,.88);--lens-bright:1.03;
+  --rim-top:rgba(255,255,255,.82);--rim-bevel:rgba(255,255,255,.2);--rim-hi:rgba(255,255,255,.24);
   --rim-bottom:rgba(0,0,0,.16);
   --halo:0 10px 26px rgba(60,70,100,.12),0 0 12px rgba(255,255,255,.28);
   --lens-shadow:0 8px 18px rgba(60,70,100,.18);
@@ -79,7 +79,7 @@ body.light-mode .bottom-nav.liquid-nav {
 .liquid-nav.is-dragging .lens-shape {transition:transform .06s linear;}
 .lens-blur {
   position:absolute;inset:0;border-radius:var(--lens-radius);
-  backdrop-filter:blur(2px) saturate(180%) brightness(var(--lens-bright));-webkit-backdrop-filter:blur(2px) saturate(180%) brightness(var(--lens-bright));
+  backdrop-filter:blur(.5px) saturate(165%) brightness(var(--lens-bright)) contrast(1.04);-webkit-backdrop-filter:blur(.5px) saturate(165%) brightness(var(--lens-bright)) contrast(1.04);
 }
 @keyframes liquid-squish {
   0% {transform:scale(1,1);}
@@ -89,16 +89,16 @@ body.light-mode .bottom-nav.liquid-nav {
 }
 .liquid-lens.is-travelling .lens-shape {animation:liquid-squish .5s cubic-bezier(.32,.9,.3,1);}
 /* 放大層：跟真實那一列同樣排版的複本，以鏡片中心放大 */
-.lens-zoom {position:absolute;inset:0;transform:scale(1.12);}
+.lens-zoom {position:absolute;inset:0;transform:scale(1.2);}
 /* 無色色散的透明厚邊 */
 .lens-rim::after {
   content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
   background:linear-gradient(145deg,rgba(255,255,255,.32),transparent 42%,rgba(255,255,255,.12));
   -webkit-mask-image:radial-gradient(ellipse 50% 50% at 50% 50%,transparent 60%,#000 94%);
   mask-image:radial-gradient(ellipse 50% 50% at 50% 50%,transparent 60%,#000 94%);
-  opacity:.42;
+  opacity:.28;
 }
-body.light-mode .lens-rim::after {opacity:.58;}
+body.light-mode .lens-rim::after {opacity:.4;}
 .lens-row {
   position:absolute;top:calc((var(--lens-h) - 64px) / 2);left:calc(8px - var(--lens-x));
   width:calc(var(--nav-w) - 16px);height:64px;display:flex;
@@ -116,10 +116,10 @@ body.light-mode .lens-rim::after {opacity:.58;}
   background:radial-gradient(ellipse 60% 55% at 32% 20%,var(--rim-hi),rgba(255,255,255,0) 70%);
   box-shadow:inset 0 0 0 1px var(--lens-ring),
     inset 0 1px 1px var(--rim-top),
-    inset 2px 3px 6px var(--rim-bevel),
-    inset 0 -3px 5px -2px var(--rim-bottom),
-    inset -2px -3px 7px rgba(255,255,255,.06),
-    inset 2px 3px 8px rgba(255,255,255,.04);
+    inset 2px 2px 5px var(--rim-bevel),
+    inset 0 -2px 4px -2px var(--rim-bottom),
+    inset -2px -2px 5px rgba(255,255,255,.04),
+    inset 2px 2px 6px rgba(255,255,255,.03);
 }
 /* 導覽項目 */
 .liquid-nav .nav-item {height:64px;padding:9px 0 7px;gap:2px;border:0;background:none;box-shadow:none;min-width:0;flex:1;border-radius:32px;color:var(--nav-ink);font:inherit;transition:transform .2s,color .25s;touch-action:none;}
