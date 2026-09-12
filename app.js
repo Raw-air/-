@@ -4107,6 +4107,14 @@ function viewLeaveRecords() {
   renderLeaveRecordsList();
 }
 
+// 請假紀錄的建立時間：2026/09/12 22:02，無效日期就留白
+function formatLeaveStamp(value) {
+  const d = new Date(value);
+  if (!value || isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 async function renderLeaveRecordsList() {
   const container = document.getElementById('leave-records-list');
   if (!container) return;
@@ -4124,10 +4132,10 @@ async function renderLeaveRecordsList() {
     }
 
     container.innerHTML = records.map(r => `
-      <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);padding:16px;border-radius:12px;margin-bottom:12px;">
+      <div style="background:var(--card);border:1px solid var(--border);padding:16px;border-radius:12px;margin-bottom:12px;">
         <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;">
           <div style="font-size:16px;font-weight:bold;color:var(--text);">${r.title}</div>
-          <div style="font-size:12px;color:rgba(255,255,255,0.5);">${new Date(r.createdAt).toLocaleString()}</div>
+          <div style="font-size:12px;color:var(--dim);white-space:nowrap;flex:0 0 auto;margin-left:10px;">${formatLeaveStamp(r.createdAt)}</div>
         </div>
         <div style="font-size:14px;color:var(--dim);margin-bottom:4px;"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg> ${r.roomBed} ${r.name}</div>
         <div style="font-size:14px;color:var(--dim);margin-bottom:4px;"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg> ${r.dateStart} ~ ${r.dateEnd}</div>
