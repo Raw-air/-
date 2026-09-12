@@ -142,9 +142,9 @@ body.light-mode .liquid-nav .nav-item.active .nav-icon,body.light-mode .liquid-n
 .bottom-nav.liquid-nav.no-prop.is-dragging .liquid-lens,body.light-mode .bottom-nav.liquid-nav.no-prop.is-dragging .liquid-lens,
 .bottom-nav.liquid-nav.no-prop.is-dragging::after,body.light-mode .bottom-nav.liquid-nav.no-prop.is-dragging::after,
 .bottom-nav.liquid-nav.no-prop.is-dragging .lens-row,body.light-mode .bottom-nav.liquid-nav.no-prop.is-dragging .lens-row {transition:none;}
-/* 滿版 (手機 PWA 隱藏系統導覽列) 時 safe-area 會變 0，保底 24px 讓膠囊停在原本的高度，不往下沉 */
+/* 滿版 (手機 PWA 隱藏系統導覽列) 時 safe-area 會變 0，保底 12px (離螢幕底 28px)，不會沉到貼底 */
 @media (display-mode:fullscreen) {
-  .bottom-nav.liquid-nav,body.light-mode .bottom-nav.liquid-nav {bottom:calc(16px + max(env(safe-area-inset-bottom,0px),24px));}
+  .bottom-nav.liquid-nav,body.light-mode .bottom-nav.liquid-nav {bottom:calc(16px + max(env(safe-area-inset-bottom,0px),12px));}
   body {padding-bottom:calc(var(--nav-h) + max(var(--safe-b),24px) + 32px);}
 }
 @media (prefers-reduced-motion:reduce) {
