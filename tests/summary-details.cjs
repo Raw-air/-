@@ -100,6 +100,22 @@ async function verify(engine, viewport, lightMode = false) {
   assert.ok(lockedText.includes('已鎖定快照'));
   assert.ok(lockedText.includes('歷史快照名單差額'));
   assert.ok(lockedText.includes('為什麼有差額？'));
+  assert.ok(lockedText.includes('這天的快照沒有存名字'));
+
+  await page.evaluate(() => {
+    const snapshotDate = '2026-09-10';
+    state.config['snapshot_' + snapshotDate] = JSON.stringify({
+      totalBeds: 7, totalEmpty: 2, residents: 5, rate: 71.4, bedOffset: 1,
+      present: 3, leave: 2, absent: 0, shouldAttend: 5, foreign: 2, foreignOffset: 1, squads: [],
+      lists: { leave: ['leave-1', 'ghost-id'], absent: [], empty: [], foreign: [] },
+    });
+    openSummaryDetail('leave');
+  });
+  await page.waitForTimeout(220);
+  const whoText = await page.locator('#page-summary-detail').innerText();
+  assert.ok(whoText.includes('差額是誰'));
+  assert.ok(whoText.includes('合成請假生'));
+  assert.ok(whoText.includes('已刪除的住宿生'));
   await page.evaluate(() => { state.currentDate = getTodayColumnName(); });
 
   const screenshotKind = viewport.width < viewport.height ? (lightMode ? 'rate' : 'foreign') : 'empty';

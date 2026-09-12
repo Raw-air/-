@@ -2282,6 +2282,8 @@ function computeDailyStats(date) {
   const squads = [];
   let gShouldAttend = 0, gLeave = 0, gAbsent = 0, gPresent = 0;
   let gEmptyCount = 0, gForeignCount = 0;
+  // 快照一起存「是誰」(學生 id)，之後名單變動時才查得出差額是哪些人
+  const lists = { leave: [], absent: [], empty: [], foreign: [] };
 
   for (const sq of CONFIG.SQUADS) {
     // 排除隱藏的學生（雙人房 C/D 和儲藏室）
@@ -2294,10 +2296,12 @@ function computeDailyStats(date) {
     const shouldAttend = residents.length;
 
     let sqLeave = 0, sqAbsent = 0;
+    for (const s of members) if (s.isEmpty) lists.empty.push(s.id);
     for (const s of residents) {
       const v = s.attendance[date] || '✓';
-      if (v === '◎' || v === '△') sqLeave++;
-      else if (v === '✘') sqAbsent++;
+      if (v === '◎' || v === '△') { sqLeave++; lists.leave.push(s.id); }
+      else if (v === '✘') { sqAbsent++; lists.absent.push(s.id); }
+      if (s.isForeign) lists.foreign.push(s.id);
     }
     // 實到 = 應到 - 請假 - 未請假
     const sqPresent = shouldAttend - sqLeave - sqAbsent;
@@ -2332,7 +2336,7 @@ function computeDailyStats(date) {
     totalBeds, totalEmpty, residents, rate, bedOffset,
     present: gPresent, leave: gLeave, absent: gAbsent,
     shouldAttend: gShouldAttend, foreign: gForeignCount + foreignOffset, foreignOffset,
-    squads,
+    squads, lists,
   };
 }
 
@@ -2491,6 +2495,44 @@ function renderSummaryRateDetail(stats) {
   </section>`;
 }
 
+// 差額是誰：新快照有存 id 就逐人比對；舊快照沒存名字，只能比各隊人數
+function renderSnapshotDifferenceDetail(kind, stats, entries, difference) {
+  const heading = `<div class="summary-detail-list-heading"><h2>差額是誰</h2><span>差 ${difference > 0 ? '+' : ''}${difference}</span></div>`;
+  const snapIds = stats.lists && Array.isArray(stats.lists[kind]) ? stats.lists[kind] : null;
+
+  if (snapIds) {
+    const snapSet = new Set(snapIds);
+    const currentSet = new Set(entries.map(student => student.id));
+    const added = entries.filter(student => !snapSet.has(student.id));
+    const removed = snapIds.filter(id => !currentSet.has(id)).map(id => state.students.find(student => student.id === id) || { id });
+    const removedRow = student => {
+      const exists = !!student.name || !!student.room;
+      const roomBed = exists ? `${sfEsc(student.room || '未填房號')} ${sfEsc(student.bed || '未填')}床` : '';
+      return `<li class="summary-detail-row">
+        <div class="summary-detail-row-main">
+          <strong>${exists ? sfEsc(student.name || roomBed) : '已刪除的住宿生'}</strong>
+          <span>${exists ? [roomBed, student.squad].filter(Boolean).map(sfEsc).join(' ・ ') : '住宿生資料已不存在'}</span>
+        </div>
+        <span class="summary-detail-status absent">快照有</span>
+      </li>`;
+    };
+    const block = (title, rows) => rows ? `<section class="summary-detail-group"><div class="summary-detail-group-title"><h2>${title}</h2></div><ul>${rows}</ul></section>` : '';
+    const body = block(`現在名單多出來的 ${added.length} 人（快照當時不在）`, added.map(student => summaryDetailRow(kind, student)).join('')) +
+      block(`快照當時有、現在不在名單的 ${removed.length} 人`, removed.map(removedRow).join(''));
+    return heading + (body || `<div class="summary-detail-notice"><span>名單人員相同，差額來自修正值變動。</span></div>`);
+  }
+
+  const snapSquads = Array.isArray(stats.squads) ? stats.squads : [];
+  const rows = snapSquads.map(squad => {
+    const then = summaryDetailNumber(squad[kind]);
+    const now = entries.filter(student => (student.squad || '未分隊') === squad.id).length;
+    const diff = now - then;
+    return diff ? `<div><span>${sfEsc(squad.id)}：快照 ${then} → 現在 ${now}</span><b>${diff > 0 ? '多 ' : '少 '}${Math.abs(diff)}</b></div>` : '';
+  }).join('');
+  return `${heading}<div class="summary-detail-notice"><strong>這天的快照沒有存名字</strong><span>舊版快照只記了人數，查不到是哪幾個人。${rows ? '下面是各隊差多少，可以縮小範圍。' : '各隊人數也對不出差異，可能是修正值或分隊資料變動。'}（這次更新之後的快照會存名字）</span></div>
+    ${rows ? `<section class="summary-calculation-card" aria-label="各隊差額"><div class="summary-formula-rows">${rows}</div></section>` : ''}`;
+}
+
 function renderSummaryDetail() {
   const kind = SUMMARY_DETAIL_META[activeSummaryDetail] ? activeSummaryDetail : 'empty';
   const meta = SUMMARY_DETAIL_META[kind];
@@ -2526,6 +2568,7 @@ function renderSummaryDetail() {
       <div class="summary-formula-rows">${calculationRows}</div>
     </section>
     ${notice}
+    ${snapshotDifference !== 0 ? renderSnapshotDifferenceDetail(kind, stats, entries, snapshotDifference) : ''}
     <div class="summary-detail-list-heading"><h2>逐筆明細</h2><span>${entries.length} 筆名單</span></div>
     ${summaryDetailGroups(kind, entries)}`;
 }
