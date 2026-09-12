@@ -2265,16 +2265,31 @@ function closeModal(id) {
  * 計算某日的全域統計資料（一個函數，renderSummary 和 copySummary 共用）
  */
 function computeDailyStats(date) {
+  const live = computeLiveDailyStats(date);
   if (!isTodayAttendanceDate(date) && !state.viewSemester) {
     const snap = state.config['snapshot_' + date];
     if (snap) {
       try {
         const cachedSt = JSON.parse(snap);
-        if (cachedSt && typeof cachedSt === 'object') return cachedSt;
+        if (cachedSt && typeof cachedSt === 'object') {
+          // 快照只鎖床位/住宿人數/外籍 (名單會變動)；請假、未請假一律用點名表現況，
+          // 不然當天最後一次開總表之後才登記的請假 (電話請假、別台裝置) 會漏算，跟歷史頁對不起來
+          const shouldAttend = summaryDetailNumber(cachedSt.shouldAttend ?? live.shouldAttend);
+          return {
+            ...cachedSt,
+            leave: live.leave, absent: live.absent,
+            present: shouldAttend - live.leave - live.absent,
+            squads: live.squads,
+            lists: { ...(cachedSt.lists || {}), leave: live.lists.leave, absent: live.lists.absent },
+          };
+        }
       } catch (e) { console.error('Failed to parse snapshot', e); }
     }
   }
+  return live;
+}
 
+function computeLiveDailyStats(date) {
   const totalBeds = parseInt(state.config['total_beds']) || state.students.filter(s => !s.hidden).length;
   const bedOffset = parseInt(state.config['bed_offset']) || 0;
 

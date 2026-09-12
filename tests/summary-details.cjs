@@ -90,12 +90,14 @@ async function verify(engine, viewport, lightMode = false) {
     const snapshotDate = '2026-09-10';
     state.currentDate = snapshotDate;
     state.config['snapshot_' + snapshotDate] = JSON.stringify({
-      totalBeds: 7, totalEmpty: 2, residents: 5, rate: 71.4, bedOffset: 1,
+      totalBeds: 7, totalEmpty: 3, residents: 4, rate: 57.1, bedOffset: 1,
       present: 3, leave: 2, absent: 0, shouldAttend: 5, foreign: 2, foreignOffset: 1, squads: [],
     });
-    openSummaryDetail('leave');
+    openSummaryDetail('empty');
   });
   await page.waitForTimeout(220);
+  // 過去日期的請假數要跟點名表現況一致，不能被舊快照的 leave:2 蓋掉
+  assert.equal(await page.evaluate(() => computeDailyStats('2026-09-10').leave), 0);
   const lockedText = await page.locator('#page-summary-detail').innerText();
   assert.ok(lockedText.includes('已鎖定快照'));
   assert.ok(lockedText.includes('歷史快照名單差額'));
@@ -105,16 +107,15 @@ async function verify(engine, viewport, lightMode = false) {
   await page.evaluate(() => {
     const snapshotDate = '2026-09-10';
     state.config['snapshot_' + snapshotDate] = JSON.stringify({
-      totalBeds: 7, totalEmpty: 2, residents: 5, rate: 71.4, bedOffset: 1,
+      totalBeds: 7, totalEmpty: 3, residents: 4, rate: 57.1, bedOffset: 1,
       present: 3, leave: 2, absent: 0, shouldAttend: 5, foreign: 2, foreignOffset: 1, squads: [],
-      lists: { leave: ['leave-1', 'ghost-id'], absent: [], empty: [], foreign: [] },
+      lists: { leave: ['leave-1', 'ghost-id'], absent: [], empty: ['empty-1', 'ghost-id'], foreign: [] },
     });
-    openSummaryDetail('leave');
+    openSummaryDetail('empty');
   });
   await page.waitForTimeout(220);
   const whoText = await page.locator('#page-summary-detail').innerText();
   assert.ok(whoText.includes('差額是誰'));
-  assert.ok(whoText.includes('合成請假生'));
   assert.ok(whoText.includes('已刪除的住宿生'));
   await page.evaluate(() => { state.currentDate = getTodayColumnName(); });
 
