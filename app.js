@@ -3993,7 +3993,9 @@ function isTodayAttendanceDate(value) {
 
 function getNavigableAttendanceDates() {
   const byISO = new Map();
-  for (const entry of getExportColumnEntries()) byISO.set(entry.iso, entry.column);
+  // 同一天可能同時有舊式「9月12日」和新式「2026-09-12」欄位，跟 resolveAttendanceDate / 歷史頁一樣取第一個，
+  // 不然總表切到那天會讀到另一個只記了少數人的欄位
+  for (const entry of getExportColumnEntries()) if (!byISO.has(entry.iso)) byISO.set(entry.iso, entry.column);
   const todayISO = localTodayISO();
   const configured = getConfiguredExportRange();
   const startDate = parseISODate(configured.start);
