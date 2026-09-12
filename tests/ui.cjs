@@ -322,9 +322,9 @@ async function run(engine,viewport){
   await page.evaluate(()=>{window._sfStopMotion();document.querySelector('.sf-folder.active .sf-input-name').value='測試住宿生 0';sfCarousel.openSheet();});
   await page.waitForTimeout(700);
   await page.screenshot({path:path.join(out,engine.name()+'-cards.png')});
-  // 刪除 = 高密度粉塵 + 微型黑洞：renderer (canvas / WebGL context / shader / 粒子池) 在頁面載入
-  // 就備妥，按下去 250ms 內就開始畫，DOM 用遮罩與粉塵同步消失；粉塵還在飛的時候資料夾就以
-  // 「空床」長回來 (草稿，不打 API)，紙會再自動打開
+  // 刪除 = 燈滅 + 光線行進的引力透鏡黑洞 + 粉塵潮汐流 + 崩塌閃光：renderer (canvas / WebGL context /
+  // shader / FBO / 粒子池) 在頁面載入就備妥，按下去 250ms 內就開始畫，DOM 用遮罩與粉塵同步消失；
+  // 黑洞崩塌後資料夾以「空床」長回來 (草稿，不打 API)，紙會再自動打開
   assert.equal(await page.locator('.sf-dissolve-canvas').count(),1,'particle canvas is created at page mount');
   assert.ok(await page.evaluate(()=>sfDissolve.max>=3000),'the particle pool is preallocated for a dense dust cloud');
   await page.evaluate(()=>{window.__delT0=performance.now();window.__bhDone=false;clearStudentData(document.querySelector('.sf-folder.active .sf-broom-btn')).then(()=>window.__bhDone=true);});
@@ -338,6 +338,7 @@ async function run(engine,viewport){
   // 資料夾本身跟著粉塵一起消失 (DOM 遮罩)，而且粉塵是「一大片」不是幾十顆
   const dust=await page.evaluate(()=>({...sfDissolve.stats,webgl:sfDissolve.webgl,max:sfDissolve.max}));
   assert.ok(dust.masked,'the folder itself dissolves with the particles (DOM mask follows the frontier)');
+  if(dust.webgl)assert.ok(dust.lens,'WebGL path renders through the gravitational-lens pass (FBO complete)');
   assert.ok(dust.max>=3000,'the particle pool is preallocated for a dense dust cloud: '+dust.max);
   assert.ok(dust.spawned>400,'a dense dust cloud, not a handful of specks: '+JSON.stringify(dust));
   assert.ok(dust.peak>150,'many particles are alive at once: '+JSON.stringify(dust));

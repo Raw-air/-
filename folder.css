@@ -499,7 +499,8 @@ body.light-mode .fd-sheet .sf-icon-btn { background: rgba(255,255,255,.8); borde
 .sf-folder.fd-dissolving { --fd-del-scale: .985; }
 .sf-folder.fd-dissolving > .fd-front,
 .sf-folder.fd-dissolving > .fd-sheet { transition: transform .07s ease-out; }
-.sf-folder.fd-dissolving > .fd-edge { opacity: 1; border-color: #fff rgba(255,255,255,.5) rgba(255,255,255,.5) #fff; }
+/* 邊緣被潮汐力撕開時會發熱：白 → 橘白 */
+.sf-folder.fd-dissolving > .fd-edge { opacity: 1; border-color: #fff4e6 rgba(255,200,150,.7) rgba(255,200,150,.7) #fff4e6; }
 /* 光暈與大片投影每幀跟著遮罩重算很貴，準備消失時先收掉 (也像物件失去光澤) */
 .sf-folder.fd-dissolving > .fd-back { box-shadow: none; transition: box-shadow .12s ease-out; }
 .sf-folder.fd-dissolving > .fd-front,
