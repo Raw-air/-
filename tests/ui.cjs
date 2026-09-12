@@ -431,6 +431,31 @@ async function run(engine,viewport){
   assert.equal(await page.locator('.liquid-nav .lens-fringe').count(),0,'liquid glass has no chromatic fringe layer');
   const navAlignment=await page.locator('.liquid-nav .nav-item').first().evaluate(e=>{const i=e.querySelector('.nav-icon svg').getBoundingClientRect(),t=e.querySelector('.nav-label').getBoundingClientRect();return Math.abs((i.left+i.width/2)-(t.left+t.width/2));});
   assert.ok(navAlignment<1,'navigation icon and label share the same centre line: '+navAlignment);
+  // 底部導覽：點一下要換頁 (別被 pointer capture 吃掉 click)，按住左右拖也要能把鏡片拖走並吸附。
+  await page.evaluate(()=>{document.querySelectorAll('.modal-overlay.show,.modal.show,.sheet.show').forEach(m=>m.classList.remove('show'));navigateTo('home');});
+  await page.waitForTimeout(700);
+  const navAt=async p=>page.evaluate(t=>{const i=[...document.querySelectorAll('.liquid-nav .nav-item')].find(n=>n.dataset.page===t);const r=i.getBoundingClientRect();return [Math.round(r.x+r.width/2),Math.round(r.y+r.height/2)];},p);
+  const navPage=()=>page.evaluate(()=>navTabFor(currentPage));
+  for(const tab of ['summary','history','settings','home']){
+    const b=await navAt(tab);await page.mouse.click(b[0],b[1]);await page.waitForTimeout(500);
+    assert.equal(await navPage(),tab,'tapping the '+tab+' tab switches page');
+  }
+  async function navDrag(from,to,steps){
+    const a=await navAt(from),b=await navAt(to);
+    await page.mouse.move(a[0],a[1]);await page.mouse.down();
+    let midLens='';
+    for(let i=1;i<=steps;i++){await page.mouse.move(a[0]+(b[0]-a[0])*i/steps,a[1]);await page.waitForTimeout(12);
+      if(i===Math.ceil(steps/2))midLens=await page.evaluate(()=>document.querySelector('.bottom-nav').style.getPropertyValue('--lens-x'));}
+    await page.mouse.up();await page.waitForTimeout(600);
+    return {page:await navPage(),mid:parseFloat(midLens)};
+  }
+  const dragFar=await navDrag('home','settings',24);
+  assert.equal(dragFar.page,'settings','dragging the lens from home lands on settings');
+  const dragBack=await navDrag('settings','summary',24);
+  assert.equal(dragBack.page,'summary','dragging the lens backwards lands on summary');
+  // 中途鏡片必須真的跟著游標，不能整段卡在起點或終點
+  assert.ok(dragBack.mid>60&&dragBack.mid<250,'the lens follows the pointer mid-drag: '+dragBack.mid);
+  await page.evaluate(()=>navigateTo('home'));await page.waitForTimeout(300);
   assert.ok(await page.evaluate(()=>document.body.classList.contains('light-mode')));
   await page.screenshot({path:path.join(out,engine.name()+'-light-navigation.png')});
   assert.deepEqual(errors,[]);

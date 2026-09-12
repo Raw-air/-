@@ -78,7 +78,9 @@ function setupNav(){
     // 等真的拖了才抓 (見 pointermove)，單純點一下維持原生 click 流程。
     nav.classList.add('is-pressing');
   });
-  nav.addEventListener('pointermove',e=>{
+  // 移動/放開掛在 document 上：不靠 pointer capture 也一定收得到，
+  // 手指或滑鼠滑出導覽列、或瀏覽器把事件改派到別的元素時都還能追。
+  document.addEventListener('pointermove',e=>{
     if(!drag.active||e.pointerId!==drag.id)return;
     const dx=e.clientX-drag.startX;
     if(!drag.moved){if(Math.abs(dx)<4)return;drag.moved=true;
@@ -110,9 +112,8 @@ function setupNav(){
     if(target!==index)navigateTo(items[target].dataset.page); // 會廣播 app:navigate → update()
     update(); // 已離開拖曳狀態，transition 恢復 → 彈簧吸附
   }
-  nav.addEventListener('pointerup',e=>release(e,false));
-  nav.addEventListener('pointercancel',e=>release(e,true));
-  nav.addEventListener('lostpointercapture',e=>release(e,true));
+  document.addEventListener('pointerup',e=>release(e,false));
+  document.addEventListener('pointercancel',e=>release(e,true));
   nav.addEventListener('click',e=>{if(suppressClick){e.preventDefault();e.stopImmediatePropagation();}},true);
   items.forEach(item=>item.addEventListener('click',()=>{navigateTo(item.dataset.page);update();}));
   nav.addEventListener('keydown',e=>{
