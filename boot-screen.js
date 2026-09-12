@@ -1,135 +1,103 @@
-// RAWAIR OS 開機畫面
-// 只管「第一次打開 App」：等 app.js 第一次把 #loading-overlay 收掉 (資料載完) 就播收場動畫並移除自己。
+// RAWAIR 開機終端機
+// 只管「第一次打開 App」：一行一行印開機訊息，等 app.js 第一次把 #loading-overlay 收掉 (資料載完) 就關掉。
 // 之後改資料時跳的載入畫面仍是原本那個，這支檔案完全不碰。
 (function () {
   var root = document.getElementById('rawair-boot');
   if (!root) return;
-  // 自動化測試 (Playwright) 不播開機動畫，免得擋住測試的點擊
+  // 自動化測試 (Playwright) 不顯示開機畫面，免得擋住測試的點擊
   if (navigator.webdriver) { root.parentNode.removeChild(root); return; }
   var body = document.body;
   body.classList.add('rawair-booting');
 
-  var lite = false;
-  try {
-    lite = localStorage.getItem('power_save_mode') === 'true' ||
-      (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
-  } catch (_) {}
-  if (lite) root.classList.add('rb-lite');
+  var fast = false;
+  try { fast = localStorage.getItem('power_save_mode') === 'true'; } catch (_) {}
 
   var t0 = Date.now();
-  var MIN_MS = lite ? 900 : 2800;   // 至少播這麼久，動畫才看得完整
+  var MIN_MS = fast ? 900 : 2600;   // 至少顯示這麼久，字才看得到
   var MAX_MS = 19000;               // 資料一直沒回來就交給原本的載入畫面
   var dataDone = false, finished = false;
 
-  // 開機期間先停掉背後舊終端機的假日誌，省效能；收場後恢復原設定
+  // 開機期間先停掉背後舊終端機的假日誌，省效能；結束後恢復原設定
   var origStopLog = window._psStopHackingLog;
   window._psStopHackingLog = true;
 
-  // ── 大字 RAWAIR (5x7 點陣) ──
-  var FONT = {
-    R: ['11110', '10001', '10001', '11110', '10100', '10010', '10001'],
-    A: ['01110', '10001', '10001', '11111', '10001', '10001', '10001'],
-    W: ['10001', '10001', '10001', '10101', '10101', '10101', '01010'],
-    I: ['11111', '00100', '00100', '00100', '00100', '00100', '11111']
-  };
-  var WORD = 'RAWAIR';
-  var logo = document.getElementById('rb-logo');
-  var html = '';
-  var vw = Math.max(window.innerWidth, 320), vh = Math.max(window.innerHeight, 480);
-  for (var li = 0; li < WORD.length; li++) {
-    var g = FONT[WORD[li]];
-    html += '<span class="rb-ch" style="left:calc(var(--p)*' + (li * 6) + ')"></span>';
-    for (var r = 0; r < 7; r++) {
-      for (var c = 0; c < 5; c++) {
-        if (g[r][c] !== '1') continue;
-        var col = li * 6 + c;
-        var hue = Math.round(188 + col / 34 * 120);
-        var ang = Math.random() * Math.PI * 2, dist = 0.45 + Math.random() * 0.6;
-        var dx = Math.round(Math.cos(ang) * vw * dist), dy = Math.round(Math.sin(ang) * vh * dist);
-        var rot = Math.round(Math.random() * 540 - 270);
-        var delay = Math.round(250 + li * 90 + Math.random() * 320);
-        html += '<i style="left:calc(var(--p)*' + col + ');top:calc(var(--p)*' + r + ');--h:' + hue +
-          ';--dx:' + dx + 'px;--dy:' + dy + 'px;--r:' + rot + 'deg;--d:' + delay + 'ms"></i>';
-      }
-    }
+  var term = document.getElementById('rb-term');
+
+  // ANSI Shadow 字型的 RAWAIR
+  var ART = [
+    '██████╗  █████╗ ██╗    ██╗ █████╗ ██╗██████╗ ',
+    '██╔══██╗██╔══██╗██║    ██║██╔══██╗██║██╔══██╗',
+    '██████╔╝███████║██║ █╗ ██║███████║██║██████╔╝',
+    '██╔══██╗██╔══██║██║███╗██║██╔══██║██║██╔══██╗',
+    '██║  ██║██║  ██║╚███╔███╔╝██║  ██║██║██║  ██║',
+    '╚═╝  ╚═╝╚═╝  ╚═╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝╚═╝  ╚═╝'
+  ];
+  // 大字的字級：盡量撐滿寬度 (等寬字大約 0.6em 寬)，最大 30px
+  function artSize() {
+    var w = (term && term.clientWidth) || window.innerWidth - 24;
+    return Math.max(6, Math.min(30, Math.floor(w / (ART[0].length * 0.61))));
   }
-  if (logo) logo.innerHTML = html;
-  var assembleMs = lite ? 0 : 250 + 5 * 90 + 320 + 850;
-  setTimeout(function () {
-    if (!logo || finished) return;
-    logo.classList.add('rb-glow');
-    if (!lite) {
-      logo.classList.add('rb-shine');
-      setTimeout(function () { logo.classList.add('rb-glitch'); }, 700);
-      setTimeout(function () { logo.classList.remove('rb-glitch'); }, 1050);
-    }
-  }, assembleMs);
 
-  // ── 上方時鐘 ──
-  var clock = document.getElementById('rb-clock');
-  function tick() {
-    if (!clock) return;
-    var d = new Date();
-    clock.textContent = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' +
-      String(d.getDate()).padStart(2, '0') + ' ' + d.toTimeString().slice(0, 8);
-  }
-  tick();
-  var clockTimer = setInterval(tick, 1000);
-
-  // ── Developer: Raw_air 打字 ──
-  var devEl = document.getElementById('rb-devname');
-  var DEV = 'Raw_air';
-  setTimeout(function typeDev(i) {
-    i = i || 0;
-    if (!devEl || finished) return;
-    devEl.textContent = DEV.slice(0, i + 1);
-    if (i + 1 < DEV.length) setTimeout(function () { typeDev(i + 1); }, lite ? 0 : 85);
-  }, lite ? 0 : 900);
-
-  // ── 開機訊息 ──
-  var logEl = document.getElementById('rb-log');
-  var bar = document.getElementById('rb-bar-fill');
-  var pctEl = document.getElementById('rb-pct');
   function esc(s) { return String(s).replace(/[&<>]/g, function (m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]; }); }
-  function line(tag, text) {
-    if (!logEl) return;
-    var TAGS = {
-      ok: '<span class="dim">[</span><span class="ok">  OK  </span><span class="dim">]</span> ',
-      wait: '<span class="dim">[</span><span class="wait"> WAIT </span><span class="dim">]</span> ',
-      warn: '<span class="dim">[</span><span class="warn"> WARN </span><span class="dim">]</span> ',
-      bad: '<span class="dim">[</span><span class="bad"> FAIL </span><span class="dim">]</span> '
-    };
+  var TAGS = {
+    ok: '<span class="dim">[</span><span class="ok">  OK  </span><span class="dim">]</span> ',
+    wait: '<span class="dim">[</span><span class="wait"> WAIT </span><span class="dim">]</span> ',
+    warn: '<span class="dim">[</span><span class="warn"> WARN </span><span class="dim">]</span> ',
+    bad: '<span class="dim">[</span><span class="bad"> FAIL </span><span class="dim">]</span> '
+  };
+  var cursor = document.createElement('span');
+  cursor.className = 'rb-cursor';
+
+  function print(kind, text) {
+    if (!term) return;
     var div = document.createElement('div');
-    div.innerHTML = (TAGS[tag] || '') + (tag === 'hi' ? '<span class="hi">' + esc(text) + '</span>' : tag === 'dim' ? '<span class="dim">' + esc(text) + '</span>' : esc(text));
-    logEl.appendChild(div);
-    while (logEl.children.length > 14) logEl.removeChild(logEl.firstChild);
-  }
-  var pct = 0;
-  function setPct(p) {
-    pct = Math.max(pct, Math.min(100, Math.round(p)));
-    if (bar) bar.style.width = pct + '%';
-    if (pctEl) pctEl.textContent = pct + '%';
+    if (kind === 'art') {
+      div.className = 'rb-art';
+      div.style.fontSize = artSize() + 'px';
+      div.textContent = text;
+    } else if (TAGS[kind]) {
+      div.innerHTML = TAGS[kind] + esc(text);
+    } else if (kind === 'raw') {
+      div.innerHTML = text;
+    } else {
+      div.innerHTML = kind ? '<span class="' + kind + '">' + esc(text) + '</span>' : esc(text);
+    }
+    div.appendChild(cursor);
+    term.appendChild(div);
+    // 像真的終端機一樣：滿了就往上捲
+    while (term.scrollHeight > root.clientHeight && term.children.length > 1) term.removeChild(term.firstChild);
   }
 
   var mem = navigator.deviceMemory ? navigator.deviceMemory * 1024 : 4096;
   var cores = navigator.hardwareConcurrency || 4;
+  var d = new Date();
+  var stamp = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + ' ' + d.toTimeString().slice(0, 8);
+
+  // [種類, 文字, 印完後停多久 ms]
   var STEPS = [
-    ['dim', 'RAWAIR BIOS v3.13  (C) 2026 Raw_air. All rights reserved.'],
-    ['dim', 'CPU: ' + cores + '-core Biyuan Neural Engine ........ detected'],
-    ['dim', 'Memory test: ' + mem + ' MB OK'],
-    ['dim', 'Booting from /dev/biyuan0 ...'],
-    ['ok', 'Mounted root filesystem (PWA shell)'],
-    ['ok', 'Started Service Worker cache daemon'],
-    ['ok', 'Restored user preferences (cookie / IndexedDB)'],
-    ['ok', 'Reached target Local Storage'],
-    ['ok', 'Started Theme Engine & Liquid Glass compositor'],
-    ['ok', 'Loaded phonetic search index'],
-    ['ok', 'Started Haptic & Audio feedback service'],
-    [navigator.onLine === false ? 'warn' : 'ok', navigator.onLine === false ? 'Network offline — using cached shell' : 'Network interface up'],
-    ['wait', 'Connecting to biyuan-proxy.workers.dev ...'],
-    ['ok', 'TLS handshake complete'],
-    ['wait', 'Fetching roster / config / changelog from Notion ...']
+    ['dim', 'RAWAIR BIOS v3.13  (C) 2026 Raw_air', 60],
+    ['dim', 'CPU: ' + cores + ' cores detected    Memory: ' + mem + ' MB OK', 60],
+    ['dim', 'Boot device: /dev/biyuan0    ' + stamp, 160],
+    ['', '', 40]
   ];
+  ART.forEach(function (l) { STEPS.push(['art', l, 45]); });
+  STEPS.push(
+    ['', '', 30],
+    ['raw', '<span class="dim">  Biyuan Dorm Roll-Call System</span>', 30],
+    ['raw', '<span class="dim">  Developer:</span> <span class="dev">Raw_air</span>', 260],
+    ['', '', 30],
+    ['ok', 'Mounted root filesystem (PWA shell)', 70],
+    ['ok', 'Started Service Worker cache daemon', 70],
+    ['ok', 'Restored user preferences (cookie / IndexedDB)', 90],
+    ['ok', 'Reached target Local Storage', 60],
+    ['ok', 'Started Theme Engine', 80],
+    ['ok', 'Loaded phonetic search index', 110],
+    ['ok', 'Started Haptic & Audio feedback service', 70],
+    [navigator.onLine === false ? 'warn' : 'ok', navigator.onLine === false ? 'Network offline - using cached shell' : 'Network interface up', 90],
+    ['wait', 'Connecting to biyuan-proxy.workers.dev ...', 180],
+    ['ok', 'TLS handshake complete', 80],
+    ['wait', 'Fetching roster / config / changelog from Notion ...', 200]
+  );
   var WAIT_MSGS = [
     'Syncing attendance matrix ...',
     'Mapping bed state records ...',
@@ -142,18 +110,14 @@
   function nextStep() {
     if (finished) return;
     if (si < STEPS.length) {
-      line(STEPS[si][0], STEPS[si][1]);
-      si++;
-      setPct(si / STEPS.length * 72);
-      var fast = dataDone || lite;
-      var d = si <= 4 ? 70 : 110 + Math.random() * 130;
-      setTimeout(nextStep, fast ? d * 0.3 : d);
+      var s = STEPS[si++];
+      print(s[0], s[1]);
+      setTimeout(nextStep, fast || dataDone ? Math.min(s[2], 25) : s[2]);
       return;
     }
     if (!dataDone) {
-      line('wait', WAIT_MSGS[wi++ % WAIT_MSGS.length]);
-      setPct(72 + (1 - Math.pow(0.8, wi)) * 22);
-      setTimeout(nextStep, 700 + Math.random() * 500);
+      print('wait', WAIT_MSGS[wi++ % WAIT_MSGS.length]);
+      setTimeout(nextStep, 650 + Math.random() * 400);
       return;
     }
     finishLines();
@@ -162,18 +126,19 @@
   function finishLines() {
     var n = 0;
     try { n = (typeof state !== 'undefined' && state.students) ? state.students.length : 0; } catch (_) {}
-    line(n > 0 ? 'ok' : 'warn', n > 0 ? 'Roster synced — ' + n + ' residents loaded' : 'Roster sync returned no records');
-    line('ok', 'Reached target Graphical Interface');
-    line('hi', 'Welcome to RAWAIR OS.');
-    setPct(100);
-    var wait = Math.max(lite ? 150 : 550, MIN_MS - (Date.now() - t0));
-    setTimeout(exit, wait);
+    print(n > 0 ? 'ok' : 'warn', n > 0 ? 'Roster synced - ' + n + ' residents loaded' : 'Roster sync returned no records');
+    print('ok', 'Reached target Graphical Interface');
+    print('', '');
+    setTimeout(function () {
+      print('raw', '<span class="prompt">raw_air@biyuan</span>:<span class="hi">~</span>$ startx');
+      var wait = Math.max(fast ? 100 : 450, MIN_MS - (Date.now() - t0));
+      setTimeout(exit, wait);
+    }, fast ? 0 : 150);
   }
 
   function exit() {
     if (finished) return;
     finished = true;
-    clearInterval(clockTimer);
     clearTimeout(maxTimer);
     if (mo) mo.disconnect();
     root.classList.add('rb-exit');
@@ -181,16 +146,13 @@
       if (root.parentNode) root.parentNode.removeChild(root);
       window._psStopHackingLog = origStopLog;
       body.classList.remove('rawair-booting');
-    }, lite ? 280 : 800);
+    }, 220);
   }
 
   // ── 判斷「第一次載入完成」：app.js 呼叫 showLoading(false) 時會替 overlay 加上 exit-drop ──
   var overlay = document.getElementById('loading-overlay');
   var mo = null, confirmTimer = null;
-  function markDone() {
-    if (dataDone) return;
-    dataDone = true;
-  }
+  function markDone() { dataDone = true; }
   if (overlay && window.MutationObserver) {
     mo = new MutationObserver(function () {
       if (!overlay.classList.contains('exit-drop')) return;
@@ -207,9 +169,9 @@
 
   var maxTimer = setTimeout(function () {
     if (finished) return;
-    line('warn', 'Sync is taking longer than usual — handing over');
+    print('warn', 'Sync is taking longer than usual - handing over');
     setTimeout(exit, 400);
   }, MAX_MS);
 
-  setTimeout(nextStep, lite ? 0 : 120);
+  nextStep();
 })();

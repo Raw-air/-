@@ -1,9 +1,9 @@
 // Atomic shell cache: HTML and JS must always come from the same release.
 const CACHE_NAME = 'biyuan-v96';
-const ASSETS = ['./', './index.html', './style.css?v=135', './phonetic-search.js?v=135', './app.js?v=135', './import.js?v=135',
-  './api.js?v=135', './config.js?v=135', './theme.js?v=135',
-  './carousel.js?v=135', './navigation.js?v=135', './motion.css?v=135', './liquid-nav.css?v=136', './folder.css?v=135', './dissolve.js?v=135',
-  './quick-menu.css?v=135', './quick-menu.js?v=135', './boot-screen.css?v=135', './boot-screen.js?v=135'];
+const ASSETS = ['./', './index.html', './style.css?v=136', './phonetic-search.js?v=136', './app.js?v=136', './import.js?v=136',
+  './api.js?v=136', './config.js?v=136', './theme.js?v=136',
+  './carousel.js?v=136', './navigation.js?v=136', './motion.css?v=136', './liquid-nav.css?v=136', './folder.css?v=136', './dissolve.js?v=136',
+  './quick-menu.css?v=136', './quick-menu.js?v=136', './boot-screen.css?v=136', './boot-screen.js?v=136'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
