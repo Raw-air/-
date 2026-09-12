@@ -98,7 +98,7 @@ async function run(engine){
   // 6. 回到本學期
   await page.evaluate(()=>exitArchiveView());
   await page.waitForFunction(()=>state.viewSemester===null&&!state.loading&&state.students.length===3);
-  const r6=await page.evaluate(()=>({hidden:document.getElementById('summary-archive-banner').hidden,name:state.rosterSemester.name}));
+  await page.evaluate(()=>navigateTo('summary'));const r6=await page.evaluate(()=>({hidden:document.getElementById('summary-archive-banner').hidden,display:getComputedStyle(document.getElementById('summary-archive-banner')).display,name:state.rosterSemester.name}));assert.equal(r6.display,'none','橫幅在本學期必須真的看不見');
   assert.equal(r6.hidden,true);assert.equal(r6.name,'115-1');
   assert.deepEqual(errors,[]);console.log(engine.name()+': semester state, apply/confirm/cancel, archive + batched beds, read-only archive view, archive export PASS');
  }finally{await browser.close();}

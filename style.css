@@ -5708,6 +5708,8 @@ body.light-mode .rm-table tbody tr.is-dirty { --rm-row-bg: rgba(48, 209, 88, .10
   background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); font-size: 13px;
 }
 .summary-archive-banner .action-btn { padding: 8px 12px; font-size: 12px; }
+/* hidden 屬性要贏過上面的 display:flex，不然橫幅在本學期也會露出來 */
+.summary-archive-banner[hidden], .export-semester-field[hidden], #sem-archive-progress[hidden] { display: none !important; }
 .export-semester-field { margin-bottom: 12px; }
 .sem-divider { height: 1px; background: rgba(255, 255, 255, 0.1); margin: 18px 0 14px; }
 .sem-carry-label { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 4px 0 12px; cursor: pointer; }
