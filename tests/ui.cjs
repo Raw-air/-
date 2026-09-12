@@ -196,7 +196,7 @@ async function run(engine,viewport){
   await page.evaluate(()=>navigateTo('resident-management'));
   await page.waitForTimeout(520);
   const rmHeaders=await page.locator('.rm-table thead th').allTextContents();
-  assert.deepEqual(rmHeaders,['#','名稱','寢床號','床號','班別','學號','外籍','空床','備註','修改']);
+  assert.deepEqual(rmHeaders,['#','名稱','寢床號','床號','班別','學號','電話','住址','外籍','空床','備註','修改']);
   assert.equal(rmHeaders.some(h=>h.includes('請假')||h.includes('2月')),false,'resident table excludes attendance/leave columns');
   assert.equal(await page.locator('#rm-table-body tr').count(),roster.length);
   const firstRmRow=page.locator('#rm-table-body tr').first();
@@ -411,12 +411,12 @@ async function run(engine,viewport){
   assert.equal(imp1.preview.stats.total,4);assert.equal(imp1.preview.stats.matched,3);assert.equal(imp1.preview.stats.unmatchedRows,1);assert.equal(imp1.preview.stats.willChange,1);
   assert.equal(imp1.result.ok,1);assert.equal(imp1.result.fail,0);
   const impReqs=requests.filter(r=>r.path==='/api/attendance');assert.equal(impReqs.length,impBefore+1);
-  assert.deepEqual(JSON.parse(impReqs[impReqs.length-1].body).updates,[{pageId:'test-0',updateProfile:{name:'新生甲',class:'匯入班',studentId:'S9001',isForeign:false},markEmpty:false}]);
+  assert.deepEqual(JSON.parse(impReqs[impReqs.length-1].body).updates,[{pageId:'test-0',updateProfile:{name:'新生甲',class:'匯入班',studentId:'S9001',isForeign:false,phone:'0911000001',address:'台北市'},markEmpty:false}]);
   assert.equal(await page.evaluate(()=>state.students.find(s=>s.id==='test-0').name),'新生甲');
   const imp2=await page.evaluate(({rows,mapping})=>window._importRows(rows,mapping,{blankAsEmpty:true,noteContact:false,skipUnchanged:true}),{rows:impRows,mapping:impMap});
   assert.equal(imp2.preview.items.find(it=>String(it.room)==='101'&&String(it.bed)==='2').action,'clear');
   const impClear=JSON.parse(requests.filter(r=>r.path==='/api/attendance').slice(-1)[0].body).updates.find(u=>u.pageId==='test-1');
-  assert.deepEqual(impClear,{pageId:'test-1',updateProfile:{name:'',class:'',studentId:'',isForeign:false},markEmpty:true,clearProfile:true});
+  assert.deepEqual(impClear,{pageId:'test-1',updateProfile:{name:'',class:'',studentId:'',phone:'',address:'',isForeign:false},markEmpty:true,clearProfile:true});
   const retryRows=[[1,'103','1','匯入班','S-RETRY','匯入重試測試','','','','']];
   const impRetry=await page.evaluate(({rows,mapping})=>window._importRows(rows,mapping,{blankAsEmpty:false,noteContact:false,skipUnchanged:true}),{rows:retryRows,mapping:impMap});
   assert.equal(impRetry.result.ok,1,'a transient import request is retried safely');

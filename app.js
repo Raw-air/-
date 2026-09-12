@@ -2075,7 +2075,7 @@ async function submitSwapBed() {
     const posB = { id: studentB.id, room: studentB.room, bed: studentB.bed, squad: studentB.squad };
 
     // 交換所有非位置屬性
-    const keysToSwap = ['name', 'class', 'studentId', 'isForeign', 'isEmpty', 'attendance'];
+    const keysToSwap = ['name', 'class', 'studentId', 'phone', 'address', 'isForeign', 'isEmpty', 'attendance'];
     for (const key of keysToSwap) {
       const tmp = studentA[key];
       studentA[key] = studentB[key];
@@ -4651,6 +4651,8 @@ function rmRowValues(row) {
     name: row.querySelector('.rm-input-name').value.trim(),
     class: row.querySelector('.rm-input-class').value.trim(),
     studentId: row.querySelector('.rm-input-id').value.trim(),
+    phone: row.querySelector('.rm-input-phone').value.trim(),
+    address: row.querySelector('.rm-input-address').value.trim(),
     remarks: row.querySelector('.rm-input-remarks').value.trim(),
     isForeign: row.querySelector('.rm-input-foreign').checked,
     isEmpty: row.querySelector('.rm-input-empty').checked,
@@ -4659,7 +4661,8 @@ function rmRowValues(row) {
 
 function rmFingerprint(values) {
   return JSON.stringify([
-    values.name || '', values.class || '', values.studentId || '', values.remarks || '',
+    values.name || '', values.class || '', values.studentId || '',
+    values.phone || '', values.address || '', values.remarks || '',
     !!values.isForeign, !!values.isEmpty,
   ]);
 }
@@ -4669,6 +4672,8 @@ function rmStudentFingerprint(student) {
     name: student.name,
     class: student.class,
     studentId: student.studentId,
+    phone: student.phone,
+    address: student.address,
     remarks: student.remarks,
     isForeign: student.isForeign,
     isEmpty: student.isEmpty || !student.name,
@@ -4709,6 +4714,8 @@ function residentRowHTML(student, rowNumber) {
     <td><span class="rm-readonly">${sfEsc(student.bed || '')}</span></td>
     <td><input class="rm-cell-input rm-input-class" type="text" value="${sfEsc(student.class || '')}" aria-label="${sfEsc(bedLabel)} 班別"></td>
     <td><input class="rm-cell-input rm-input-id" type="text" value="${sfEsc(student.studentId || '')}" aria-label="${sfEsc(bedLabel)} 學號"></td>
+    <td><input class="rm-cell-input rm-input-phone" type="tel" inputmode="tel" value="${sfEsc(student.phone || '')}" aria-label="${sfEsc(bedLabel)} 電話"></td>
+    <td><input class="rm-cell-input rm-input-address" type="text" value="${sfEsc(student.address || '')}" aria-label="${sfEsc(bedLabel)} 住址"></td>
     <td class="rm-check-cell"><label class="rm-check"><span class="sr-only">${sfEsc(bedLabel)} 外籍生</span><input class="rm-input-foreign" type="checkbox" ${student.isForeign ? 'checked' : ''}></label></td>
     <td class="rm-check-cell"><label class="rm-check"><span class="sr-only">${sfEsc(bedLabel)} 空床</span><input class="rm-input-empty" type="checkbox" ${isEmpty ? 'checked' : ''}></label></td>
     <td><textarea class="rm-cell-remarks rm-input-remarks" rows="1" aria-label="${sfEsc(bedLabel)} 備註">${sfEsc(student.remarks || '')}</textarea></td>
@@ -4737,7 +4744,7 @@ window.filterResidentManagement = function () {
     const student = _rmRenderMap.get(row);
     if (!student) return;
     const values = rmRowValues(row);
-    const text = [values.name, student.room, student.bed, values.class, values.studentId, values.remarks, student.squad]
+    const text = [values.name, student.room, student.bed, values.class, values.studentId, values.phone, values.address, values.remarks, student.squad]
       .join(' ').toLowerCase();
     const statusMatch = status === 'all' ||
       (status === 'resident' && !values.isEmpty) ||
@@ -4778,6 +4785,8 @@ window.saveResidentRow = async function (row, options = {}) {
         name: values.isEmpty ? '' : values.name,
         class: values.class,
         studentId: values.isEmpty ? '' : values.studentId,
+        phone: values.isEmpty ? '' : values.phone,
+        address: values.isEmpty ? '' : values.address,
         isForeign: values.isForeign,
       },
       markEmpty: values.isEmpty,
@@ -4791,11 +4800,15 @@ window.saveResidentRow = async function (row, options = {}) {
     student.name = values.isEmpty ? '' : values.name;
     student.class = values.class;
     student.studentId = values.isEmpty ? '' : values.studentId;
+    student.phone = values.isEmpty ? '' : values.phone;
+    student.address = values.isEmpty ? '' : values.address;
     student.remarks = values.remarks;
     student.isForeign = values.isForeign;
     student.isEmpty = values.isEmpty;
     row.querySelector('.rm-input-name').value = student.name;
     row.querySelector('.rm-input-id').value = student.studentId;
+    row.querySelector('.rm-input-phone').value = student.phone;
+    row.querySelector('.rm-input-address').value = student.address;
     row.classList.remove('is-dirty');
     localStorage.setItem('biyuan_temp_students_update', JSON.stringify(state.students));
 

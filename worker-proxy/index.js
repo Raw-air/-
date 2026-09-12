@@ -168,6 +168,19 @@ async function ensureDateColumns(dbId, names, env, dbInfo) {
   return missing;
 }
 
+/** 確保總表有「電話」「住址」兩個文字欄位；沒有就自動補上（只在缺的時候動一次結構） */
+const CONTACT_COLUMNS = ['電話', '住址'];
+async function ensureContactColumns(dbId, env, dbInfo) {
+  if (!dbInfo) { dbInfo = await notion(`/databases/${dbId}`, 'GET', null, env); await sleep(340); }
+  const missing = CONTACT_COLUMNS.filter(n => !dbInfo.properties[n]);
+  if (!missing.length) return [];
+  const properties = {};
+  for (const n of missing) properties[n] = { rich_text: {} };
+  await notion(`/databases/${dbId}`, 'PATCH', { properties }, env);
+  await sleep(340);
+  return missing;
+}
+
 // ─── 學期狀態 (KV 為快取、系統設定資料庫為正本；都沒有就退回環境變數) ─────────
 const SEMESTER_KEY = 'semester_state';
 
@@ -565,6 +578,7 @@ async function handleGetRoster(env, dbIdOverride) {
 
   // 取得資料庫結構（知道哪些是日期欄位）
   const dbInfo = await notion(`/databases/${dbId}`, 'GET', null, env);
+  await ensureContactColumns(dbId, env, dbInfo);
   const allProps = Object.keys(dbInfo.properties);
   const dateColumns = allProps
     .filter(name => isDateColumnName(name))
@@ -588,6 +602,8 @@ async function handleGetRoster(env, dbIdOverride) {
       bed: getSelect(p['床號']),
       class: getText(p['班別']),
       studentId: getText(p['學號']),
+      phone: getText(p['電話']),
+      address: getText(p['住址']),
       squad: getSelect(p['中隊']),
       isForeign: getCheckbox(p['外籍生']),
       isEmpty: getCheckbox(p['空床']),
@@ -631,6 +647,9 @@ async function handleUpdateAttendance(data, env) {
   }
   let addedColumns = [];
   if (dateNames.some(isDateColumnName)) addedColumns = await ensureDateColumns(dbId, dateNames, env);
+  const touchesContact = updates.slice(0, 45).some(u => u.clearProfile ||
+    (u.updateProfile && (u.updateProfile.phone !== undefined || u.updateProfile.address !== undefined)));
+  if (touchesContact) await ensureContactColumns(dbId, env);
 
   let updated = 0;
   const errors = [];
@@ -659,6 +678,8 @@ async function handleUpdateAttendance(data, env) {
         properties['姓名'] = { title: [] };
         properties['班別'] = { rich_text: [] };
         properties['學號'] = { rich_text: [] };
+        properties['電話'] = { rich_text: [] };
+        properties['住址'] = { rich_text: [] };
         properties['外籍生'] = { checkbox: false };
       }
 
@@ -666,6 +687,8 @@ async function handleUpdateAttendance(data, env) {
         properties['姓名'] = { title: [{ text: { content: u.updateProfile.name || '' } }] };
         properties['班別'] = { rich_text: [{ text: { content: u.updateProfile.class || '' } }] };
         properties['學號'] = { rich_text: [{ text: { content: u.updateProfile.studentId || '' } }] };
+        if (u.updateProfile.phone !== undefined) properties['電話'] = { rich_text: [{ text: { content: u.updateProfile.phone || '' } }] };
+        if (u.updateProfile.address !== undefined) properties['住址'] = { rich_text: [{ text: { content: u.updateProfile.address || '' } }] };
         properties['外籍生'] = { checkbox: !!u.updateProfile.isForeign };
         properties['空床'] = { checkbox: false }; // 自動取消空床標記
       }

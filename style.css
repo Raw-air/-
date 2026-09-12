@@ -5512,12 +5512,14 @@ body.light-mode .anim-line::after {
   border-radius: 14px;
   background: var(--bg2);
   box-shadow: 0 16px 44px rgba(0, 0, 0, .2);
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.rm-table-shell::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .rm-table-shell:focus-visible { outline: 3px solid rgba(10, 132, 255, .55); outline-offset: 2px; }
 .rm-table {
   width: 100%;
-  min-width: 1180px;
+  min-width: 1520px;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
@@ -5552,10 +5554,12 @@ body.light-mode .anim-line::after {
 .rm-table th:nth-child(4) { width: 72px; }
 .rm-table th:nth-child(5) { width: 135px; }
 .rm-table th:nth-child(6) { width: 145px; }
-.rm-table th:nth-child(7),
-.rm-table th:nth-child(8) { width: 70px; text-align: center; }
-.rm-table th:nth-child(9) { width: 250px; }
-.rm-table th:nth-child(10) { width: 108px; text-align: center; }
+.rm-table th:nth-child(7) { width: 132px; }
+.rm-table th:nth-child(8) { width: 250px; }
+.rm-table th:nth-child(9),
+.rm-table th:nth-child(10) { width: 70px; text-align: center; }
+.rm-table th:nth-child(11) { width: 230px; }
+.rm-table th:nth-child(12) { width: 108px; text-align: center; }
 .rm-table tbody tr { --rm-row-bg: rgba(255, 255, 255, .018); }
 .rm-table tbody tr:nth-child(even) { --rm-row-bg: rgba(255, 255, 255, .038); }
 .rm-table tbody tr:hover { --rm-row-bg: rgba(94, 92, 230, .10); }

@@ -213,7 +213,10 @@
           const nameChanged = (target.name || '') !== name;
           const idChanged = (target.studentId || '') !== studentId;
           const classChanged = (target.class || '') !== klass;
-          const changed = nameChanged || idChanged || classChanged;
+          // 電話/住址現在是總表的正式欄位；Excel 有值且和現有不同就算有變動
+          const phoneChanged = !!phone && (target.phone || '') !== phone;
+          const addressChanged = !!address && (target.address || '') !== address;
+          const changed = nameChanged || idChanged || classChanged || phoneChanged || addressChanged;
           item.changed = changed;
           item.remarksAppend = remarksAppend;
           if (!changed && options.skipUnchanged) {
@@ -251,13 +254,13 @@
       const batch = toApply.slice(i, i + BATCH);
       const payloads = batch.map(it => {
         if (it.action === 'clear') {
-          return { pageId: it.target.id, updateProfile: { name: '', class: '', studentId: '', isForeign: false }, markEmpty: true, clearProfile: true };
+          return { pageId: it.target.id, updateProfile: { name: '', class: '', studentId: '', phone: '', address: '', isForeign: false }, markEmpty: true, clearProfile: true };
         }
-        return {
-          pageId: it.target.id,
-          updateProfile: { name: it.name, class: it.class, studentId: it.studentId, isForeign: !!it.target.isForeign },
-          markEmpty: false,
-        };
+        const profile = { name: it.name, class: it.class, studentId: it.studentId, isForeign: !!it.target.isForeign };
+        // Excel 沒帶到的欄位就不要送，才不會把總表既有的電話/住址洗掉
+        if (it.phone) profile.phone = it.phone;
+        if (it.address) profile.address = it.address;
+        return { pageId: it.target.id, updateProfile: profile, markEmpty: false };
       });
 
       try {
@@ -269,10 +272,13 @@
         batch.forEach(it => {
           if (it.action === 'clear') {
             it.target.name = ''; it.target.studentId = ''; it.target.class = ''; it.target.squad = '';
+            it.target.phone = ''; it.target.address = '';
             it.target.isForeign = false; it.target.isEmpty = true;
           } else {
             it.target.name = it.name; it.target.studentId = it.studentId;
             it.target.class = it.class; it.target.squad = it.class;
+            if (it.phone) it.target.phone = it.phone;
+            if (it.address) it.target.address = it.address;
             it.target.isEmpty = false;
           }
           ok++; done++;
@@ -450,7 +456,7 @@
       ${items.length > 12 ? `<div class="imp-more-hint">... 另外 ${items.length - 12} 筆未顯示</div>` : ''}
       <div class="imp-opts">
         <label class="imp-opt-row"><input type="checkbox" id="imp-opt-blank" ${IMP.options.blankAsEmpty ? 'checked' : ''} onchange="window._impToggleOpt('blankAsEmpty',this.checked)"> 空白列視為空床並清空該床</label>
-        <label class="imp-opt-row"><input type="checkbox" id="imp-opt-contact" ${IMP.options.noteContact ? 'checked' : ''} onchange="window._impToggleOpt('noteContact',this.checked)"> 電話/地址寫進備註</label>
+        <label class="imp-opt-row"><input type="checkbox" id="imp-opt-contact" ${IMP.options.noteContact ? 'checked' : ''} onchange="window._impToggleOpt('noteContact',this.checked)"> 電話/地址另外複製一份到備註</label>
         <label class="imp-opt-row"><input type="checkbox" id="imp-opt-skip" ${IMP.options.skipUnchanged ? 'checked' : ''} onchange="window._impToggleOpt('skipUnchanged',this.checked)"> 略過與目前相同的資料</label>
       </div>
       <div class="modal-actions">
