@@ -5700,3 +5700,25 @@ body.light-mode .rm-table tbody tr.is-dirty { --rm-row-bg: rgba(48, 209, 88, .10
   .summary-detail-back,
   .summary-detail-related { transition: none; }
 }
+
+/* ─── 學期管理 ─── */
+.summary-archive-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  margin: 0 0 14px; padding: 10px 14px; border-radius: 12px;
+  background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); font-size: 13px;
+}
+.summary-archive-banner .action-btn { padding: 8px 12px; font-size: 12px; }
+.export-semester-field { margin-bottom: 12px; }
+.sem-divider { height: 1px; background: rgba(255, 255, 255, 0.1); margin: 18px 0 14px; }
+.sem-carry-label { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 4px 0 12px; cursor: pointer; }
+.sem-archive-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 12px; margin-bottom: 8px; border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.sem-archive-row > div { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.sem-archive-row span { font-size: 12px; color: var(--dim); }
+.sem-archive-row .action-btn { padding: 8px 12px; font-size: 12px; white-space: nowrap; }
+.sem-remove-list { text-align: left; max-height: 180px; overflow-y: auto; margin: 8px 0; padding-left: 18px; font-size: 12px; }
+#semester-card.is-unavailable .export-date-grid, #semester-card.is-unavailable button, #semester-card.is-unavailable .sem-divider,
+#semester-card.is-unavailable .sem-carry-label, #semester-card.is-unavailable #sem-archive-list, #semester-card.is-unavailable #sem-range-summary { display: none; }

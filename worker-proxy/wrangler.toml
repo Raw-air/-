@@ -1,0 +1,15 @@
+# biyuan-proxy (Notion 主後端) 的部署設定
+# 部署：cd worker-proxy && npx wrangler deploy --keep-vars
+#   --keep-vars 一定要加：NOTION_TOKEN / *_DB_ID 這些變數存在 Cloudflare 後台，不在這個檔案裡；
+#   沒加的話 wrangler 會把它們清掉。
+# 回滾：npx wrangler rollback
+name = "biyuan-proxy"
+main = "index.js"
+compatibility_date = "2026-04-09"
+
+[observability]
+enabled = true
+
+[[kv_namespaces]]
+binding = "POLL_KV"
+id = "498beb572d984a9a98540993d1af64b3"

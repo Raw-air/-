@@ -153,6 +153,12 @@ const state = {
   recentSyncs: {}, // 用於保護剛同步成功的狀態，避免 eventual consistency 導致閃爍
   // 後端點名表沒有該日期欄位時，本機暫存的點名 { [iso日期]: { [pageId]: 狀態 } }
   pendingByDate: {},
+  // 學期狀態 (來自 /api/semester)：current = 本學期、archives = 封存學期、available = 後端有支援
+  semester: { current: { name: '', dbId: '', start: '', end: '' }, archives: [], dateColumns: [], available: false },
+  // 正在查看的封存學期名稱；null = 本學期 (正常模式)
+  viewSemester: null,
+  // 這次 roster 來自哪個學期 (後端回傳)，用來推算舊式 "X月Y日" 欄位的年份
+  rosterSemester: null,
 };
 
 // ─── 觸覺回饋 (iOS Taptic 開關 + 進階波形引擎 Web Audio API) ─────────────────
@@ -561,6 +567,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     applyStoredPrefs();
     loadPendingAttendance();
+    semesterInputsTouched();
+    // 查看封存學期時，所有寫入總表的動作一律擋下 (點名、電話請假、匯入精靈、檔案管理)
+    if (window._api && typeof window._api.updateAttendance === 'function') {
+      const rawUpdate = window._api.updateAttendance.bind(window._api);
+      window._api.updateAttendance = (updates, options) => {
+        if (state.viewSemester) return Promise.reject(new Error(`正在查看封存學期 ${state.viewSemester}，不能修改`));
+        return rawUpdate(updates, options);
+      };
+    }
 
     state.currentDate = getTodayAttendanceDate();
     setupNav();
@@ -610,9 +625,10 @@ document.addEventListener('DOMContentLoaded', async () => {
           // 靜默觸發完整刷新（不顯示 loading 畫面）
           try {
             const [roster, config] = await Promise.all([
-              window._api.getRoster(),
+              window._api.getRoster(state.viewSemester || ''),
               window._api.getConfig(),
             ]);
+            state.rosterSemester = roster.semester || null;
             state.students = applyLocalStateToRoster(roster.students || [], roster.dateColumns || []);
             state.dateColumns = roster.dateColumns || [];
             state.currentDate = resolveAttendanceDate(state.currentDate || localTodayISO());
@@ -738,11 +754,13 @@ async function loadData() {
   try {
     showLoading(true);
     const [roster, config, changelogs, remarks] = await Promise.all([
-      window._api.getRoster(),
+      window._api.getRoster(state.viewSemester || ''),
       window._api.getConfig(),
       window._api.getChangelog().catch(() => []),
-      window._api.getRemarks().catch(() => ({}))
+      window._api.getRemarks().catch(() => ({})),
+      loadSemesterState(),
     ]);
+    state.rosterSemester = roster.semester || null;
 
     // Merge remarks natively into the student list
     if (roster.students && remarks) {
@@ -1648,6 +1666,7 @@ function renderRollCall(skipAnimation = false) {
 const _syncTimers = {};
 
 function toggleStatus(pageId) {
+  if (state.viewSemester) { showToast(`正在查看封存學期 ${state.viewSemester}，不能修改點名`, 'error'); return; }
   const s = state.students.find(x => x.id === pageId);
   if (!s || s.isEmpty) return;
 
@@ -2100,7 +2119,7 @@ function closeModal(id) {
  * 計算某日的全域統計資料（一個函數，renderSummary 和 copySummary 共用）
  */
 function computeDailyStats(date) {
-  if (!isTodayAttendanceDate(date)) {
+  if (!isTodayAttendanceDate(date) && !state.viewSemester) {
     const snap = state.config['snapshot_' + date];
     if (snap) {
       try {
@@ -2369,7 +2388,16 @@ function renderSummary() {
   const date = state.currentDate || getTodayAttendanceDate();
   const st = computeDailyStats(date);
 
-  if (!isTodayAttendanceDate(date) && state.config['snapshot_' + date]) {
+  const banner = document.getElementById('summary-archive-banner');
+  if (banner) {
+    banner.hidden = !state.viewSemester;
+    const nameEl = document.getElementById('summary-archive-name');
+    if (nameEl) nameEl.textContent = state.viewSemester || '';
+  }
+
+  if (state.viewSemester) {
+    document.getElementById('summary-date').textContent = date + ` (封存 ${state.viewSemester})`;
+  } else if (!isTodayAttendanceDate(date) && state.config['snapshot_' + date]) {
     document.getElementById('summary-date').textContent = date + ' (已鎖定)';
   } else if (!serverHasDateColumn(date)) {
     document.getElementById('summary-date').textContent = date + ' (後端無此日欄位，僅本機暫存)';
@@ -2379,7 +2407,8 @@ function renderSummary() {
 
   // 核心功能：當觀看的是「今天」的總表時，背景自動紀錄快照。
   // 這確保 11 點鐘他們拉開來看數字回報時，系統就會自動存下那瞬間的結果。
-  if (isTodayAttendanceDate(date)) {
+  // (查看封存學期時不能寫快照，不然會把舊學期的數字蓋到今天)
+  if (isTodayAttendanceDate(date) && !state.viewSemester) {
     const snapshotStr = JSON.stringify(st);
     if (state.config['snapshot_' + date] !== snapshotStr) {
       state.config['snapshot_' + date] = snapshotStr;
@@ -3093,13 +3122,23 @@ function parseISODate(value) {
   return date;
 }
 
+// 目前資料所屬的學期名稱：後端回傳的 roster.semester 優先，其次本學期，最後 config.js 的預設值
+function activeSemesterName() {
+  return (state.rosterSemester && state.rosterSemester.name) || (state.semester && state.semester.current.name) || CONFIG.SEMESTER || '';
+}
+
 function dateColumnToISO(columnName) {
+  return dateColumnToISOFor(columnName, activeSemesterName());
+}
+
+// 舊式 "X月Y日" 欄位沒有年份，用學期名稱 (例如 114-2) 推算
+function dateColumnToISOFor(columnName, semesterName) {
   if (parseISODate(columnName)) return columnName;
   const match = String(columnName || '').match(/^(\d{1,2})月(\d{1,2})日$/);
   if (!match) return '';
   const month = Number(match[1]);
   const day = Number(match[2]);
-  const semesterMatch = String(CONFIG.SEMESTER || '').match(/^(\d+)-([12])$/);
+  const semesterMatch = String(semesterName || '').match(/^(\d+)-([12])$/);
   let year = new Date().getFullYear();
   if (semesterMatch) {
     const academicYear = Number(semesterMatch[1]) + 1911;
@@ -3125,7 +3164,9 @@ function getAvailableExportRange() {
 function getConfiguredExportRange() {
   const available = getAvailableExportRange();
   const today = localTodayISO();
-  const start = parseISODate(state.config[EXPORT_START_KEY]) ? state.config[EXPORT_START_KEY] : (available.start || today);
+  const sem = state.semester && state.semester.current;
+  const semStart = sem && parseISODate(sem.start) ? sem.start : '';
+  const start = parseISODate(state.config[EXPORT_START_KEY]) ? state.config[EXPORT_START_KEY] : (semStart || available.start || today);
   const end = parseISODate(state.config[EXPORT_END_KEY]) ? state.config[EXPORT_END_KEY] : today;
   return start && end && start <= end ? { start, end } : { start: today, end: today };
 }
@@ -3148,6 +3189,7 @@ function initializeExportDateInputs() {
   if (endInput) endInput.value = configured.end;
   if (devStartInput) devStartInput.value = configured.start;
   if (devEndInput) devEndInput.value = configured.end;
+  populateExportSemesterSelect();
   updateExportDateSummary();
 }
 
@@ -3205,25 +3247,298 @@ async function saveDefaultExportRange() {
   }
 }
 
-function exportExcel() {
-  if (!state.students.length) { showToast('沒有資料', 'error'); return; }
+// 匯出下拉選單裡選的學期；'' = 目前畫面的資料
+function selectedExportSemester() {
+  const sel = document.getElementById('export-semester');
+  return sel ? sel.value : '';
+}
+
+function populateExportSemesterSelect() {
+  const sel = document.getElementById('export-semester');
+  if (!sel) return;
+  const sem = state.semester;
+  const previous = sel.value;
+  const options = [`<option value="">本學期${sem.current.name ? '（' + sem.current.name + '）' : ''}</option>`];
+  for (const arc of sem.archives) options.push(`<option value="${arc.name}">封存 ${arc.name}${arc.start ? '（' + arc.start + ' ~ ' + arc.end + '）' : ''}</option>`);
+  sel.innerHTML = options.join('');
+  if ([...sel.options].some(o => o.value === previous)) sel.value = previous;
+  const wrap = sel.closest('.export-semester-field');
+  if (wrap) wrap.hidden = !sem.available || !sem.archives.length;
+}
+
+// 把日期範圍對到某一份 roster 的欄位 (封存學期的舊式欄位要用那個學期推年份)
+function exportColumnsFor(range, dateColumns, semesterName) {
+  const known = new Map();
+  for (const column of dateColumns) { const iso = dateColumnToISOFor(column, semesterName); if (iso && !known.has(iso)) known.set(iso, column); }
+  const cursor = parseISODate(range.start);
+  const days = Math.round((parseISODate(range.end) - cursor) / 86400000) + 1;
+  const columns = [];
+  for (let i = 0; i < days; i++) { const iso = cursor.toISOString().slice(0, 10); columns.push(known.get(iso) || iso); cursor.setUTCDate(cursor.getUTCDate() + 1); }
+  return columns;
+}
+
+function buildExportRows(students, columns) {
+  return students.map(s => {
+    const r = [s.name, s.room, s.bed, s.class, s.studentId];
+    // 預設每個人每一天都是 ✓ (在宿舍)，沒有紀錄或後端沒有該日欄位也一樣
+    for (const d of columns) r.push(s.attendance[d] || '✓');
+    return r;
+  });
+}
+
+async function exportExcel() {
   const range = readExportRange('export-start-date', 'export-end-date');
   if (range.error) { showToast(range.error, 'error'); return; }
+  const btn = document.getElementById('export-btn');
+  const semester = selectedExportSemester();
   try {
-    const headers = ['名稱', '寢床號', '床號', '班別', '學號', ...range.columns];
-    const rows = state.students.map(s => {
-      const r = [s.name, s.room, s.bed, s.class, s.studentId];
-      // 預設每個人每一天都是 ✓ (在宿舍)，沒有紀錄或後端沒有該日欄位也一樣
-      for (const d of range.columns) r.push(s.attendance[d] || '✓');
-      return r;
-    });
+    let students = state.students, columns = range.columns, label = activeSemesterName();
+    if (semester && semester !== (state.rosterSemester && state.rosterSemester.name)) {
+      if (btn) { btn.disabled = true; btn.setAttribute('aria-busy', 'true'); }
+      showToast(`正在讀取封存學期 ${semester}…`, 'info');
+      const roster = await window._api.getRoster(semester);
+      students = roster.students || [];
+      columns = exportColumnsFor(range, roster.dateColumns || [], semester);
+      label = semester;
+    }
+    if (!students.length) { showToast('沒有資料', 'error'); return; }
+    const headers = ['名稱', '寢床號', '床號', '班別', '學號', ...columns];
+    const rows = buildExportRows(students, columns);
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '點名總表');
     const fileRange = `${range.start.replaceAll('-', '')}-${range.end.replaceAll('-', '')}`;
-    XLSX.writeFile(wb, `碧苑點名_${CONFIG.SEMESTER}_${fileRange}.xlsx`);
-    showToast(`Excel 已下載（${range.columns.length} 個日期）`, 'success');
+    XLSX.writeFile(wb, `碧苑點名_${label || 'semester'}_${fileRange}.xlsx`);
+    showToast(`Excel 已下載（${columns.length} 個日期）`, 'success');
   } catch (err) { showToast('匯出失敗：' + err.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); } }
 }
+
+// ─── 學期管理 (開發者調適區) ───────────────────────────────────────────────
+async function loadSemesterState() {
+  try {
+    const data = await window._api.getSemester();
+    if (!data || !data.current || typeof data.current !== 'object') { state.semester.available = false; return state.semester; }
+    state.semester = {
+      current: { name: data.current.name || '', dbId: data.current.dbId || '', start: data.current.start || '', end: data.current.end || '' },
+      archives: Array.isArray(data.archives) ? data.archives : [],
+      dateColumns: Array.isArray(data.dateColumns) ? data.dateColumns : [],
+      available: true,
+    };
+  } catch (e) {
+    state.semester.available = false;
+  }
+  return state.semester;
+}
+
+function semesterRangeText(start, end) {
+  const a = parseISODate(start), b = parseISODate(end);
+  if (!a || !b || a > b) return '';
+  const days = Math.round((b - a) / 86400000) + 1;
+  return `${formatExportDate(start)} ～ ${formatExportDate(end)}，共 ${days} 天`;
+}
+
+function updateSemesterRangeSummary() {
+  const el = document.getElementById('sem-range-summary');
+  if (!el) return;
+  const start = document.getElementById('sem-start')?.value || '';
+  const end = document.getElementById('sem-end')?.value || '';
+  el.textContent = semesterRangeText(start, end) || '請選擇學期開始與結束日期';
+}
+
+function renderSemesterCard() {
+  const card = document.getElementById('semester-card');
+  if (!card) return;
+  const sem = state.semester;
+  const hint = document.getElementById('semester-hint');
+  if (!sem.available) {
+    if (hint) hint.textContent = '後端尚未更新到支援學期管理的版本。';
+    card.classList.add('is-unavailable');
+    return;
+  }
+  card.classList.remove('is-unavailable');
+  const cur = sem.current;
+  const cols = sem.dateColumns || [];
+  const isoCols = cols.filter(c => parseISODate(c));
+  const legacy = cols.length - isoCols.length;
+  if (hint) {
+    hint.textContent = `雲端目前：學期「${cur.name || '未命名'}」${cur.start ? '，' + cur.start + ' ~ ' + cur.end : '，尚未設定日期範圍'}；總表有 ${cols.length} 個日期欄位${legacy ? '（其中 ' + legacy + ' 個是舊式「X月Y日」欄位）' : ''}。套用後全宿舍所有裝置都會同步。`;
+  }
+  const nameEl = document.getElementById('sem-name');
+  const startEl = document.getElementById('sem-start');
+  const endEl = document.getElementById('sem-end');
+  if (nameEl && !nameEl.dataset.touched) nameEl.value = cur.name || '';
+  if (startEl && !startEl.dataset.touched) startEl.value = cur.start || '';
+  if (endEl && !endEl.dataset.touched) endEl.value = cur.end || '';
+  updateSemesterRangeSummary();
+
+  const list = document.getElementById('sem-archive-list');
+  if (list) {
+    list.innerHTML = sem.archives.length
+      ? sem.archives.slice().reverse().map(arc => `<div class="sem-archive-row">
+          <div><b>${arc.name || '未命名'}</b><span>${arc.start ? arc.start + ' ~ ' + arc.end : '日期未記錄'}</span></div>
+          <button type="button" class="action-btn" onclick="viewArchivedSemester('${arc.name}')">查看總表</button>
+        </div>`).join('')
+      : '<p class="dev-card-hint">還沒有封存的學期。</p>';
+  }
+}
+
+function semesterInputsTouched() {
+  for (const id of ['sem-name', 'sem-start', 'sem-end']) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', () => { el.dataset.touched = '1'; updateSemesterRangeSummary(); }, { once: false });
+  }
+}
+
+async function refreshSemesterUI() {
+  await loadSemesterState();
+  for (const id of ['sem-name', 'sem-start', 'sem-end']) { const el = document.getElementById(id); if (el) delete el.dataset.touched; }
+  renderSemesterCard();
+  populateExportSemesterSelect();
+  initializeExportDateInputs();
+}
+
+async function applySemesterDates() {
+  const name = (document.getElementById('sem-name')?.value || '').trim();
+  const start = document.getElementById('sem-start')?.value || '';
+  const end = document.getElementById('sem-end')?.value || '';
+  if (!parseISODate(start) || !parseISODate(end)) { showToast('請選擇完整的學期開始與結束日期', 'error'); return; }
+  if (start > end) { showToast('結束日期不能早於開始日期', 'error'); return; }
+  const btn = document.getElementById('sem-apply-btn');
+  if (btn) { btn.disabled = true; btn.setAttribute('aria-busy', 'true'); btn.textContent = '套用中…'; }
+  try {
+    let res = await window._api.applySemesterDates({ name, start, end });
+    if (res && res.needsConfirm) {
+      const lost = res.toRemove.filter(d => d.nonDefault > 0);
+      const rows = res.toRemove.map(d => `<li>${d.date}${d.nonDefault ? ` — 有 <b>${d.nonDefault}</b> 筆請假/未請假紀錄會消失` : ''}</li>`).join('');
+      const ok = await showConfirmDialog({
+        title: `縮小範圍會刪除 ${res.toRemove.length} 天的欄位`,
+        message: `這些日期在新的範圍外，欄位和裡面的點名紀錄會從雲端刪除，無法還原：<ul class="sem-remove-list">${rows}</ul>${lost.length ? `<p>其中 ${lost.length} 天有非 ✓ 的紀錄。</p>` : ''}${res.toAdd.length ? `<p>同時會新增 ${res.toAdd.length} 天的欄位。</p>` : ''}`,
+        confirmText: '確定刪除並套用', danger: true,
+      });
+      if (!ok) { showToast('已取消，沒有改動任何欄位', 'info'); return; }
+      res = await window._api.applySemesterDates({ name, start, end, confirmRemove: true });
+    }
+    if (!res || !res.success) throw new Error(res && res.error ? res.error : '後端沒有回報成功');
+    showToast(`學期日期已套用：新增 ${res.added.length} 天、刪除 ${res.removed.length} 天`, 'success');
+    await refreshSemesterUI();
+    await loadData();
+  } catch (err) {
+    showToast('套用失敗：' + err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); btn.textContent = '套用學期日期範圍'; }
+  }
+}
+
+let _archiveBedsPending = null; // 封存後尚未建立的床位 (分批失敗時可重試)
+let _archiveBedsDbId = '';
+
+async function importArchiveBeds() {
+  const progress = document.getElementById('sem-archive-progress');
+  const total = _archiveBedsPending ? _archiveBedsPending.length : 0;
+  let done = 0;
+  while (_archiveBedsPending && _archiveBedsPending.length) {
+    const batch = _archiveBedsPending.slice(0, 40);
+    if (progress) { progress.hidden = false; progress.textContent = `正在建立新學期床位… ${done}/${total}`; }
+    const res = await window._api.importBatch({ db_id: _archiveBedsDbId, students: batch });
+    if (res && res.errors && res.errors.length) console.warn('床位建立部分失敗', res.errors);
+    done += batch.length;
+    _archiveBedsPending = _archiveBedsPending.slice(40);
+  }
+  _archiveBedsPending = null;
+  if (progress) { progress.textContent = `新學期床位建立完成（${total} 張）`; }
+}
+
+async function archiveSemester() {
+  const newName = (document.getElementById('sem-new-name')?.value || '').trim();
+  const start = document.getElementById('sem-new-start')?.value || '';
+  const end = document.getElementById('sem-new-end')?.value || '';
+  const carry = !!document.getElementById('sem-carry')?.checked;
+  const btn = document.getElementById('sem-archive-btn');
+
+  // 上次床位沒建完 → 先把剩下的補完
+  if (_archiveBedsPending && _archiveBedsPending.length) {
+    if (btn) { btn.disabled = true; btn.setAttribute('aria-busy', 'true'); }
+    try { await importArchiveBeds(); showToast('剩餘床位已建立完成', 'success'); await refreshSemesterUI(); await loadData(); }
+    catch (err) { showToast('床位建立又失敗了，稍後再按一次：' + err.message, 'error'); }
+    finally { if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); btn.textContent = '封存本學期並建立新學期'; } }
+    return;
+  }
+
+  if (!newName) { showToast('請輸入新學期名稱（例如 115-2）', 'error'); return; }
+  if (!parseISODate(start) || !parseISODate(end)) { showToast('請選擇新學期的開始與結束日期', 'error'); return; }
+  if (start > end) { showToast('結束日期不能早於開始日期', 'error'); return; }
+  const currentName = state.semester.current.name || CONFIG.SEMESTER || '舊學期';
+  if (newName === currentName) { showToast('新學期名稱不能跟目前學期一樣', 'error'); return; }
+
+  const ok = await showConfirmDialog({
+    title: `封存「${currentName}」並建立「${newName}」？`,
+    message: `<p>目前的總表會原封不動保留（改名為「碧苑點名總表 ${currentName}」），之後可在此查看。</p><p>系統會另外建立「碧苑點名總表 ${newName}」，日期範圍 ${semesterRangeText(start, end)}。</p><p>床位會照抄；${carry ? '目前住宿生的姓名、班級、學號會一起帶到新學期' : '新學期所有床位都是空床，之後用匯入精靈匯入名單'}。</p><p>所有幹部的裝置都會立刻切到新學期。</p>`,
+    confirmText: '確定封存並建立', danger: true,
+  });
+  if (!ok) return;
+
+  if (btn) { btn.disabled = true; btn.setAttribute('aria-busy', 'true'); btn.textContent = '建立新學期中…'; }
+  const progress = document.getElementById('sem-archive-progress');
+  try {
+    const res = await window._api.archiveSemester({ newName, start, end, currentName, carryResidents: carry });
+    if (!res || !res.success) throw new Error(res && res.error ? res.error : '後端沒有回報成功');
+    _archiveBedsDbId = res.newDbId;
+    _archiveBedsPending = Array.isArray(res.beds) ? res.beds.slice() : [];
+    try {
+      await importArchiveBeds();
+    } catch (err) {
+      showToast(`新學期已建立，但床位只建了一部分：${err.message}。再按一次按鈕會把剩下的補完`, 'error');
+      if (btn) btn.textContent = `繼續建立剩餘 ${_archiveBedsPending.length} 張床位`;
+      return;
+    }
+    showToast(`已封存 ${res.archived.name}，新學期 ${newName} 建立完成`, 'success');
+    for (const id of ['sem-new-name', 'sem-new-start', 'sem-new-end']) { const el = document.getElementById(id); if (el) el.value = ''; }
+    state.viewSemester = null;
+    await refreshSemesterUI();
+    await loadData();
+  } catch (err) {
+    showToast('封存失敗：' + err.message, 'error');
+  } finally {
+    if (btn && !(_archiveBedsPending && _archiveBedsPending.length)) { btn.disabled = false; btn.removeAttribute('aria-busy'); btn.textContent = '封存本學期並建立新學期'; }
+    else if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); }
+    if (progress && !(_archiveBedsPending && _archiveBedsPending.length)) setTimeout(() => { progress.hidden = true; }, 4000);
+  }
+}
+
+async function viewArchivedSemester(name) {
+  const arc = state.semester.archives.find(a => a.name === name);
+  if (!arc) { showToast('找不到這個封存學期', 'error'); return; }
+  state.viewSemester = name;
+  state.currentDate = arc.end && parseISODate(arc.end) ? arc.end : (state.currentDate || localTodayISO());
+  navigateTo('summary');
+  await loadData();
+  // 封存資料的日期用該學期的欄位；沒有對到就退到最後一個欄位
+  const entries = getExportColumnEntries();
+  if (entries.length && !entries.some(e => e.column === state.currentDate || e.iso === state.currentDate)) {
+    state.currentDate = entries[entries.length - 1].column;
+  } else {
+    state.currentDate = resolveAttendanceDate(state.currentDate) || state.currentDate;
+  }
+  renderCurrentPage(true);
+  showToast(`正在查看封存學期 ${name}（唯讀）`, 'info');
+}
+
+async function exitArchiveView() {
+  state.viewSemester = null;
+  state.rosterSemester = null;
+  state.currentDate = getTodayAttendanceDate();
+  await loadData();
+  const banner = document.getElementById('summary-archive-banner');
+  if (banner) banner.hidden = true;
+  showToast('已回到本學期', 'success');
+}
+
+window.applySemesterDates = applySemesterDates;
+window.archiveSemester = archiveSemester;
+window.viewArchivedSemester = viewArchivedSemester;
+window.exitArchiveView = exitArchiveView;
+window.updateSemesterRangeSummary = updateSemesterRangeSummary;
+window.populateExportSemesterSelect = populateExportSemesterSelect;
 
 // ─── 全域暴露 ───────────────────────────────────────────────────────────────
 window.enterSquad = enterSquad;
@@ -3329,6 +3644,7 @@ function openDevAuth() {
       }
       initDevChangelog();
       checkUnreadFeedback();
+      refreshSemesterUI();
       panel.classList.add('open');
     } else {
       panel.classList.remove('open');
@@ -3367,6 +3683,7 @@ function openDevAuth() {
           pinAuthCheckbox.checked = state.config['global_pin_auth'] !== 'false';
         }
         initDevChangelog();
+        refreshSemesterUI();
         showToast('開發者模式已解鎖', 'success');
       }, 200);
     } else {
@@ -3823,6 +4140,7 @@ async function renderLeaveRecordsList() {
 }
 
 async function submitCounterLeave() {
+  if (state.viewSemester) { showToast(`正在查看封存學期 ${state.viewSemester}，不能登記請假`, 'error'); return; }
   const targetId = document.getElementById('cl-target').value;
   const startDateStr = document.getElementById('cl-start-date').value;
   const endDateStr = document.getElementById('cl-end-date').value;

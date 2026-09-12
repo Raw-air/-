@@ -10,10 +10,10 @@
   <meta name="theme-color" content="#151518">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=116">
-  <link rel="stylesheet" href="motion.css?v=116">
-  <link rel="stylesheet" href="folder.css?v=116">
-  <link rel="stylesheet" href="liquid-nav.css?v=116">
+  <link rel="stylesheet" href="style.css?v=117">
+  <link rel="stylesheet" href="motion.css?v=117">
+  <link rel="stylesheet" href="folder.css?v=117">
+  <link rel="stylesheet" href="liquid-nav.css?v=117">
   <link rel="manifest" href="manifest.json?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=2">
   <script defer src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -441,6 +441,10 @@
         <span id="summary-date" class="date-pill"></span>
         <button id="summary-next-date" class="nav-arrow">›</button>
       </div>
+    </div>
+    <div id="summary-archive-banner" class="summary-archive-banner" role="status" hidden>
+      <span>正在查看封存學期 <b id="summary-archive-name"></b>（唯讀，不能點名）</span>
+      <button type="button" class="action-btn" onclick="exitArchiveView()">回到本學期</button>
     </div>
 
     <!-- 1-3: 總床數 / 空床數 / 住宿人數 -->
@@ -1063,6 +1067,10 @@
     <div class="settings-card">
       <div class="settings-card-header"><img src="./Lp/ICON/COPY.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">匯出 Excel</div>
       <p class="settings-hint">自動套用本學期的預設時段；這次匯出也可以臨時調整，不會改到預設值。</p>
+      <div class="export-date-field export-semester-field" hidden>
+        <label for="export-semester">學期</label>
+        <select id="export-semester" class="styled-select" onchange="updateExportDateSummary()"></select>
+      </div>
       <div class="export-date-grid">
         <div class="export-date-field">
           <label for="export-start-date">資料開始日期</label>
@@ -1091,7 +1099,58 @@
 
     <!-- 開發者面板（需要密碼） -->
     <div id="dev-panel" class="dev-panel">
-      <div class="dev-card">
+      <div class="dev-card" id="semester-card">
+        <div class="dev-card-header"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="m9 16 2 2 4-4"/></svg> 學期管理</div>
+        <p class="dev-card-hint" id="semester-hint">載入中…</p>
+        <div class="export-date-grid">
+          <div class="export-date-field">
+            <label for="sem-name">學期名稱</label>
+            <input type="text" id="sem-name" class="styled-input" placeholder="例如 115-1" autocomplete="off">
+          </div>
+        </div>
+        <div class="export-date-grid">
+          <div class="export-date-field">
+            <label for="sem-start">學期開始日</label>
+            <input type="date" id="sem-start" class="styled-input">
+          </div>
+          <div class="export-date-field">
+            <label for="sem-end">學期結束日</label>
+            <input type="date" id="sem-end" class="styled-input">
+          </div>
+        </div>
+        <p id="sem-range-summary" class="export-date-summary" aria-live="polite"></p>
+        <p class="dev-card-hint">套用後，雲端總表會補上範圍內每一天的欄位。之後改日期再套用一次：範圍變大就補欄位；範圍縮小會先列出要刪掉的日期與裡面的紀錄數，確認後才刪。</p>
+        <button id="sem-apply-btn" class="action-btn wide save-btn" onclick="applySemesterDates()">套用學期日期範圍</button>
+
+        <div class="sem-divider"></div>
+        <div class="dev-card-header">封存本學期並建立新學期</div>
+        <p class="dev-card-hint">目前總表原封不動保留供日後查看，另外建立一張新學期總表。床位照抄；勾選「帶入目前住宿生」會連姓名、班級、學號一起帶過去，之後再用匯入精靈更新名單即可。</p>
+        <div class="export-date-grid">
+          <div class="export-date-field">
+            <label for="sem-new-name">新學期名稱</label>
+            <input type="text" id="sem-new-name" class="styled-input" placeholder="例如 115-2" autocomplete="off">
+          </div>
+        </div>
+        <div class="export-date-grid">
+          <div class="export-date-field">
+            <label for="sem-new-start">新學期開始日</label>
+            <input type="date" id="sem-new-start" class="styled-input">
+          </div>
+          <div class="export-date-field">
+            <label for="sem-new-end">新學期結束日</label>
+            <input type="date" id="sem-new-end" class="styled-input">
+          </div>
+        </div>
+        <label class="sem-carry-label"><input type="checkbox" id="sem-carry" checked> 帶入目前住宿生名單</label>
+        <button id="sem-archive-btn" class="action-btn wide warning" onclick="archiveSemester()">封存本學期並建立新學期</button>
+        <p id="sem-archive-progress" class="export-date-summary" aria-live="polite" hidden></p>
+
+        <div class="sem-divider"></div>
+        <div class="dev-card-header">已封存的學期</div>
+        <div id="sem-archive-list"></div>
+      </div>
+
+      <div class="dev-card" style="margin-top:16px;">
         <div class="dev-card-header"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg> Excel 匯出預設時段</div>
         <p class="dev-card-hint">設定本學期常用的資料起訖日。儲存後，所有使用者開啟匯出功能時都會自動帶入此區間。</p>
         <div class="export-date-grid">
@@ -1383,15 +1442,15 @@
     <button type="button" class="nav-item" data-page="settings"><span class="nav-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-label">設定</span></button>
   </nav>
 
-  <script src="config.js?v=116"></script>
-  <script src="api.js?v=116"></script>
-  <script src="phonetic-search.js?v=116"></script>
-  <script src="app.js?v=116"></script>
-  <script src="import.js?v=116"></script>
-  <script src="theme.js?v=116"></script>
-  <script src="carousel.js?v=116"></script>
-  <script src="dissolve.js?v=116"></script>
-  <script src="navigation.js?v=116"></script>
+  <script src="config.js?v=117"></script>
+  <script src="api.js?v=117"></script>
+  <script src="phonetic-search.js?v=117"></script>
+  <script src="app.js?v=117"></script>
+  <script src="import.js?v=117"></script>
+  <script src="theme.js?v=117"></script>
+  <script src="carousel.js?v=117"></script>
+  <script src="dissolve.js?v=117"></script>
+  <script src="navigation.js?v=117"></script>
 
   <!-- 幹部工作手冊 Modal -->
   <div id="duty-manual-modal" class="modal-overlay">

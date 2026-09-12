@@ -51,8 +51,19 @@ class ApiClient {
   // 連線測試
   ping() { return this._fetch('/api/ping'); }
 
-  // 取得全部學生 + 出席資料
-  getRoster() { return this._fetch('/api/roster'); }
+  // 取得全部學生 + 出席資料（可指定封存學期名稱，空字串 = 本學期）
+  getRoster(semester) {
+    return this._fetch('/api/roster' + (semester ? '?semester=' + encodeURIComponent(semester) : ''));
+  }
+
+  // ── 學期管理 ──
+  getSemester() { return this._fetch('/api/semester'); }
+  // { name?, start, end, confirmRemove? } → 補齊/刪除日期欄位；縮小範圍時第一次會回 needsConfirm
+  applySemesterDates(body) { return this._fetch('/api/semester/dates', 'POST', body, { timeoutMs: 90000 }); }
+  // { newName, start, end, currentName?, carryResidents? } → 封存目前總表、建立新學期總表，回傳床位清單
+  archiveSemester(body) { return this._fetch('/api/semester/archive', 'POST', body, { timeoutMs: 90000 }); }
+  // { db_id?, students } 一批最多 45 筆
+  importBatch(body) { return this._fetch('/api/import-batch', 'POST', body, { timeoutMs: 90000 }); }
 
   // 批次更新出席狀態
   // updates: [{ pageId, date, value }]
