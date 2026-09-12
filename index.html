@@ -10,10 +10,10 @@
   <meta name="theme-color" content="#151518">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=125">
-  <link rel="stylesheet" href="motion.css?v=125">
-  <link rel="stylesheet" href="folder.css?v=125">
-  <link rel="stylesheet" href="liquid-nav.css?v=125">
+  <link rel="stylesheet" href="style.css?v=127">
+  <link rel="stylesheet" href="motion.css?v=127">
+  <link rel="stylesheet" href="folder.css?v=127">
+  <link rel="stylesheet" href="liquid-nav.css?v=127">
   <link rel="manifest" href="manifest.json?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=2">
   <script defer src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -105,13 +105,17 @@
           setTimeout(loopLogs, nextDelay);
         }
         let logTimer = null;
+        // 省電模式：假終端機日誌每 20~60ms 就重寫一次 120 行文字，開機時最吃電的一段。
+        // 開著省電模式時只印一次靜態畫面，之後完全不跑。
+        try { window._psStopHackingLog = localStorage.getItem('power_save_mode') === 'true'; } catch (_) {}
         function loopLogsGuard() {
+          if (window._psStopHackingLog) { logTimer = null; return; }
           const overlay = document.getElementById('loading-overlay');
           // 載入畫面已經關掉就停下來，不要在背景一直跑 (省電、省效能)
           if (!overlay || overlay.style.display === 'none' || overlay.classList.contains('exit-drop')) { logTimer = null; return; }
           loopLogs();
         }
-        window._startHackingLog = function () { if (logTimer === null) logTimer = setTimeout(loopLogsGuard, 50); };
+        window._startHackingLog = function () { if (window._psStopHackingLog) return; if (logTimer === null) logTimer = setTimeout(loopLogsGuard, 50); };
         loopLogs = function () {
           const allLines = bg.textContent.split('\n');
           if (allLines.length > 120) allLines.splice(0, allLines.length - 120);
@@ -121,7 +125,7 @@
           const nextDelay = Math.random() < 0.15 ? Math.random() * 600 + 300 : Math.random() * 60 + 20;
           logTimer = setTimeout(loopLogsGuard, nextDelay);
         };
-        window._startHackingLog();
+        if (!window._psStopHackingLog) window._startHackingLog();
       }
     })();
   </script>
@@ -249,6 +253,27 @@
     <div id="leave-records-list">
       <!-- Javascript 會注入紀錄 -->
     </div>
+  </div>
+
+  <!-- ═══════════ 個人請假查詢 ═══════════ -->
+  <div id="page-leave-lookup" class="page">
+    <header class="summary-detail-header">
+      <button type="button" class="ll-back" onclick="navigateTo('tools')" aria-label="返回工具與選項">
+        <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        返回工具
+      </button>
+      <p id="ll-subtitle" class="summary-detail-date"></p>
+      <h1 tabindex="-1">請假狀況查詢</h1>
+      <p class="summary-detail-description">找一位住宿生，看他這學期哪幾天請假、哪幾天未請假。</p>
+    </header>
+    <main class="summary-detail-content">
+      <div class="ll-search-box">
+        <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="ll-search-input" aria-label="搜尋住宿生姓名、房號、床號或學號" placeholder="姓名／同音字／房號／床號／學號" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" oninput="onLeaveLookupSearch(this.value)" />
+      </div>
+      <div id="ll-results"></div>
+      <div id="ll-detail"></div>
+    </main>
   </div>
 
   <!-- ═══════════ 點名 ═══════════ -->
@@ -551,6 +576,16 @@
       <div class="eb-content">
         <span class="eb-title" style="color:var(--green)">櫃台請假填寫</span>
         <span class="eb-desc">電話通報請假，自動更新總表紀錄</span>
+      </div>
+      <span class="eb-arrow">›</span>
+    </button>
+
+    <!-- 請假狀況查詢 -->
+    <button class="empty-bed-action" onclick="openLeaveLookup()">
+      <span class="eb-icon"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="11.5" cy="16" r="2.5"/><path d="m15 19.5-1.7-1.7"/></svg></span>
+      <div class="eb-content">
+        <span class="eb-title" style="color:var(--yellow)">請假狀況查詢</span>
+        <span class="eb-desc">查單一住宿生這學期請了哪幾天假</span>
       </div>
       <span class="eb-arrow">›</span>
     </button>
@@ -1000,8 +1035,16 @@
     </div>
 
     <div class="settings-card">
-      <div class="settings-card-header">連線狀態</div>
-      <div id="conn-status" class="conn-badge">檢查中...</div>
+      <div class="settings-card-header">系統狀態</div>
+      <button type="button" id="health-entry" class="health-entry" data-status="loading" onclick="openHealthModal()" aria-label="查看系統穩定度詳情">
+        <span class="health-entry-dot" id="health-entry-dot" data-status="loading"></span>
+        <span class="health-entry-text">
+          <span class="health-entry-title" id="health-entry-title">檢查中…</span>
+          <span class="health-entry-sub" id="health-entry-sub">正在讀取系統狀態</span>
+        </span>
+        <svg class="health-entry-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
+      <div id="conn-status" class="conn-badge" hidden></div>
       <div id="settings-info" class="settings-dim"></div>
       <button class="action-btn wide warning" style="margin-top:12px;font-size:12px;padding:8px"
         onclick="clearSystemCache()"><img src="./Lp/ICON/RESET.svg" style="width:14px;height:14px;vertical-align:middle;margin-right:6px;">強制清除快取 (解Bug專用)</button>
@@ -1405,6 +1448,32 @@
     }
   </script>
 
+  <!-- 系統穩定度 Modal -->
+  <div id="health-modal" class="modal-overlay">
+    <div class="modal-card health-card">
+      <div class="health-head">
+        <h3>系統穩定度</h3>
+        <button type="button" class="health-close" onclick="closeHealthModal()" aria-label="關閉">&times;</button>
+      </div>
+      <div class="health-overall">
+        <div class="health-ring" id="health-ring" data-status="loading" style="--pct:0">
+          <span id="health-percent">—</span>
+        </div>
+        <div class="health-overall-text">
+          <div class="health-overall-title" id="health-overall-title">檢測中…</div>
+          <div class="health-overall-sub" id="health-overall-sub">正在逐項檢查</div>
+        </div>
+      </div>
+      <div class="health-list" id="health-list">
+        <div class="health-empty">檢測中…</div>
+      </div>
+      <div class="health-actions">
+        <button type="button" class="modal-btn cancel" id="health-recheck" onclick="refreshSystemHealth()">重新檢測</button>
+        <button type="button" class="modal-btn confirm" onclick="closeHealthModal()">關閉</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 系統更新日誌 Modal -->
   <div id="changelog-modal" class="modal-overlay">
     <div class="modal-card" style="max-height:80vh;display:flex;flex-direction:column;max-width:500px">
@@ -1443,15 +1512,15 @@
     <button type="button" class="nav-item" data-page="settings"><span class="nav-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-label">設定</span></button>
   </nav>
 
-  <script src="config.js?v=125"></script>
-  <script src="api.js?v=125"></script>
-  <script src="phonetic-search.js?v=125"></script>
-  <script src="app.js?v=125"></script>
-  <script src="import.js?v=125"></script>
-  <script src="theme.js?v=125"></script>
-  <script src="carousel.js?v=125"></script>
-  <script src="dissolve.js?v=125"></script>
-  <script src="navigation.js?v=125"></script>
+  <script src="config.js?v=127"></script>
+  <script src="api.js?v=127"></script>
+  <script src="phonetic-search.js?v=127"></script>
+  <script src="app.js?v=127"></script>
+  <script src="import.js?v=127"></script>
+  <script src="theme.js?v=127"></script>
+  <script src="carousel.js?v=127"></script>
+  <script src="dissolve.js?v=127"></script>
+  <script src="navigation.js?v=127"></script>
 
   <!-- 幹部工作手冊 Modal -->
   <div id="duty-manual-modal" class="modal-overlay">

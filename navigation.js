@@ -26,11 +26,12 @@ function setupNav(){
   // 保持乾淨、無色的液體玻璃；不再疊加青／洋紅色散複本，避免深色模式出現負片殘影。
   const rim=document.createElement('span');rim.className='lens-rim';shape.appendChild(rim);
   lens.appendChild(shape);nav.prepend(lens);
-  const reduced=matchMedia('(prefers-reduced-motion: reduce)');
+  // 省電模式也算「減少動態」→ 鏡片不做水滴拉長，直接定位
+  const reduced=()=>(window.sfReduceMotion?window.sfReduceMotion():matchMedia('(prefers-reduced-motion: reduce)').matches);
   const LENS_W=84,PAD=8;
   let index=0,lastIndex=-1,travelTimer=0,retryTimer=0,w=0,slot=0,suppressClick=false;
   const pageIndex=()=>{
-    const page=['home','summary','history','settings'].includes(currentPage)?currentPage:currentPage==='rollcall'?'home':currentPage==='summary-detail'?'summary':'settings';
+    const page=typeof navTabFor==='function'?navTabFor(currentPage):'home';
     return Math.max(0,items.findIndex(item=>item.dataset.page===page));
   };
   const xFor=i=>PAD+slot*(i+.5)-LENS_W/2;
@@ -52,7 +53,7 @@ function setupNav(){
     nav.style.setProperty('--lens-x',xFor(index)+'px');
     mark(index);
     // 換分頁時鏡片像水滴一樣先拉長，抵達後彈回正圓
-    if(lastIndex!==-1&&lastIndex!==index&&!reduced.matches){
+    if(lastIndex!==-1&&lastIndex!==index&&!reduced()){
       lens.classList.remove('is-travelling');void lens.offsetWidth;
       lens.classList.add('is-travelling');clearTimeout(travelTimer);
       travelTimer=setTimeout(()=>lens.classList.remove('is-travelling'),520);
@@ -60,7 +61,7 @@ function setupNav(){
     lastIndex=index;
   }
   // ── 按住鏡片左右拖 (iOS 26 tab bar)：鏡片跟著手指、依速度拉長、跨過分頁震一下、放開吸到最近的分頁 ──
-  const drag={active:false,moved:false,id:null,startX:0,startLens:0,lastX:0,lastT:0,v:0,hover:-1};
+  const drag={active:false,moved:false,id:null,item:null,startX:0,startLens:0,lastX:0,lastT:0,v:0,hover:-1};
   const rubber=x=>{const min=PAD,max=w-PAD-LENS_W,over=22;
     if(x<min)return min-over*(1-Math.exp((x-min)/over));
     if(x>max)return max+over*(1-Math.exp(-(x-max)/over));return x;};
@@ -69,9 +70,10 @@ function setupNav(){
     nav.style.setProperty('--lens-sx',(1+s).toFixed(3));nav.style.setProperty('--lens-sy',(1-s*.55).toFixed(3));
   }
   nav.addEventListener('pointerdown',e=>{
-    if(e.button!==0||drag.active||!e.target.closest('.nav-item'))return;
+    const pressed=e.target.closest('.nav-item');
+    if(e.button!==0||drag.active||!pressed)return;
     measure();if(w<120)return;
-    Object.assign(drag,{active:true,moved:false,id:e.pointerId,startX:e.clientX,lastX:e.clientX,lastT:performance.now(),v:0,hover:index,startLens:lensX()});
+    Object.assign(drag,{active:true,moved:false,id:e.pointerId,item:pressed,startX:e.clientX,lastX:e.clientX,lastT:performance.now(),v:0,hover:index,startLens:lensX()});
     try{nav.setPointerCapture(e.pointerId);}catch(_){}
     nav.classList.add('is-pressing');
   });
@@ -93,8 +95,15 @@ function setupNav(){
     nav.classList.remove('is-pressing','is-dragging');
     nav.style.removeProperty('--lens-sx');nav.style.removeProperty('--lens-sy');
     try{nav.releasePointerCapture(e.pointerId);}catch(_){}
-    if(!drag.moved)return; // 單純點一下 → 交給按鈕的 click
+    // 有 pointer capture 時，瀏覽器會把 click 改派給 nav 而不是被按的 .nav-item，
+    // 所以純點擊不能等原生 click，直接用按下時記住的按鈕自己導頁。
     suppressClick=true;setTimeout(()=>suppressClick=false,0);
+    if(!drag.moved){
+      const hit=drag.item;drag.item=null;
+      if(!cancelled&&hit)navigateTo(hit.dataset.page);
+      update();return;
+    }
+    drag.item=null;
     const target=cancelled?index:slotAt(lensX());
     if(target!==index)navigateTo(items[target].dataset.page); // 會廣播 app:navigate → update()
     update(); // 已離開拖曳狀態，transition 恢復 → 彈簧吸附
