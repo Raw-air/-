@@ -1,0 +1,97 @@
+/* 首頁左上角漢堡捷徑選單：單色線條圖示 + 折射玻璃面板
+   刻意不用工具頁的彩色標題，所有文字與圖示都吃 --qm-ink 一個顏色。 */
+.qm-toggle {
+  position:absolute;top:16px;left:16px;z-index:20;
+  width:40px;height:40px;padding:0;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--text);cursor:pointer;
+  background:rgba(255,255,255,.1);
+  border:1px solid rgba(255,255,255,.22);
+  backdrop-filter:blur(12px) saturate(180%);-webkit-backdrop-filter:blur(12px) saturate(180%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 4px 14px rgba(0,0,0,.22);
+  transition:transform .2s,background .2s;
+  -webkit-tap-highlight-color:transparent;
+}
+.qm-toggle:active {transform:scale(.92);}
+.qm-toggle:focus-visible {outline:2px solid var(--text);outline-offset:3px;}
+body.light-mode .qm-toggle {background:rgba(255,255,255,.55);border-color:rgba(0,0,0,.08);box-shadow:inset 0 1px 0 #fff,0 4px 14px rgba(60,70,100,.12);}
+.qm-bars {position:relative;width:18px;height:12px;}
+.qm-bars i {position:absolute;left:0;width:100%;height:2px;border-radius:2px;background:currentColor;transition:transform .32s cubic-bezier(.22,1.2,.36,1),opacity .2s,top .32s cubic-bezier(.22,1.2,.36,1);}
+.qm-bars i:nth-child(1) {top:0;}
+.qm-bars i:nth-child(2) {top:5px;}
+.qm-bars i:nth-child(3) {top:10px;}
+.qm-toggle[aria-expanded="true"] .qm-bars i:nth-child(1) {top:5px;transform:rotate(45deg);}
+.qm-toggle[aria-expanded="true"] .qm-bars i:nth-child(2) {opacity:0;transform:scaleX(.2);}
+.qm-toggle[aria-expanded="true"] .qm-bars i:nth-child(3) {top:5px;transform:rotate(-45deg);}
+
+/* 點面板外面就關：透明遮罩，稍微壓暗背景讓面板浮起來 */
+.qm-scrim {position:fixed;inset:0;z-index:1190;background:rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .25s;}
+.qm-scrim.open {opacity:1;pointer-events:auto;}
+body.light-mode .qm-scrim {background:rgba(40,45,60,.08);}
+
+.qm-panel {
+  --qm-ink:#f2f2f6;--qm-dim:rgba(242,242,246,.56);--qm-line:rgba(255,255,255,.1);
+  --qm-fill:rgba(30,30,38,.34);--qm-rim:rgba(255,255,255,.34);--qm-hover:rgba(255,255,255,.08);
+  position:fixed;z-index:1200;
+  top:calc(64px + env(safe-area-inset-top,0px));left:16px;
+  width:min(300px,calc(100vw - 32px));max-height:calc(100dvh - 180px);
+  padding:8px;border-radius:24px;overflow:hidden auto;overscroll-behavior:contain;
+  color:var(--qm-ink);
+  background:var(--qm-fill);
+  /* 折射感：高飽和 + 提亮 + 對比，讓後面的顏色被「放大」透出來，不是一片霧 */
+  backdrop-filter:blur(26px) saturate(210%) brightness(1.12) contrast(1.06);
+  -webkit-backdrop-filter:blur(26px) saturate(210%) brightness(1.12) contrast(1.06);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),inset 0 1px 0 var(--qm-rim),0 24px 60px rgba(0,0,0,.4),0 2px 8px rgba(0,0,0,.2);
+  transform-origin:20px -10px;
+  opacity:0;transform:scale(.86) translateY(-6px);filter:blur(6px);
+  pointer-events:none;visibility:hidden;
+  transition:opacity .22s,transform .42s cubic-bezier(.22,1.2,.36,1),filter .3s,visibility 0s .42s;
+}
+.qm-panel.open {opacity:1;transform:none;filter:none;pointer-events:auto;visibility:visible;transition:opacity .22s,transform .42s cubic-bezier(.22,1.2,.36,1),filter .3s,visibility 0s;}
+body.light-mode .qm-panel {
+  --qm-ink:#1d1d22;--qm-dim:rgba(29,29,34,.55);--qm-line:rgba(0,0,0,.07);
+  --qm-fill:rgba(255,255,255,.38);--qm-rim:#fff;--qm-hover:rgba(0,0,0,.05);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.7),inset 0 1px 0 var(--qm-rim),0 24px 60px rgba(60,70,100,.22),0 2px 8px rgba(60,70,100,.1);
+}
+/* 玻璃厚邊：斜向高光 + 只留外圈的遮罩，模擬鏡片邊緣的折射亮環 */
+.qm-panel::before {
+  content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(140deg,rgba(255,255,255,.34),transparent 30%,transparent 70%,rgba(255,255,255,.14));
+  padding:1.5px;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);
+}
+/* 左上角的柔和鏡面反光 */
+.qm-panel::after {
+  content:'';position:absolute;left:-20%;top:-40%;width:90%;height:70%;pointer-events:none;
+  background:radial-gradient(ellipse at center,rgba(255,255,255,.12),transparent 65%);
+}
+body.light-mode .qm-panel::after {background:radial-gradient(ellipse at center,rgba(255,255,255,.5),transparent 65%);}
+
+.qm-head {position:relative;z-index:1;display:flex;align-items:baseline;justify-content:space-between;padding:8px 12px 6px;}
+.qm-head b {font-size:12px;font-weight:700;letter-spacing:2px;color:var(--qm-dim);}
+.qm-head span {font-size:10px;letter-spacing:1.5px;color:var(--qm-dim);opacity:.7;}
+
+.qm-item {
+  position:relative;z-index:1;width:100%;display:flex;align-items:center;gap:12px;
+  padding:10px 12px;border:0;border-radius:16px;background:none;
+  color:var(--qm-ink);font:inherit;text-align:left;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+  opacity:0;transform:translateY(-4px);
+  transition:background .15s,opacity .28s,transform .38s cubic-bezier(.22,1.2,.36,1);
+}
+.qm-panel.open .qm-item {opacity:1;transform:none;transition-delay:calc(var(--i,0) * 22ms);}
+.qm-item:hover,.qm-item:focus-visible {background:var(--qm-hover);outline:none;}
+.qm-item:active {background:var(--qm-hover);transform:scale(.98);transition-delay:0s;}
+.qm-ico {flex:none;width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px var(--qm-line);}
+.qm-ico svg {width:18px;height:18px;}
+.qm-txt {flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
+.qm-txt b {font-size:14px;font-weight:650;letter-spacing:.3px;}
+.qm-txt small {font-size:11px;color:var(--qm-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.qm-sep {position:relative;z-index:1;height:1px;margin:6px 12px;background:var(--qm-line);}
+.qm-item.qm-all .qm-txt b {font-size:13px;color:var(--qm-dim);}
+
+@media (prefers-reduced-motion:reduce) {
+  .qm-panel,.qm-panel.open,.qm-item,.qm-bars i {transition:none;}
+  .qm-panel {filter:none;}
+}

@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="motion.css?v=132">
   <link rel="stylesheet" href="folder.css?v=132">
   <link rel="stylesheet" href="liquid-nav.css?v=132">
+  <link rel="stylesheet" href="quick-menu.css?v=132">
   <link rel="manifest" href="manifest.json?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=2">
   <script defer src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -147,6 +148,7 @@
   <div id="page-home" class="page active">
     <!-- 背景已移至外層全域 -->
     <div class="home-hero">
+      <button type="button" id="qm-toggle" class="qm-toggle" aria-label="開啟工具捷徑" aria-expanded="false" aria-controls="qm-panel"><span class="qm-bars"><i></i><i></i><i></i></span></button>
       <button class="changelog-btn" onclick="openChangelogModal()">
         <img src="./Lp/ICON/NEW.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">
         <span>更新公告</span>
@@ -1565,6 +1567,7 @@
   <script src="carousel.js?v=132"></script>
   <script src="dissolve.js?v=132"></script>
   <script src="navigation.js?v=132"></script>
+  <script src="quick-menu.js?v=132"></script>
 
   <!-- 幹部工作手冊 Modal -->
   <div id="duty-manual-modal" class="modal-overlay">

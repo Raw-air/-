@@ -2,7 +2,8 @@
 const CACHE_NAME = 'biyuan-v92';
 const ASSETS = ['./', './index.html', './style.css?v=132', './phonetic-search.js?v=132', './app.js?v=132', './import.js?v=132',
   './api.js?v=132', './config.js?v=132', './theme.js?v=132',
-  './carousel.js?v=132', './navigation.js?v=132', './motion.css?v=132', './liquid-nav.css?v=132', './folder.css?v=132', './dissolve.js?v=132'];
+  './carousel.js?v=132', './navigation.js?v=132', './motion.css?v=132', './liquid-nav.css?v=132', './folder.css?v=132', './dissolve.js?v=132',
+  './quick-menu.css?v=132', './quick-menu.js?v=132'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
