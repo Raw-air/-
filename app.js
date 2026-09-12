@@ -577,6 +577,12 @@ function applyStoredPrefs() {
   // 顯示自訂客製化（預設關閉：沒有值就是 false）
   const custToggle = document.getElementById('setting-squad-custom');
   if (custToggle) custToggle.checked = squadCustomOn();
+  updateCustomMenuEntry();
+}
+
+// 雲端設定是任何人都能寫的，照片一律確認真的是圖片 data URL 才塞進畫面
+function isSafeImageDataUrl(v) {
+  return typeof v === 'string' && /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/]+=*$/.test(v);
 }
 
 // 中隊卡片自訂客製化是否開啟。預設關閉，怕中隊長上傳的照片把首頁版面弄亂。
@@ -776,7 +782,15 @@ function togglePanzi(el) {
 
 function toggleSquadCustom(el) {
   setPref('squad_custom', el.checked);
+  updateCustomMenuEntry();
+  loadGlobalBgVideo();
   if (currentPage === 'home') renderHome();
+}
+
+// 設定頁的「客製化選單」入口只在開關打開時出現
+function updateCustomMenuEntry() {
+  const entry = document.getElementById('custom-menu-entry');
+  if (entry) entry.style.display = squadCustomOn() ? 'flex' : 'none';
 }
 
 function togglePowerSave(el) {
@@ -1391,7 +1405,7 @@ const NAV_TAB_OF = {
   'summary-detail': 'summary', tools: 'summary', 'leave-records': 'summary',
   'student-files': 'summary', 'resident-management': 'summary', 'repair-form': 'summary',
   'leave-lookup': 'summary',
-  'feedback-review': 'settings', 'database-setup': 'settings',
+  'feedback-review': 'settings', 'database-setup': 'settings', customize: 'settings',
 };
 const NAV_TABS = ['home', 'summary', 'history', 'settings'];
 function navTabFor(page) {
@@ -1466,6 +1480,7 @@ function renderCurrentPage(skipAnimation = false) {
     case 'settings': renderSettings(); break;
     case 'resident-management': initResidentManagement(false); break;
     case 'leave-lookup': renderLeaveLookup(); break;
+    case 'customize': renderCustomizePage(); break;
   }
 }
 
@@ -1574,7 +1589,8 @@ function renderHome() {
     const delay = (baseDelay + i * 0.03).toFixed(2) + 's';
 
     // 中隊長上傳的照片：只有使用者打開「顯示自訂客製化」才會拿出來用
-    const photo = showCustom ? (state.config['squad_img_' + sq.id] || '') : '';
+    const rawPhoto = showCustom ? state.config['squad_img_' + sq.id] : '';
+    const photo = isSafeImageDataUrl(rawPhoto) ? rawPhoto : '';
     if (photo) {
       return `
         <div class="sq-card sq-photo ${animClass}" style="--sq-c:${sq.color}; animation-delay: ${delay}; -webkit-animation-delay: ${delay};" onclick="enterSquad('${sq.id}')">
@@ -2794,11 +2810,11 @@ const _sqCust = { squad: null, dataUrl: null, changed: false, busy: false };
 
 function squadCustomKey(squadId) { return SQ_CUST_KEY_PREFIX + squadId; }
 
-function openSquadCustomModal() {
-  const squad = state.currentSquad;
-  if (!squad) { showToast('請先進入中隊再自訂卡片', 'error'); return; }
+function openSquadCustomModal(squadId) {
+  const squad = squadId || state.currentSquad;
+  if (!squad) { showToast('請先選擇中隊', 'error'); return; }
   _sqCust.squad = squad;
-  _sqCust.dataUrl = state.config[squadCustomKey(squad)] || null;
+  _sqCust.dataUrl = isSafeImageDataUrl(state.config[squadCustomKey(squad)]) ? state.config[squadCustomKey(squad)] : null;
   _sqCust.changed = false;
   const title = document.getElementById('sq-cust-title');
   if (title) title.textContent = '自訂「' + squad + '」卡片';
@@ -2835,8 +2851,8 @@ function renderSquadCustomPreview() {
   }
 }
 
-// 把使用者選的照片裁成正方形、縮到卡片實際需要的尺寸，並壓到預算內。
-function compressSquadPhoto(file) {
+// 把照片縮小並壓到預算內。square=true 置中裁成正方形 (中隊卡片)；false 保留原比例 (背景)。
+function compressImage(file, { square, sides, budget }) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('讀取檔案失敗'));
@@ -2845,27 +2861,30 @@ function compressSquadPhoto(file) {
       img.onerror = () => reject(new Error('這個檔案不是有效的圖片'));
       img.onload = () => {
         try {
-          const sides = [320, 256, 192, 144];
           const qualities = [0.82, 0.7, 0.58, 0.46, 0.34];
           const types = ['image/webp', 'image/jpeg'];
+          const iw = img.naturalWidth, ih = img.naturalHeight;
           let best = null;
           for (const side of sides) {
             const canvas = document.createElement('canvas');
-            canvas.width = side;
-            canvas.height = side;
             const ctx = canvas.getContext('2d');
-            // 置中裁切成正方形，照片不會被壓扁
-            const crop = Math.min(img.naturalWidth, img.naturalHeight);
-            const sx = (img.naturalWidth - crop) / 2;
-            const sy = (img.naturalHeight - crop) / 2;
-            ctx.drawImage(img, sx, sy, crop, crop, 0, 0, side, side);
+            if (square) {
+              canvas.width = side; canvas.height = side;
+              const crop = Math.min(iw, ih);
+              ctx.drawImage(img, (iw - crop) / 2, (ih - crop) / 2, crop, crop, 0, 0, side, side);
+            } else {
+              const k = Math.min(1, side / Math.max(iw, ih));
+              canvas.width = Math.max(1, Math.round(iw * k));
+              canvas.height = Math.max(1, Math.round(ih * k));
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            }
             for (const type of types) {
               for (const q of qualities) {
                 const url = canvas.toDataURL(type, q);
                 // 瀏覽器不支援 WebP 時會退回 PNG，這種就跳過換下一個格式
                 if (!url.startsWith('data:' + type)) break;
                 if (!best || url.length < best.length) best = url;
-                if (url.length <= SQ_CUST_BUDGET) return resolve(url);
+                if (url.length <= budget) return resolve(url);
               }
             }
           }
@@ -2877,6 +2896,10 @@ function compressSquadPhoto(file) {
     };
     reader.readAsDataURL(file);
   });
+}
+
+function compressSquadPhoto(file) {
+  return compressImage(file, { square: true, sides: [320, 256, 192, 144], budget: SQ_CUST_BUDGET });
 }
 
 async function onSquadCustomFile(input) {
@@ -2921,6 +2944,7 @@ async function saveSquadCustom() {
       showToast('已同步，但你的「顯示自訂客製化」是關閉的，所以首頁看不到', 'info');
     }
     if (currentPage === 'home') renderHome();
+    if (currentPage === 'customize') renderCustomizePage();
   } catch (err) {
     showToast('儲存失敗：' + err.message, 'error');
   } finally {
@@ -2946,11 +2970,178 @@ async function removeSquadCustom() {
     closeModal('squad-custom-modal');
     showToast('已恢復預設卡片樣式', 'success');
     if (currentPage === 'home') renderHome();
+    if (currentPage === 'customize') renderCustomizePage();
   } catch (err) {
     showToast('移除失敗：' + err.message, 'error');
   } finally {
     _sqCust.busy = false;
   }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 客製化選單 (設定 → 顯示自訂客製化 → 客製化選單)
+// 首頁背景：key custom_bg_img / custom_bg_opacity，儲存要幹部密碼 (pin_admin)
+// 中隊卡片：沿用上面的 squad_img_<中隊>，儲存前要該中隊密碼
+// 全部存雲端設定，所有人下次開 App 就會拿到；看不看得到由各自的開關決定。
+// ═════════════════════════════════════════════════════════════════════════════
+const CUST_BG_KEY = 'custom_bg_img';
+const CUST_BG_OPACITY_KEY = 'custom_bg_opacity';
+const CUST_BG_BUDGET = 90000;   // data URL 字串上限 (約 66KB)：背景要全螢幕，但也不能拖慢開 App
+const _custBg = { dataUrl: null, opacity: 0.35, imgChanged: false, opChanged: false, busy: false };
+
+function clampBgOpacity(v) {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? Math.min(1, Math.max(0.1, n)) : 0.35;
+}
+
+// 有自訂背景就畫出來並回傳 true；沒有 (或開關關著) 回傳 false，讓原本的背景影片接手
+function applyCustomBackground() {
+  const raw = squadCustomOn() ? state.config[CUST_BG_KEY] : '';
+  if (!isSafeImageDataUrl(raw)) return false;
+  const container = document.getElementById('custom-video-bg');
+  if (!container) return false;
+  const op = clampBgOpacity(state.config[CUST_BG_OPACITY_KEY]);
+  container.innerHTML = '<img class="custom-bg-img" alt="" style="--target-opacity:' + op + '">';
+  container.querySelector('img').src = raw;
+  const animBg = document.querySelector('.home-anim-bg');
+  if (animBg) animBg.style.display = 'none';
+  return true;
+}
+
+function renderCustomizePage() {
+  if (!_custBg.imgChanged) {
+    const saved = state.config[CUST_BG_KEY];
+    _custBg.dataUrl = isSafeImageDataUrl(saved) ? saved : null;
+  }
+  if (!_custBg.opChanged) _custBg.opacity = clampBgOpacity(state.config[CUST_BG_OPACITY_KEY]);
+  renderCustomBgPreview();
+
+  const grid = document.getElementById('cust-squad-grid');
+  if (!grid) return;
+  grid.innerHTML = CONFIG.SQUADS.map(sq => {
+    const onclick = ' onclick="editSquadCard(\'' + sq.id + '\')"';
+    if (isSafeImageDataUrl(state.config[squadCustomKey(sq.id)])) {
+      return '<div class="sq-card sq-photo" data-squad="' + sq.id + '" style="--sq-c:' + sq.color + '"' + onclick + '>' +
+        '<img class="sq-photo-img" alt="' + sq.id + ' 目前照片">' +
+        '<div class="sq-photo-pill"><span class="sq-photo-dot"></span>' + sq.id + '</div></div>';
+    }
+    return '<div class="sq-card" style="--sq-c:' + sq.color + '"' + onclick + '>' +
+      '<div class="sq-badge" style="background:' + sq.color + '">' + sq.floor + '</div>' +
+      '<div class="sq-name">' + sq.id + '</div><div class="sq-desc">點我換照片</div></div>';
+  }).join('');
+  // data URL 很長，用屬性設定比塞進 HTML 字串安全
+  grid.querySelectorAll('.sq-photo[data-squad]').forEach(card => {
+    card.querySelector('img').src = state.config[squadCustomKey(card.dataset.squad)];
+  });
+}
+
+function renderCustomBgPreview() {
+  const box = document.getElementById('cust-bg-preview');
+  const meta = document.getElementById('cust-bg-meta');
+  const range = document.getElementById('cust-bg-opacity');
+  const val = document.getElementById('cust-bg-opacity-val');
+  const removeBtn = document.getElementById('cust-bg-remove');
+  if (!box) return;
+  if (range) range.value = _custBg.opacity;
+  if (val) val.textContent = Math.round(_custBg.opacity * 100) + '%';
+  if (_custBg.dataUrl) {
+    box.innerHTML = '<img alt="背景預覽">';
+    const img = box.querySelector('img');
+    img.src = _custBg.dataUrl;
+    img.style.opacity = _custBg.opacity;
+    if (meta) {
+      const kb = Math.round(_custBg.dataUrl.length * 0.75 / 1024 * 10) / 10;
+      meta.textContent = (_custBg.imgChanged || _custBg.opChanged)
+        ? ('約 ' + kb + ' KB，按「儲存並同步」才會套用給所有人')
+        : ('目前背景約 ' + kb + ' KB');
+    }
+  } else {
+    box.innerHTML = '<span class="sq-cust-empty">還沒有自訂背景<br>使用預設背景</span>';
+    if (meta) meta.textContent = '';
+  }
+  if (removeBtn) removeBtn.style.display = isSafeImageDataUrl(state.config[CUST_BG_KEY]) ? 'block' : 'none';
+}
+
+function onCustomBgOpacity(v) {
+  _custBg.opacity = clampBgOpacity(v);
+  _custBg.opChanged = _custBg.opacity !== clampBgOpacity(state.config[CUST_BG_OPACITY_KEY]);
+  renderCustomBgPreview();
+}
+
+async function onCustomBgFile(input) {
+  const file = input && input.files && input.files[0];
+  if (!file) return;
+  if (!/^image\//.test(file.type)) { showToast('請選擇圖片檔', 'error'); input.value = ''; return; }
+  const meta = document.getElementById('cust-bg-meta');
+  if (meta) meta.textContent = '正在壓縮照片…';
+  try {
+    _custBg.dataUrl = await compressImage(file, { square: false, sides: [1280, 1080, 900, 720, 540], budget: CUST_BG_BUDGET });
+    _custBg.imgChanged = true;
+    renderCustomBgPreview();
+    haptic('light');
+  } catch (err) {
+    showToast('照片處理失敗：' + err.message, 'error');
+    if (meta) meta.textContent = '';
+  } finally {
+    input.value = '';
+  }
+}
+
+function saveCustomBg() {
+  if (_custBg.busy) return;
+  if (state.viewSemester) { showToast('正在查看封存學期，不能修改', 'error'); return; }
+  if (!_custBg.dataUrl) { showToast('請先選一張照片', 'error'); return; }
+  if (!_custBg.imgChanged && !_custBg.opChanged) { showToast('沒有變更', 'info'); return; }
+  showPinDialog('admin', doSaveCustomBg, '輸入幹部密碼以更換背景');
+}
+
+async function doSaveCustomBg() {
+  const updates = {};
+  if (_custBg.imgChanged) updates[CUST_BG_KEY] = _custBg.dataUrl;
+  updates[CUST_BG_OPACITY_KEY] = String(_custBg.opacity);
+  const btn = document.getElementById('cust-bg-save');
+  _custBg.busy = true;
+  if (btn) { btn.disabled = true; btn.textContent = '上傳中…'; }
+  try {
+    await window._api.setConfig(updates);
+    Object.assign(state.config, updates);
+    _custBg.imgChanged = false;
+    _custBg.opChanged = false;
+    loadGlobalBgVideo();
+    renderCustomBgPreview();
+    showToast('背景已同步，所有人下次打開 App 就會看到', 'success');
+  } catch (err) {
+    showToast('儲存失敗：' + err.message, 'error');
+  } finally {
+    _custBg.busy = false;
+    if (btn) { btn.disabled = false; btn.textContent = '儲存並同步'; }
+  }
+}
+
+function removeCustomBg() {
+  if (_custBg.busy) return;
+  if (state.viewSemester) { showToast('正在查看封存學期，不能修改', 'error'); return; }
+  if (!confirm('要移除自訂背景，恢復預設嗎？所有人都會一起恢復。')) return;
+  showPinDialog('admin', async () => {
+    _custBg.busy = true;
+    try {
+      await window._api.setConfig({ [CUST_BG_KEY]: '' });
+      state.config[CUST_BG_KEY] = '';
+      _custBg.dataUrl = null;
+      _custBg.imgChanged = false;
+      loadGlobalBgVideo();
+      renderCustomBgPreview();
+      showToast('已恢復預設背景', 'success');
+    } catch (err) {
+      showToast('移除失敗：' + err.message, 'error');
+    } finally {
+      _custBg.busy = false;
+    }
+  }, '輸入幹部密碼以移除背景');
+}
+
+function editSquadCard(squadId) {
+  showPinDialog(squadId, () => openSquadCustomModal(squadId), squadId + ' 中隊密碼');
 }
 
 async function testWorkerConnection() {
@@ -4367,6 +4558,7 @@ window.saveGlobalPinAuth = saveGlobalPinAuth;
 // 伺服器自訂背景影片 (全域 Notion Config 儲存)
 // ═════════════════════════════════════════════════════════════════════════════
 function loadGlobalBgVideo() {
+  if (applyCustomBackground()) return;
   // 從 Notion 全域設定讀取
   const rawUrl = state.config['bg_video_url'];
   const url = (rawUrl || '').trim();

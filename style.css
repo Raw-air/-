@@ -6199,39 +6199,6 @@ body.power-save-mode.light-mode .sq-photo-pill {
   background: rgba(255, 255, 255, .93);
 }
 
-/* 點名頁頂端的「自訂卡片」入口（中隊長過完 PIN 才看得到這頁） */
-.rc-custom-btn {
-  /* 頁面左邊 12~92px 被固定的「返回」按鈕蓋住，中間 165px 起是中隊名稱，
-     所以這顆只放圖示、塞在兩者中間那段空白裡 */
-  margin-left: 84px;
-  margin-right: auto;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text);
-  opacity: .8;
-  background: rgba(255, 255, 255, .08);
-  border: 1px solid rgba(255, 255, 255, .18);
-  border-radius: 50%;
-  cursor: pointer;
-  transition: transform .12s ease, opacity .12s ease;
-}
-
-.rc-custom-btn:active {
-  transform: scale(.92);
-  opacity: 1;
-}
-
-body.light-mode .rc-custom-btn {
-  color: #555b66;
-  background: rgba(0, 0, 0, .04);
-  border-color: rgba(0, 0, 0, .1);
-}
-
 /* 自訂卡片 Modal 的即時預覽 */
 .sq-cust-preview {
   width: 136px;
@@ -6270,4 +6237,80 @@ body.light-mode .rc-custom-btn {
   text-align: center;
   margin-bottom: 10px;
   min-height: 15px;
+}
+
+/* ═══════════ 客製化選單 ═══════════ */
+.cust-menu-entry {
+  margin: 10px 0 4px;
+}
+
+/* 首頁自訂背景照片（放在原本背景影片的同一個容器，所以離開首頁一樣會淡出） */
+.custom-bg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: var(--target-opacity, .35);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 100%);
+  animation: custBgIn .8s ease both;
+}
+
+@keyframes custBgIn {
+  from { opacity: 0; }
+}
+
+.cust-bg-preview {
+  position: relative;
+  width: 124px;
+  aspect-ratio: 9 / 16;
+  margin: 12px auto 8px;
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg, #000);
+  border: 1px solid rgba(255, 255, 255, .14);
+}
+
+.cust-bg-preview img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+body.light-mode .cust-bg-preview {
+  border-color: rgba(0, 0, 0, .12);
+}
+
+.cust-opacity-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 12px;
+  font-size: 13px;
+}
+
+.cust-opacity-row input[type="range"] {
+  flex: 1;
+}
+
+.cust-opacity-row span {
+  min-width: 38px;
+  text-align: right;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.cust-btn-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+#cust-squad-grid {
+  margin-top: 12px;
 }

@@ -10,11 +10,11 @@
   <meta name="theme-color" content="#151518">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=132">
-  <link rel="stylesheet" href="motion.css?v=132">
-  <link rel="stylesheet" href="folder.css?v=132">
-  <link rel="stylesheet" href="liquid-nav.css?v=132">
-  <link rel="stylesheet" href="quick-menu.css?v=132">
+  <link rel="stylesheet" href="style.css?v=133">
+  <link rel="stylesheet" href="motion.css?v=133">
+  <link rel="stylesheet" href="folder.css?v=133">
+  <link rel="stylesheet" href="liquid-nav.css?v=133">
+  <link rel="stylesheet" href="quick-menu.css?v=133">
   <link rel="manifest" href="manifest.json?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=2">
   <script defer src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -282,7 +282,6 @@
   <div id="page-rollcall" class="page">
     <header class="rc-header">
       <div class="rc-header-top">
-        <button type="button" class="rc-custom-btn" onclick="openSquadCustomModal()" aria-label="自訂本中隊卡片外觀" title="自訂本中隊卡片外觀"><svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></button>
         <span id="rc-squad-name" class="rc-squad-name"></span>
         <button id="rc-date-btn" class="rc-date-pill rc-date-clickable" onclick="toggleDatePicker()">
           <span id="rc-date"></span>
@@ -931,6 +930,43 @@
     <div id="hist-detail" class="hist-detail"></div>
   </div>
 
+  <!-- ═══════════ 客製化選單 ═══════════ -->
+  <div id="page-customize" class="page">
+    <header class="summary-detail-header">
+      <button type="button" class="ll-back" onclick="navigateTo('settings')" aria-label="返回系統設定">
+        <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        返回設定
+      </button>
+      <h1 tabindex="-1">客製化選單</h1>
+      <p class="summary-detail-description">這裡改的東西會同步到雲端，所有人打開 App 都會看到（對方要開著「顯示自訂客製化」）。</p>
+    </header>
+    <main class="summary-detail-content">
+      <div class="settings-card">
+        <div class="settings-card-header"><svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> 首頁背景</div>
+        <div class="settings-hint">上傳一張照片當首頁背景，會自動縮小壓縮。儲存時需要幹部密碼。</div>
+        <div id="cust-bg-preview" class="cust-bg-preview"><span class="sq-cust-empty">還沒有自訂背景<br>使用預設背景</span></div>
+        <div id="cust-bg-meta" class="sq-cust-meta"></div>
+        <div class="cust-opacity-row">
+          <label for="cust-bg-opacity">背景濃度</label>
+          <input type="range" id="cust-bg-opacity" min="0.1" max="1" step="0.05" value="0.35" oninput="onCustomBgOpacity(this.value)">
+          <span id="cust-bg-opacity-val">35%</span>
+        </div>
+        <input type="file" id="cust-bg-file" accept="image/*" style="display:none" onchange="onCustomBgFile(this)">
+        <div class="cust-btn-row">
+          <button type="button" class="action-btn" onclick="document.getElementById('cust-bg-file').click()">選擇照片</button>
+          <button type="button" id="cust-bg-save" class="action-btn save-btn" onclick="saveCustomBg()">儲存並同步</button>
+        </div>
+        <button type="button" id="cust-bg-remove" class="action-btn wide warning" style="display:none;margin-top:8px;font-size:12px;padding:8px;" onclick="removeCustomBg()">移除背景，恢復預設</button>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-header"><svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> 中隊卡片照片</div>
+        <div class="settings-hint">點一個中隊來換照片，儲存時需要該中隊的點名密碼。</div>
+        <div id="cust-squad-grid" class="squad-grid-3col"></div>
+      </div>
+    </main>
+  </div>
+
   <!-- ═══════════ 設定 ═══════════ -->
   <div id="page-settings" class="page">
     <h1 class="page-title"><img src="./Lp/ICON/SETTIN.svg" style="width:28px;height:28px;vertical-align:middle;margin-right:12px;margin-bottom:6px;">系統設定</h1>
@@ -1079,6 +1115,14 @@
             </div>
         </label>
       </div>
+      <button type="button" id="custom-menu-entry" class="empty-bed-action cust-menu-entry" style="display:none;" onclick="navigateTo('customize')">
+        <span class="eb-icon"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2Z"/></svg></span>
+        <div class="eb-content">
+          <span class="eb-title">客製化選單</span>
+          <span class="eb-desc">換首頁背景、換中隊卡片照片</span>
+        </div>
+        <span class="eb-arrow">›</span>
+      </button>
     </div>
 
     <div class="settings-card">
@@ -1558,16 +1602,16 @@
     <button type="button" class="nav-item" data-page="settings"><span class="nav-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-label">設定</span></button>
   </nav>
 
-  <script src="config.js?v=132"></script>
-  <script src="api.js?v=132"></script>
-  <script src="phonetic-search.js?v=132"></script>
-  <script src="app.js?v=132"></script>
-  <script src="import.js?v=132"></script>
-  <script src="theme.js?v=132"></script>
-  <script src="carousel.js?v=132"></script>
-  <script src="dissolve.js?v=132"></script>
-  <script src="navigation.js?v=132"></script>
-  <script src="quick-menu.js?v=132"></script>
+  <script src="config.js?v=133"></script>
+  <script src="api.js?v=133"></script>
+  <script src="phonetic-search.js?v=133"></script>
+  <script src="app.js?v=133"></script>
+  <script src="import.js?v=133"></script>
+  <script src="theme.js?v=133"></script>
+  <script src="carousel.js?v=133"></script>
+  <script src="dissolve.js?v=133"></script>
+  <script src="navigation.js?v=133"></script>
+  <script src="quick-menu.js?v=133"></script>
 
   <!-- 幹部工作手冊 Modal -->
   <div id="duty-manual-modal" class="modal-overlay">
