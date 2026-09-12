@@ -4,6 +4,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <script>
+    /* Android 滿版 PWA 冷啟動時，Chrome 太早收到 viewport-fit=cover 會沒套到，鏡頭那排變黑；
+       開起來後把它拿掉再裝回去，讓 Chrome 重新套用一次 (重開 App 時本來就正常) */
+    (function () {
+      if (!window.matchMedia || !matchMedia('(display-mode: fullscreen)').matches) return;
+      var m = document.querySelector('meta[name=viewport]'), full = m.content;
+      function kick() {
+        m.content = full.replace(/,\s*viewport-fit=cover/, '');
+        setTimeout(function () { m.content = full; }, 60);
+      }
+      addEventListener('load', function () { setTimeout(kick, 150); setTimeout(kick, 1200); });
+    })();
+  </script>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">

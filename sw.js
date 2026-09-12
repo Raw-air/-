@@ -1,5 +1,5 @@
 // Atomic shell cache: HTML and JS must always come from the same release.
-const CACHE_NAME = 'biyuan-v99';
+const CACHE_NAME = 'biyuan-v100';
 const ASSETS = ['./', './index.html', './style.css?v=139', './phonetic-search.js?v=139', './app.js?v=139', './import.js?v=139',
   './api.js?v=139', './config.js?v=139', './theme.js?v=139',
   './carousel.js?v=139', './navigation.js?v=139', './motion.css?v=139', './liquid-nav.css?v=139', './folder.css?v=139', './dissolve.js?v=139',
