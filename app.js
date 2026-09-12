@@ -6009,6 +6009,96 @@ function rmBindTouchGuard() {
     const el = e.target;
     if (rmIsTouchDevice() && el?.matches?.('.rm-cell-input, .rm-cell-remarks')) el.readOnly = true;
   });
+
+  rmBindPinchZoom(shell);
+}
+
+// ─── 雙指縮放總表 ─────────────────────────────────────────────────────────────
+// 整個 App 關掉了瀏覽器縮放，所以表格自己處理：兩指捏合改 --rm-zoom，手指中間那一格保持在原位。
+// 電腦上按住 Ctrl 滾輪 (或觸控板捏合) 也行。倍率記在 localStorage，下次打開還是同樣大小。
+const RM_ZOOM_MIN = 0.6;
+const RM_ZOOM_MAX = 2.5;
+const RM_ZOOM_KEY = 'rm-table-zoom';
+let _rmZoom = 1;
+
+function rmClampZoom(z) {
+  return Math.min(RM_ZOOM_MAX, Math.max(RM_ZOOM_MIN, Math.round(z * 100) / 100));
+}
+
+function rmApplyZoom(shell, zoom, cx, cy) {
+  const next = rmClampZoom(zoom);
+  const prev = _rmZoom;
+  if (next === prev) return;
+  // 以 (cx, cy) 為錨點：縮放前後，這個位置底下的內容不動
+  const contentX = (shell.scrollLeft + cx) / prev;
+  const contentY = (shell.scrollTop + cy) / prev;
+  _rmZoom = next;
+  shell.style.setProperty('--rm-zoom', next);
+  shell.scrollLeft = contentX * next - cx;
+  shell.scrollTop = contentY * next - cy;
+  rmShowZoomBadge(shell, next);
+}
+
+function rmShowZoomBadge(shell, zoom) {
+  let badge = document.getElementById('rm-zoom-badge');
+  if (!badge) {
+    badge = document.createElement('div');
+    badge.id = 'rm-zoom-badge';
+    badge.className = 'rm-zoom-badge';
+    shell.parentElement.insertBefore(badge, shell);
+  }
+  badge.textContent = `${Math.round(zoom * 100)}%`;
+  badge.classList.add('is-visible');
+  clearTimeout(badge._hideTimer);
+  badge._hideTimer = setTimeout(() => badge.classList.remove('is-visible'), 900);
+}
+
+function rmBindPinchZoom(shell) {
+  try { _rmZoom = rmClampZoom(parseFloat(localStorage.getItem(RM_ZOOM_KEY)) || 1); } catch (_) { _rmZoom = 1; }
+  shell.style.setProperty('--rm-zoom', _rmZoom);
+  const save = () => { try { localStorage.setItem(RM_ZOOM_KEY, String(_rmZoom)); } catch (_) { } };
+
+  let pinch = null;
+  const dist = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+  const center = (a, b) => {
+    const r = shell.getBoundingClientRect();
+    return { x: (a.clientX + b.clientX) / 2 - r.left, y: (a.clientY + b.clientY) / 2 - r.top };
+  };
+
+  shell.addEventListener('touchstart', e => {
+    if (e.touches.length !== 2) return;
+    pinch = { d: dist(e.touches[0], e.touches[1]), zoom: _rmZoom };
+    _rmMoved = true; // 兩指手勢不算點擊
+    document.activeElement?.blur?.();
+  }, { passive: true });
+
+  shell.addEventListener('touchmove', e => {
+    if (!pinch || e.touches.length !== 2) return;
+    if (e.cancelable) e.preventDefault();
+    const [a, b] = e.touches;
+    const c = center(a, b);
+    rmApplyZoom(shell, pinch.zoom * dist(a, b) / pinch.d, c.x, c.y);
+  }, { passive: false });
+
+  const end = e => {
+    if (!pinch || e.touches.length >= 2) return;
+    pinch = null;
+    save();
+  };
+  shell.addEventListener('touchend', end, { passive: true });
+  shell.addEventListener('touchcancel', end, { passive: true });
+
+  // iOS Safari 不理 user-scalable=no，會自己放大整頁，要擋掉
+  shell.addEventListener('gesturestart', e => e.preventDefault());
+  shell.addEventListener('gesturechange', e => e.preventDefault());
+
+  shell.addEventListener('wheel', e => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    const r = shell.getBoundingClientRect();
+    rmApplyZoom(shell, _rmZoom * Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+    save();
+  }, { passive: false });
 }
 
 function renderResidentManagement() {

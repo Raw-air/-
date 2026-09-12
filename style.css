@@ -5572,7 +5572,27 @@ body.light-mode .anim-line::after {
 }
 .rm-table-shell::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .rm-table-shell:focus-visible { outline: 3px solid rgba(10, 132, 255, .55); outline-offset: 2px; }
+.rm-zoom-badge {
+  position: fixed;
+  left: 50%;
+  top: 45%;
+  z-index: 50;
+  transform: translate(-50%, -50%);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .72);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+}
+.rm-zoom-badge.is-visible { opacity: 1; }
 .rm-table {
+  /* 雙指縮放：--rm-zoom 由 app.js 設定 */
+  zoom: var(--rm-zoom, 1);
   width: 100%;
   min-width: 1520px;
   border-collapse: separate;
