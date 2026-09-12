@@ -781,9 +781,39 @@ body.light-mode #page-student-files .sf-folder:not(.active) > .fd-front {backgro
 #page-student-files .sf-folder.fd-near > .fd-front,
 #page-student-files .sf-folder.fd-near > .fd-back {will-change:auto;}
 /* 圓角：側邊厚度與頂面原本貼滿整條邊，會從 18px 圓角外面凸出一塊方角。縮到圓角內側。 */
-#page-student-files .sf-folder > .fd-spine {top:var(--fd-radius);bottom:var(--fd-radius);}
-#page-student-files .sf-folder > .fd-top {left:var(--fd-radius);right:var(--fd-radius);}
 /* 3D 旋轉後邊緣鋸齒：透明外框讓瀏覽器對邊緣做抗鋸齒 */
 #page-student-files .sf-folder > .fd-front,
 #page-student-files .sf-folder > .fd-back,
 #page-student-files .sf-folder > .fd-edge {outline:1px solid transparent;}
+/* 側面厚度：貼滿整條邊，但兩端在圓角長度內淡出。
+   不再硬切 (上一版縮短後底部會留一個方形斷口)，也不會在圓角外凸出方角；拿掉外陰影，不再像浮在前面的白條。 */
+#page-student-files {--fd-side:rgba(232,240,235,.5);}
+body.light-mode #page-student-files {--fd-side:rgba(255,255,255,.8);}
+#page-student-files .sf-folder > .fd-spine {
+  top:2px;bottom:2px;border-radius:0;box-shadow:none;
+  background:linear-gradient(180deg,transparent,var(--fd-side) var(--fd-radius),var(--fd-side) calc(100% - var(--fd-radius)),transparent);
+}
+#page-student-files .sf-folder > .fd-top {
+  left:2px;right:2px;border-radius:0;box-shadow:none;
+  background:linear-gradient(90deg,transparent,var(--fd-side) var(--fd-radius),var(--fd-side) calc(100% - var(--fd-radius)),transparent);
+}
+/* 選取狀態連續過渡：--fd-sel (0~1) 由 carousel.js 逐幀寫入 */
+#page-student-files .sf-folder > .fd-front,
+#page-student-files .sf-folder.active > .fd-front {
+  background:linear-gradient(165deg,rgba(250,252,250,.8),rgba(233,240,235,.7) 34%,rgba(229,237,231,.76) 63%,rgba(196,209,200,.6) 90%,rgba(255,255,255,.66));
+}
+body.light-mode #page-student-files .sf-folder > .fd-front,
+body.light-mode #page-student-files .sf-folder.active > .fd-front {background:linear-gradient(160deg,#fffffff2,#e5ebe4ea 38%,#d7e0d6e6 66%,#b7c5bad0 92%);}
+#page-student-files .sf-folder > .fd-front::after {
+  content:'';position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;
+  background:var(--fd-active-front);opacity:var(--fd-sel,0);
+}
+#page-student-files .sf-folder > .fd-back::after,
+#page-student-files .sf-folder.active > .fd-back::after {opacity:var(--fd-sel,0);transition:none;}
+#page-student-files .sf-folder .fd-summary {opacity:clamp(0,calc(var(--fd-sel,0) * 2 - 1),1);transition:none;}
+#page-student-files .sf-folder .fd-rail-label,
+#page-student-files .sf-folder.active .fd-rail-label {opacity:clamp(0,calc(1 - var(--fd-sel,0) * 2),1);transition:none;}
+#page-student-files .sf-folder .fd-file-mark {color:color-mix(in srgb,#d9ffe0 calc(var(--fd-sel,0) * 100%),#152b1b);}
+/* 滑鼠拖曳時不要反白選到資料夾上的字 (紫色選取框) */
+#page-student-files .sf-card-area-2d {-webkit-user-select:none;user-select:none;}
+#page-student-files .fd-sheet {-webkit-user-select:text;user-select:text;}

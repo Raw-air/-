@@ -219,6 +219,12 @@ function setup2DCarouselInteraction() {
       const bump = ad < .5 ? 1 - smooth(ad / .5) : 0;
       const layer = 2000 + Math.round(p.x * Math.sin(yawR) + p.z * Math.cos(yawR)) + Math.round(1500 * bump * Math.max(ext.ex, sheet.amt));
       if (el._layer !== layer) { el.style.zIndex = layer; el._layer = layer; }
+      // 選取的綠色與標籤依「離中心多近」連續淡入淡出。原本靠 .active class 瞬間換本，
+      // 快速滑動時綠色一幀一幀在資料夾之間跳，看起來就是閃爍。
+      const sel = (ad < 1 ? 1 - smooth(ad) : 0).toFixed(2);
+      // 只寫在前板與背板上：寫在資料夾根節點會連整張詳細資料表單一起重算樣式
+      if (!el._front || el._front.parentNode !== el) { el._front = el.querySelector(':scope > .fd-front'); el._back = el.querySelector(':scope > .fd-back'); el._sel = null; }
+      if (el._sel !== sel && el._front) { el._front.style.setProperty('--fd-sel', sel); el._back.style.setProperty('--fd-sel', sel); el._sel = sel; }
       // 資料紙要正對使用者，所以把這本的 yaw 反轉回去
       if (isActive) {
         const cy = (-p.rot).toFixed(2) + 'deg';

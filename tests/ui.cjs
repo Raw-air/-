@@ -293,14 +293,15 @@ async function run(engine,viewport){
       activeCount:document.querySelectorAll('.sf-folder.active').length,
       summary:document.getElementById('sf-selection-name').textContent,
       expected:sfStudentAt(_sfActiveIndex).name||'空床',
-      activeMaterial:getComputedStyle(active.querySelector('.fd-front')).backgroundImage,
-      neighborMaterial:getComputedStyle(neighbor.querySelector('.fd-front')).backgroundImage,
+      // 綠色材質是 .fd-front::after 疊層，透明度隨 --fd-sel 連續變化
+      activeMaterial:+getComputedStyle(active.querySelector('.fd-front'),'::after').opacity,
+      neighborMaterial:+getComputedStyle(neighbor.querySelector('.fd-front'),'::after').opacity,
     };
   });
   assert.equal(liveSelection.cardIndex,liveSelection.index,'green selected folder updates before release');
   assert.equal(liveSelection.activeCount,1);
   assert.equal(liveSelection.summary,liveSelection.expected,'current resident summary updates during the drag');
-  assert.notEqual(liveSelection.activeMaterial,liveSelection.neighborMaterial,'live selected folder uses the green material');
+  assert.ok(liveSelection.activeMaterial>liveSelection.neighborMaterial,'live selected folder uses the green material: '+liveSelection.activeMaterial+' vs '+liveSelection.neighborMaterial);
   await page.mouse.up();
   await page.waitForTimeout(950);
   assert.ok(await page.evaluate(()=>_sfActiveIndex>0));
