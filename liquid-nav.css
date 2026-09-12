@@ -16,20 +16,20 @@
   --lens-x:8px;
   transition:--lens-x var(--lens-time) var(--lens-ease);
   /* 深色：玻璃要暗、亮邊要收斂，才不會像一顆發光的球 */
-  --nav-fill:rgba(28,28,34,.64);--nav-rim:rgba(255,255,255,.1);--nav-top:rgba(255,255,255,.12);
-  --nav-shadow:0 18px 40px rgba(0,0,0,.45),0 2px 6px rgba(0,0,0,.3);
+  --nav-fill:rgba(40,40,48,.28);--nav-rim:rgba(255,255,255,.16);--nav-top:rgba(255,255,255,.2);
+  --nav-shadow:0 14px 34px rgba(0,0,0,.3),0 2px 6px rgba(0,0,0,.18);
   --nav-ink:#8e8e96;--nav-ink-active:var(--purple);
-  --lens-fill:rgba(255,255,255,.075);--lens-ring:rgba(255,255,255,.3);--lens-bright:1;
+  --lens-fill:rgba(255,255,255,.05);--lens-ring:rgba(255,255,255,.38);--lens-bright:1.14;
   --rim-top:rgba(255,255,255,.32);--rim-bevel:rgba(255,255,255,.12);--rim-hi:rgba(255,255,255,.16);
-  --rim-bottom:rgba(0,0,0,.26);
-  --halo:0 10px 28px rgba(0,0,0,.16),0 0 16px rgba(255,255,255,.05);
-  --lens-shadow:0 8px 18px rgba(0,0,0,.3);
+  --rim-bottom:rgba(0,0,0,.16);
+  --halo:0 8px 22px rgba(0,0,0,.12),0 0 18px rgba(255,255,255,.08);
+  --lens-shadow:0 6px 14px rgba(0,0,0,.18);
 }
 body.light-mode .bottom-nav.liquid-nav {
-  --nav-fill:rgba(255,255,255,.74);--nav-rim:rgba(255,255,255,.95);--nav-top:#fff;
+  --nav-fill:rgba(255,255,255,.42);--nav-rim:rgba(255,255,255,.9);--nav-top:#fff;
   --nav-shadow:0 18px 40px rgba(60,70,100,.16),0 2px 6px rgba(60,70,100,.08);
   --nav-ink:#8a8a8e;--nav-ink-active:var(--purple);
-  --lens-fill:rgba(255,255,255,.3);--lens-ring:rgba(255,255,255,.82);--lens-bright:1.03;
+  --lens-fill:rgba(255,255,255,.16);--lens-ring:rgba(255,255,255,.85);--lens-bright:1.1;
   --rim-top:rgba(255,255,255,.75);--rim-bevel:rgba(255,255,255,.35);--rim-hi:rgba(255,255,255,.42);
   --rim-bottom:rgba(0,0,0,.16);
   --halo:0 10px 26px rgba(60,70,100,.12),0 0 12px rgba(255,255,255,.28);
@@ -41,7 +41,7 @@ body.light-mode .bottom-nav.liquid-nav {
 .liquid-nav::before {
   content:'';position:absolute;inset:0;border-radius:inherit;z-index:-2;
   background:var(--nav-fill);
-  backdrop-filter:blur(28px) saturate(170%);-webkit-backdrop-filter:blur(28px) saturate(170%);
+  backdrop-filter:blur(18px) saturate(200%) brightness(1.08);-webkit-backdrop-filter:blur(18px) saturate(200%) brightness(1.08);
   box-shadow:inset 0 0 0 1px var(--nav-rim),inset 0 1px 0 var(--nav-top),var(--nav-shadow);
 }
 /* 鏡片後方的柔和粉/藍光暈 (soft glow, hints of pink) */
@@ -79,7 +79,7 @@ body.light-mode .bottom-nav.liquid-nav {
 .liquid-nav.is-dragging .lens-shape {transition:transform .06s linear;}
 .lens-blur {
   position:absolute;inset:0;border-radius:var(--lens-radius);
-  backdrop-filter:blur(12px) saturate(100%) brightness(var(--lens-bright));-webkit-backdrop-filter:blur(12px) saturate(100%) brightness(var(--lens-bright));
+  backdrop-filter:blur(2px) saturate(180%) brightness(var(--lens-bright));-webkit-backdrop-filter:blur(2px) saturate(180%) brightness(var(--lens-bright));
 }
 @keyframes liquid-squish {
   0% {transform:scale(1,1);}
@@ -117,9 +117,9 @@ body.light-mode .lens-rim::after {opacity:.58;}
   box-shadow:inset 0 0 0 1px var(--lens-ring),
     inset 0 1px 1px var(--rim-top),
     inset 2px 3px 6px var(--rim-bevel),
-    inset 0 -4px 6px -2px var(--rim-bottom),
-    inset -3px -4px 9px rgba(255,255,255,.08),
-    inset 3px 4px 10px rgba(255,255,255,.05);
+    inset 0 -3px 5px -2px var(--rim-bottom),
+    inset -2px -3px 7px rgba(255,255,255,.06),
+    inset 2px 3px 8px rgba(255,255,255,.04);
 }
 /* 導覽項目 */
 .liquid-nav .nav-item {height:64px;padding:9px 0 7px;gap:2px;border:0;background:none;box-shadow:none;min-width:0;flex:1;border-radius:32px;color:var(--nav-ink);font:inherit;transition:transform .2s,color .25s;touch-action:none;}
