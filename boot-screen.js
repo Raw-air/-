@@ -1,6 +1,7 @@
 // RAWAIR 開機終端機
 // 只管「第一次打開 App」：一行一行印開機訊息，等 app.js 第一次把 #loading-overlay 收掉 (資料載完) 就關掉。
 // 之後改資料時跳的載入畫面仍是原本那個，這支檔案完全不碰。
+// 進度條與每一行 API 請求都是真的：開機期間暫時包住 fetch，照實際收到的位元組、完成時間更新。
 (function () {
   var root = document.getElementById('rawair-boot');
   if (!root) return;
@@ -13,8 +14,10 @@
   try { fast = localStorage.getItem('power_save_mode') === 'true'; } catch (_) {}
 
   var t0 = Date.now();
-  var MIN_MS = fast ? 900 : 2600;   // 至少顯示這麼久，字才看得到
+  var MIN_MS = fast ? 600 : 1800;   // 至少顯示這麼久，大字才看得到
   var MAX_MS = 19000;               // 資料一直沒回來就交給原本的載入畫面
+  var EXPECTED_REQ = 5;             // app.js loadData() 開機時同時打 5 支：roster / config / changelog / remarks / semester
+  var domReady = document.readyState !== 'loading';
   var dataDone = false, finished = false;
 
   // 開機期間先停掉背後舊終端機的假日誌，省效能；結束後恢復原設定
@@ -39,17 +42,31 @@
   }
 
   function esc(s) { return String(s).replace(/[&<>]/g, function (m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]; }); }
+  function fmt(b) {
+    if (b >= 1048576) return (b / 1048576).toFixed(2) + ' MB';
+    if (b >= 1024) return (b / 1024).toFixed(1) + ' KB';
+    return b + ' B';
+  }
   var TAGS = {
     ok: '<span class="dim">[</span><span class="ok">  OK  </span><span class="dim">]</span> ',
-    wait: '<span class="dim">[</span><span class="wait"> WAIT </span><span class="dim">]</span> ',
     warn: '<span class="dim">[</span><span class="warn"> WARN </span><span class="dim">]</span> ',
     bad: '<span class="dim">[</span><span class="bad"> FAIL </span><span class="dim">]</span> '
   };
+  // / | \ - 旋轉：所有還在跑的行共用同一個計時器
+  var SPIN = '|/-\\', spinI = 0;
+  function spinTag() { return '<span class="dim">[</span>  <span class="spin wait">' + SPIN[spinI] + '</span>   <span class="dim">]</span> '; }
+
   var cursor = document.createElement('span');
   cursor.className = 'rb-cursor';
+  var statusLine = document.createElement('div');
+  statusLine.className = 'rb-status';
 
+  function trim() {
+    // 像真的終端機一樣：滿了就往上捲
+    while (term.scrollHeight > root.clientHeight - 20 && term.children.length > 2) term.removeChild(term.firstChild);
+  }
   function print(kind, text) {
-    if (!term) return;
+    if (!term) return null;
     var div = document.createElement('div');
     if (kind === 'art') {
       div.className = 'rb-art';
@@ -69,10 +86,103 @@
     } else {
       div.innerHTML = kind ? '<span class="' + kind + '">' + esc(text) + '</span>' : esc(text);
     }
-    div.appendChild(cursor);
     term.appendChild(div);
-    // 像真的終端機一樣：滿了就往上捲
-    while (term.scrollHeight > root.clientHeight && term.children.length > 1) term.removeChild(term.firstChild);
+    if (statusShown) term.appendChild(statusLine);
+    trim();
+    return div;
+  }
+  function setLine(div, html) { if (div) div.innerHTML = html; }
+
+  // ── 真實進度 ──
+  var reqs = [];
+  var statusShown = false;
+  var pendingLines = [];
+  function progress() {
+    if (dataDone) return 100;
+    var p = domReady ? 25 : 5;
+    var sum = 0;
+    for (var i = 0; i < reqs.length; i++) {
+      var r = reqs[i];
+      if (r.done) sum += 1;
+      else if (r.total) sum += Math.min(0.95, r.loaded / r.total) * 0.9 + 0.05;
+      else if (r.headers) sum += 0.1;
+    }
+    p += 70 * sum / Math.max(EXPECTED_REQ, reqs.length);
+    return Math.min(99, Math.floor(p));
+  }
+  function renderStatus() {
+    if (!statusShown) return;
+    var pct = progress();
+    var W = 20, fill = Math.round(pct / 100 * W);
+    var done = 0, bytes = 0;
+    for (var i = 0; i < reqs.length; i++) { if (reqs[i].done) done++; bytes += reqs[i].loaded; }
+    var bar = new Array(fill + 1).join('#') + new Array(W - fill + 1).join('.');
+    var head = pct >= 100 ? '<span class="ok">*</span>' : '<span class="wait">' + SPIN[spinI] + '</span>';
+    statusLine.innerHTML = head + ' <span class="dim">[</span><span class="ok">' + bar.slice(0, fill) + '</span><span class="dim">' +
+      bar.slice(fill) + ']</span> ' + ('   ' + pct).slice(-3) + '%  <span class="dim">' +
+      Math.min(done, Math.max(EXPECTED_REQ, reqs.length)) + '/' + Math.max(EXPECTED_REQ, reqs.length) + '  ' + fmt(bytes) + '</span>';
+    statusLine.appendChild(cursor);
+  }
+  var spinTimer = setInterval(function () {
+    spinI = (spinI + 1) % 4;
+    var els = term.getElementsByClassName('spin');
+    for (var i = 0; i < els.length; i++) els[i].textContent = SPIN[spinI];
+    renderStatus();
+  }, 90);
+
+  // ── 包住 fetch：每一支 /api/ 請求一行，旋轉到真的收完為止 ──
+  var origFetch = window.fetch;
+  var wrappedFetch = null;
+  if (typeof origFetch === 'function') {
+    wrappedFetch = function (input, init) {
+      var p = origFetch.apply(this, arguments);
+      var url = typeof input === 'string' ? input : (input && input.url) || '';
+      if (finished || url.indexOf('/api/') < 0 || url.indexOf('/api/poll') >= 0) return p;
+      var path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
+      var method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+      var label = esc((method + '    ').slice(0, 5) + path);
+      var r = { loaded: 0, total: 0, done: false, headers: false, t: Date.now() };
+      reqs.push(r);
+      var line;
+      if (statusShown) line = print('raw', spinTag() + label);
+      else {
+        // 開頭大字還在印：先記著，等印完再依序接上去，免得插在 RAWAIR 中間
+        line = document.createElement('div');
+        line.innerHTML = spinTag() + label;
+        pendingLines.push(line);
+      }
+      function end(ok, info) {
+        if (r.done) return;
+        r.done = true;
+        setLine(line, TAGS[ok ? 'ok' : 'bad'] + label + '  <span class="dim">' + esc(info) + '</span>');
+        renderStatus();
+        maybeFinish();
+      }
+      p.then(function (res) {
+        r.headers = true;
+        r.total = Number(res.headers.get('content-length')) || 0;
+        var info = function () { return res.status + '  ' + fmt(r.loaded) + '  ' + (Date.now() - r.t) + 'ms'; };
+        var live = function () {
+          if (!r.done) setLine(line, spinTag() + label + '  <span class="dim">' + fmt(r.loaded) + (r.total ? ' / ' + fmt(r.total) : '') + '</span>');
+        };
+        live();
+        var reader = null;
+        try { reader = res.clone().body.getReader(); } catch (_) {}
+        if (!reader) { end(res.ok, info()); return; }
+        (function pump() {
+          reader.read().then(function (x) {
+            if (x.done) { end(res.ok, info()); return; }
+            r.loaded += x.value.byteLength;
+            live();
+            pump();
+          }, function () { end(res.ok, info()); });
+        })();
+      }, function (err) {
+        end(false, err && err.name === 'AbortError' ? 'timeout' : 'network error');
+      });
+      return p;
+    };
+    window.fetch = wrappedFetch;
   }
 
   var mem = navigator.deviceMemory ? navigator.deviceMemory * 1024 : 4096;
@@ -80,74 +190,81 @@
   var d = new Date();
   var stamp = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + ' ' + d.toTimeString().slice(0, 8);
 
-  // [種類, 文字, 印完後停多久 ms]
+  // 開頭固定印的部分：[種類, 文字, 印完後停多久 ms]
   var STEPS = [
-    ['dim', 'RAWAIR BIOS v3.13  (C) 2026 Raw_air', 60],
-    ['dim', 'CPU: ' + cores + ' cores detected    Memory: ' + mem + ' MB OK', 60],
-    ['dim', 'Boot device: /dev/biyuan0    ' + stamp, 160],
-    ['', '', 40]
+    ['dim', 'RAWAIR BIOS v3.13  (C) 2026 Raw_air', 40],
+    ['dim', 'CPU: ' + cores + ' cores detected    Memory: ' + mem + ' MB OK', 40],
+    ['dim', 'Boot device: /dev/biyuan0    ' + stamp, 80],
+    ['', '', 20]
   ];
-  ART.forEach(function (l) { STEPS.push(['art', l, 45]); });
+  ART.forEach(function (l) { STEPS.push(['art', l, 35]); });
   STEPS.push(
-    ['', '', 30],
-    ['raw', '<span class="dim">  Biyuan Dorm Roll-Call System</span>', 30],
-    ['raw', '<span class="dim">  Developer:</span> <span class="dev">Raw_air</span>', 260],
-    ['', '', 30],
-    ['ok', 'Mounted root filesystem (PWA shell)', 70],
-    ['ok', 'Started Service Worker cache daemon', 70],
-    ['ok', 'Restored user preferences (cookie / IndexedDB)', 90],
-    ['ok', 'Reached target Local Storage', 60],
-    ['ok', 'Started Theme Engine', 80],
-    ['ok', 'Loaded phonetic search index', 110],
-    ['ok', 'Started Haptic & Audio feedback service', 70],
-    [navigator.onLine === false ? 'warn' : 'ok', navigator.onLine === false ? 'Network offline - using cached shell' : 'Network interface up', 90],
-    ['wait', 'Connecting to biyuan-proxy.workers.dev ...', 180],
-    ['ok', 'TLS handshake complete', 80],
-    ['wait', 'Fetching roster / config / changelog from Notion ...', 200]
+    ['', '', 20],
+    ['raw', '<span class="dim">  Biyuan Dorm Roll-Call System</span>', 20],
+    ['raw', '<span class="dim">  Developer:</span> <span class="dev">Raw_air</span>', 120],
+    ['', '', 0]
   );
-  var WAIT_MSGS = [
-    'Syncing attendance matrix ...',
-    'Mapping bed state records ...',
-    'Waiting for Notion API response ...',
-    'Applying room rules ...',
-    'Resolving semester date columns ...'
-  ];
 
-  var si = 0, wi = 0;
+  var si = 0, modLine = null;
   function nextStep() {
     if (finished) return;
     if (si < STEPS.length) {
       var s = STEPS[si++];
       print(s[0], s[1]);
-      setTimeout(nextStep, fast || dataDone ? Math.min(s[2], 25) : s[2]);
+      setTimeout(nextStep, fast ? 0 : s[2]);
       return;
     }
-    if (!dataDone) {
-      print('wait', WAIT_MSGS[wi++ % WAIT_MSGS.length]);
-      setTimeout(nextStep, 650 + Math.random() * 400);
-      return;
-    }
-    finishLines();
+    // 開頭印完：接上真實狀態
+    statusShown = true;
+    term.appendChild(statusLine);
+    renderStatus();
+    modLine = print('raw', spinTag() + 'Loading application modules ...');
+    if (domReady) modulesLoaded();
+    pendingLines.forEach(function (l) { term.appendChild(l); });
+    pendingLines = [];
+    term.appendChild(statusLine);
+    trim();
+    maybeFinish();
   }
 
-  function finishLines() {
+  function modulesLoaded() {
+    domReady = true;
+    if (!modLine) return;
+    var n = 0, bytes = 0;
+    try {
+      performance.getEntriesByType('resource').forEach(function (e) {
+        if (/\.(js|css)(\?|$)/.test(e.name) && e.name.indexOf(location.origin) === 0) { n++; bytes += e.transferSize || 0; }
+      });
+    } catch (_) {}
+    setLine(modLine, TAGS.ok + 'Loaded ' + n + ' application modules  <span class="dim">' + (bytes ? fmt(bytes) : 'from cache') + '</span>');
+    modLine = null;
+    renderStatus();
+  }
+  document.addEventListener('DOMContentLoaded', modulesLoaded);
+
+  var dataLine = null;
+  function maybeFinish() {
+    if (finished || !statusShown || !dataDone || dataLine) return;
     var n = 0;
     try { n = (typeof state !== 'undefined' && state.students) ? state.students.length : 0; } catch (_) {}
-    print(n > 0 ? 'ok' : 'warn', n > 0 ? 'Roster synced - ' + n + ' residents loaded' : 'Roster sync returned no records');
+    dataLine = print(n > 0 ? 'ok' : 'warn', n > 0 ? 'Roster applied - ' + n + ' residents' : 'Roster sync returned no records');
     print('ok', 'Reached target Graphical Interface');
-    print('', '');
+    renderStatus();
+    var wait = Math.max(fast ? 80 : 350, MIN_MS - (Date.now() - t0));
     setTimeout(function () {
+      if (finished) return;
       print('raw', '<span class="prompt">raw_air@biyuan</span>:<span class="hi">~</span>$ startx');
-      var wait = Math.max(fast ? 100 : 450, MIN_MS - (Date.now() - t0));
-      setTimeout(exit, wait);
-    }, fast ? 0 : 150);
+      setTimeout(exit, fast ? 60 : 250);
+    }, wait);
   }
 
   function exit() {
     if (finished) return;
     finished = true;
     clearTimeout(maxTimer);
+    clearInterval(spinTimer);
     if (mo) mo.disconnect();
+    if (wrappedFetch && window.fetch === wrappedFetch) window.fetch = origFetch;
     root.classList.add('rb-exit');
     setTimeout(function () {
       if (root.parentNode) root.parentNode.removeChild(root);
@@ -159,7 +276,7 @@
   // ── 判斷「第一次載入完成」：app.js 呼叫 showLoading(false) 時會替 overlay 加上 exit-drop ──
   var overlay = document.getElementById('loading-overlay');
   var mo = null, confirmTimer = null;
-  function markDone() { dataDone = true; }
+  function markDone() { dataDone = true; renderStatus(); maybeFinish(); }
   if (overlay && window.MutationObserver) {
     mo = new MutationObserver(function () {
       if (!overlay.classList.contains('exit-drop')) return;
