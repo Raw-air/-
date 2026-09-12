@@ -10,10 +10,10 @@
   <meta name="theme-color" content="#151518">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=129">
-  <link rel="stylesheet" href="motion.css?v=129">
-  <link rel="stylesheet" href="folder.css?v=129">
-  <link rel="stylesheet" href="liquid-nav.css?v=129">
+  <link rel="stylesheet" href="style.css?v=131">
+  <link rel="stylesheet" href="motion.css?v=131">
+  <link rel="stylesheet" href="folder.css?v=131">
+  <link rel="stylesheet" href="liquid-nav.css?v=131">
   <link rel="manifest" href="manifest.json?v=3">
   <link rel="apple-touch-icon" href="icon-192.png?v=2">
   <script defer src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -280,6 +280,7 @@
   <div id="page-rollcall" class="page">
     <header class="rc-header">
       <div class="rc-header-top">
+        <button type="button" class="rc-custom-btn" onclick="openSquadCustomModal()" aria-label="自訂本中隊卡片外觀" title="自訂本中隊卡片外觀"><svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></button>
         <span id="rc-squad-name" class="rc-squad-name"></span>
         <button id="rc-date-btn" class="rc-date-pill rc-date-clickable" onclick="toggleDatePicker()">
           <span id="rc-date"></span>
@@ -338,6 +339,26 @@
   </div>
 
   <!-- 空床回報 Modal -->
+  <!-- 中隊卡片自訂客製化 Modal -->
+  <div id="squad-custom-modal" class="modal-overlay">
+    <div class="modal-card">
+      <h3><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> <span id="sq-cust-title">自訂中隊卡片</span></h3>
+      <p class="modal-desc">上傳一張照片，首頁的中隊方塊就會變成這張圖，左下角膠囊還是會顯示中隊名稱。</p>
+      <div id="sq-cust-preview" class="sq-cust-preview">
+        <span class="sq-cust-empty">還沒有照片</span>
+      </div>
+      <div id="sq-cust-meta" class="sq-cust-meta"></div>
+      <input type="file" id="sq-cust-file" accept="image/*" style="display:none" onchange="onSquadCustomFile(this)">
+      <button class="action-btn wide" onclick="document.getElementById('sq-cust-file').click()"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg> 選擇照片</button>
+      <p class="modal-desc" style="font-size:11px;margin-top:10px;line-height:1.6;">看不到變化？請到「系統設定 → 個人化設定 → 顯示自訂客製化」把開關打開，這個開關預設是關閉的。</p>
+      <div class="modal-actions">
+        <button class="modal-btn cancel" onclick="closeModal('squad-custom-modal')">取消</button>
+        <button class="modal-btn confirm" id="sq-cust-save" onclick="saveSquadCustom()">儲存並同步</button>
+      </div>
+      <button class="action-btn wide warning" id="sq-cust-remove" style="margin-top:8px;font-size:12px;padding:8px;display:none;" onclick="removeSquadCustom()"><svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 移除照片，恢復預設樣式</button>
+    </div>
+  </div>
+
   <div id="empty-bed-modal" class="modal-overlay">
     <div class="modal-card">
       <h3><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg> 回報空床</h3>
@@ -1032,6 +1053,30 @@
             </div>
         </label>
       </div>
+      <!-- NEW: 顯示自訂客製化（預設關閉） -->
+      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 8px 0;">
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <span>顯示自訂客製化</span>
+          <span style="color:var(--dim); font-size:11px;">開啟後首頁會顯示中隊長上傳的中隊卡片照片</span>
+        </div>
+        <label class="switch">
+            <input id="setting-squad-custom" aria-label="顯示自訂客製化" type="checkbox" onchange="toggleSquadCustom(this)">
+            <div class="slider">
+                <div class="circle">
+                    <svg class="cross" xml:space="preserve" style="enable-background:new 0 0 512 512" viewBox="0 0 365.696 365.696" y="0" x="0" height="6" width="6" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                        <g>
+                            <path data-original="#000000" fill="currentColor" d="M243.188 182.86 356.32 69.726c12.5-12.5 12.5-32.766 0-45.247L341.238 9.398c-12.504-12.503-32.77-12.503-45.25 0L182.86 122.528 69.727 9.374c-12.5-12.5-32.766-12.5-45.247 0L9.375 24.457c-12.5 12.504-12.5 32.77 0 45.25l113.152 113.152L9.398 295.99c-12.503 12.503-12.503 32.769 0 45.25L24.48 356.32c12.5 12.5 32.766 12.5 45.247 0l113.132-113.132L295.99 356.32c12.503 12.5 32.769 12.5 45.25 0l15.081-15.082c12.5-12.504 12.5-32.77 0-45.25zm0 0"></path>
+                        </g>
+                    </svg>
+                    <svg class="checkmark" xml:space="preserve" style="enable-background:new 0 0 512 512" viewBox="0 0 24 24" y="0" x="0" height="10" width="10" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                        <g>
+                            <path class="" data-original="#000000" fill="currentColor" d="M9.707 19.121a.997.997 0 0 1-1.414 0l-5.646-5.647a1.5 1.5 0 0 1 0-2.121l.707-.707a1.5 1.5 0 0 1 2.121 0L9 14.171l9.525-9.525a1.5 1.5 0 0 1 2.121 0l.707.707a1.5 1.5 0 0 1 0 2.121z"></path>
+                        </g>
+                    </svg>
+                </div>
+            </div>
+        </label>
+      </div>
     </div>
 
     <div class="settings-card">
@@ -1511,15 +1556,15 @@
     <button type="button" class="nav-item" data-page="settings"><span class="nav-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-label">設定</span></button>
   </nav>
 
-  <script src="config.js?v=129"></script>
-  <script src="api.js?v=129"></script>
-  <script src="phonetic-search.js?v=129"></script>
-  <script src="app.js?v=129"></script>
-  <script src="import.js?v=129"></script>
-  <script src="theme.js?v=129"></script>
-  <script src="carousel.js?v=129"></script>
-  <script src="dissolve.js?v=129"></script>
-  <script src="navigation.js?v=129"></script>
+  <script src="config.js?v=131"></script>
+  <script src="api.js?v=131"></script>
+  <script src="phonetic-search.js?v=131"></script>
+  <script src="app.js?v=131"></script>
+  <script src="import.js?v=131"></script>
+  <script src="theme.js?v=131"></script>
+  <script src="carousel.js?v=131"></script>
+  <script src="dissolve.js?v=131"></script>
+  <script src="navigation.js?v=131"></script>
 
   <!-- 幹部工作手冊 Modal -->
   <div id="duty-manual-modal" class="modal-overlay">

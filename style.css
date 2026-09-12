@@ -6114,3 +6114,160 @@ body.power-save-mode .health-entry-dot { animation: none !important; }
 .health-actions .modal-btn { flex: 1; }
 
 body.light-mode .health-card { background: rgba(255, 255, 255, 0.94); }
+
+/* ═══════════ 中隊卡片自訂客製化（中隊長上傳照片） ═══════════ */
+/* 首頁中隊方塊：有照片時整塊變成圖片，底部放一顆膠囊標示是哪個中隊 */
+.sq-card.sq-photo {
+  padding: 0;
+  /* 跟旁邊沒放照片的卡片等高(整列拉齊)，最矮也還是接近正方形 */
+  height: 100%;
+  min-height: 108px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, .25);
+}
+
+.sq-photo-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* 照片卡不要原本那層中隊色光，改成底部黑漸層，膠囊上的字才看得清楚 */
+.sq-card.sq-photo::before {
+  background: linear-gradient(to top, rgba(0, 0, 0, .72) 0%, rgba(0, 0, 0, .28) 48%, rgba(0, 0, 0, 0) 78%);
+  opacity: 1;
+  z-index: 1;
+}
+
+.sq-photo-pill {
+  position: relative;
+  z-index: 2;
+  margin: 0 6px 10px;
+  max-width: calc(100% - 12px);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(18, 18, 20, .62);
+  backdrop-filter: blur(10px) saturate(1.3);
+  -webkit-backdrop-filter: blur(10px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, .22);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .45);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .5px;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.sq-photo-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: var(--sq-c, var(--indigo));
+  box-shadow: 0 0 8px var(--sq-c, var(--indigo));
+}
+
+.sq-photo-sub {
+  font-size: 10px;
+  font-weight: 700;
+  opacity: .72;
+}
+
+body.light-mode .sq-photo-pill {
+  background: rgba(255, 255, 255, .84);
+  border-color: rgba(0, 0, 0, .12);
+  color: #14161a;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .18);
+}
+
+body.power-save-mode .sq-photo-pill {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(18, 18, 20, .86);
+}
+
+body.power-save-mode.light-mode .sq-photo-pill {
+  background: rgba(255, 255, 255, .93);
+}
+
+/* 點名頁頂端的「自訂卡片」入口（中隊長過完 PIN 才看得到這頁） */
+.rc-custom-btn {
+  /* 頁面左邊 12~92px 被固定的「返回」按鈕蓋住，中間 165px 起是中隊名稱，
+     所以這顆只放圖示、塞在兩者中間那段空白裡 */
+  margin-left: 84px;
+  margin-right: auto;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  opacity: .8;
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform .12s ease, opacity .12s ease;
+}
+
+.rc-custom-btn:active {
+  transform: scale(.92);
+  opacity: 1;
+}
+
+body.light-mode .rc-custom-btn {
+  color: #555b66;
+  background: rgba(0, 0, 0, .04);
+  border-color: rgba(0, 0, 0, .1);
+}
+
+/* 自訂卡片 Modal 的即時預覽 */
+.sq-cust-preview {
+  width: 136px;
+  height: 136px;
+  margin: 4px auto 10px;
+  border-radius: var(--r);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(255, 255, 255, .03);
+}
+
+.sq-cust-preview.has-img::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(0, 0, 0, .72) 0%, rgba(0, 0, 0, .28) 48%, rgba(0, 0, 0, 0) 78%);
+}
+
+.sq-cust-empty {
+  align-self: center;
+  padding: 0 12px;
+  font-size: 11px;
+  color: var(--dim);
+  text-align: center;
+}
+
+.sq-cust-meta {
+  font-size: 11px;
+  color: var(--dim);
+  text-align: center;
+  margin-bottom: 10px;
+  min-height: 15px;
+}
