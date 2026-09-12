@@ -35,7 +35,7 @@
   // 大字的字級：盡量撐滿寬度 (等寬字大約 0.6em 寬)，最大 30px
   function artSize() {
     var w = (term && term.clientWidth) || window.innerWidth - 24;
-    return Math.max(6, Math.min(30, Math.floor(w / (ART[0].length * 0.61))));
+    return Math.max(5, Math.min(30, Math.floor(w / (ART[0].length * 0.6) * 10) / 10));
   }
 
   function esc(s) { return String(s).replace(/[&<>]/g, function (m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]; }); }
@@ -54,7 +54,14 @@
     if (kind === 'art') {
       div.className = 'rb-art';
       div.style.fontSize = artSize() + 'px';
-      div.textContent = text;
+      // 每個字元放進固定寬度的格子：手機字型的方塊字、框線字寬度不一，不固定格子就會跑版。
+      // 「█」直接用底色填滿整格，不靠字型。
+      var cells = '';
+      for (var ci = 0; ci < text.length; ci++) {
+        var ch = text[ci];
+        cells += ch === '█' ? '<b class="rb-full"></b>' : '<b>' + (ch === ' ' ? '&nbsp;' : ch) + '</b>';
+      }
+      div.innerHTML = cells;
     } else if (TAGS[kind]) {
       div.innerHTML = TAGS[kind] + esc(text);
     } else if (kind === 'raw') {

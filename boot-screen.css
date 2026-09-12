@@ -27,11 +27,26 @@ body.rawair-booting #loading-overlay { opacity: 0 !important; }
 
 /* 大字 RAWAIR：用字元拼出來的 ASCII 字，字級由 JS 依螢幕寬度算好 */
 #rb-term .rb-art {
-  line-height: 1;
-  min-height: 1em;
+  display: flex;
+  height: 1.15em;
+  min-height: 1.15em;
+  line-height: 1.15em;
   color: #39ff9f;
   text-shadow: 0 0 6px rgba(57, 255, 159, .55);
   font-weight: 700;
+}
+/* 固定格子：每個字元剛好 0.6em 寬、1.15em 高，不管手機用哪個字型都對齊 */
+#rb-term .rb-art b {
+  flex: 0 0 .6em;
+  width: .6em;
+  height: 1.15em;
+  overflow: hidden;
+  text-align: center;
+  font-weight: 700;
+}
+#rb-term .rb-art b.rb-full {
+  background: #39ff9f;
+  box-shadow: 0 0 5px rgba(57, 255, 159, .45);
 }
 #rb-term .ok { color: #3fb950; }
 #rb-term .wait { color: #d29922; }
