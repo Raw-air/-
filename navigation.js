@@ -1,4 +1,37 @@
 const _navOriginalIcons=new Map(Array.from(document.querySelectorAll('.nav-item'),item=>[item.dataset.page,item.querySelector('.nav-icon').innerHTML]));
+// 用 canvas 畫一張圓角長條的位移貼圖 (R=左右偏移、G=上下偏移，128 = 不動)，包成 SVG feDisplacementMap
+function buildLensRefraction(W,H,R){
+  const id='lens-refract';
+  if(document.getElementById(id))return id;
+  try{
+    const S=2,BAND=14,MAX=9; // 貼圖解析度倍數、折射帶寬度 px、邊緣最大偏移 px
+    const cv=document.createElement('canvas');cv.width=W*S;cv.height=H*S;
+    const ctx=cv.getContext('2d');const img=ctx.createImageData(cv.width,cv.height);const d=img.data;
+    for(let y=0;y<cv.height;y++)for(let x=0;x<cv.width;x++){
+      const px=(x+.5)/S-W/2,py=(y+.5)/S-H/2;
+      const qx=Math.abs(px)-(W/2-R),qy=Math.abs(py)-(H/2-R);
+      const ox=Math.max(qx,0),oy=Math.max(qy,0),ol=Math.hypot(ox,oy);
+      const inside=-(ol+Math.min(Math.max(qx,qy),0)-R); // 離邊緣多遠 (px)
+      let nx=0,ny=0;
+      if(qx>0&&qy>0){nx=ox/ol;ny=oy/ol;}else if(qx>qy)nx=1;else ny=1;
+      nx*=Math.sign(px)||1;ny*=Math.sign(py)||1;
+      const t=Math.max(0,Math.min(1,1-inside/BAND)),k=t*t*MAX;
+      const i=(y*cv.width+x)*4;
+      d[i]=Math.round(255*(.5+nx*k/(2*MAX)));d[i+1]=Math.round(255*(.5+ny*k/(2*MAX)));d[i+2]=128;d[i+3]=255;
+    }
+    ctx.putImageData(img,0,0);
+    const ns='http://www.w3.org/2000/svg';
+    const svg=document.createElementNS(ns,'svg');
+    svg.setAttribute('width','0');svg.setAttribute('height','0');svg.setAttribute('aria-hidden','true');
+    svg.style.cssText='position:absolute;width:0;height:0;overflow:hidden;pointer-events:none';
+    svg.innerHTML=`<filter id="${id}" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+      <feImage href="${cv.toDataURL()}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="none" result="map"/>
+      <feDisplacementMap in="SourceGraphic" in2="map" scale="${2*MAX}" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>`;
+    document.body.appendChild(svg);
+    return id;
+  }catch(_){return null;}
+}
 function setupNav(){
   const nav=document.querySelector('.bottom-nav');nav.classList.add('liquid-nav');
   nav.setAttribute('aria-label','主要導覽');
@@ -22,13 +55,18 @@ function setupNav(){
     c.innerHTML=`<span class="nav-icon">${_navOriginalIcons.get(item.dataset.page)}</span><span class="nav-label">${item.querySelector('.nav-label').textContent}</span>`;
     row.appendChild(c);return c;
   });
-  zoom.appendChild(row);shape.appendChild(zoom);
+  // 折射濾鏡掛在不放大的外框上，貼圖座標才會剛好對齊鏡片邊緣 (掛在 lens-zoom 上會被 1.2 倍放大推出去)
+  const bend=document.createElement('span');bend.className='lens-bend';
+  zoom.appendChild(row);bend.appendChild(zoom);shape.appendChild(bend);
   // 保持乾淨、無色的液體玻璃；不再疊加青／洋紅色散複本，避免深色模式出現負片殘影。
   const rim=document.createElement('span');rim.className='lens-rim';shape.appendChild(rim);
   lens.appendChild(shape);nav.prepend(lens);
   // 省電模式也算「減少動態」→ 鏡片不做水滴拉長，直接定位
   const reduced=()=>(window.sfReduceMotion?window.sfReduceMotion():matchMedia('(prefers-reduced-motion: reduce)').matches);
   const LENS_W=84,PAD=8;
+  // 邊緣折射：鏡片邊緣一圈往外取樣，外面的圖示被「彎進」邊緣；中間保持原樣。複本上的一般 filter，iOS Safari 也吃
+  const refractId=buildLensRefraction(LENS_W,54,27);
+  if(refractId)bend.style.filter=`url(#${refractId})`;
   let index=0,lastIndex=-1,travelTimer=0,retryTimer=0,w=0,slot=0,suppressClick=false;
   const pageIndex=()=>{
     const page=typeof navTabFor==='function'?navTabFor(currentPage):'home';

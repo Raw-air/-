@@ -90,6 +90,8 @@ body.light-mode .bottom-nav.liquid-nav {
 .liquid-lens.is-travelling .lens-shape {animation:liquid-squish .5s cubic-bezier(.32,.9,.3,1);}
 /* 放大層：跟真實那一列同樣排版的複本，以鏡片中心放大 */
 .lens-zoom {position:absolute;inset:0;transform:scale(1.2);}
+/* 邊緣折射外框：navigation.js 會掛上 SVG 位移濾鏡 */
+.lens-bend {position:absolute;inset:0;}
 /* 無色色散的透明厚邊 */
 .lens-rim::after {
   content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
