@@ -14,7 +14,7 @@
   try { fast = localStorage.getItem('power_save_mode') === 'true'; } catch (_) {}
 
   var t0 = Date.now();
-  var MIN_MS = fast ? 600 : 1800;   // 至少顯示這麼久，大字才看得到
+  var MIN_MS = fast ? 400 : 1000;   // 至少顯示這麼久，大字才看得到
   var MAX_MS = 19000;               // 資料一直沒回來就交給原本的載入畫面
   var EXPECTED_REQ = 5;             // app.js loadData() 開機時同時打 5 支：roster / config / changelog / remarks / semester
   var domReady = document.readyState !== 'loading';
@@ -192,16 +192,16 @@
 
   // 開頭固定印的部分：[種類, 文字, 印完後停多久 ms]
   var STEPS = [
-    ['dim', 'RAWAIR BIOS v3.13  (C) 2026 Raw_air', 40],
-    ['dim', 'CPU: ' + cores + ' cores detected    Memory: ' + mem + ' MB OK', 40],
-    ['dim', 'Boot device: /dev/biyuan0    ' + stamp, 80],
+    ['dim', 'RAWAIR BIOS v3.13  (C) 2026 Raw_air', 15],
+    ['dim', 'CPU: ' + cores + ' cores detected    Memory: ' + mem + ' MB OK', 15],
+    ['dim', 'Boot device: /dev/biyuan0    ' + stamp, 30],
     ['', '', 20]
   ];
-  ART.forEach(function (l) { STEPS.push(['art', l, 35]); });
+  ART.forEach(function (l) { STEPS.push(['art', l, 18]); });
   STEPS.push(
     ['', '', 20],
     ['raw', '<span class="dim">  Biyuan Dorm Roll-Call System</span>', 20],
-    ['raw', '<span class="dim">  Developer:</span> <span class="dev">Raw_air</span>', 120],
+    ['raw', '<span class="dim">  Developer:</span> <span class="dev">Raw_air</span>', 50],
     ['', '', 0]
   );
 
@@ -303,9 +303,9 @@
   // 卡卡的節奏：大多一閃而過，偶爾停一下，偶爾整個卡住轉圈
   function jitter() {
     var r = Math.random();
-    if (r < 0.15) return 450 + Math.random() * 500;
-    if (r < 0.4) return 140 + Math.random() * 180;
-    return 8 + Math.random() * 35;
+    if (r < 0.1) return 250 + Math.random() * 250;
+    if (r < 0.3) return 60 + Math.random() * 90;
+    return 4 + Math.random() * 16;
   }
   // 螢幕寫滿了沒：再多一行就會超出畫面
   function isFull() {
@@ -314,11 +314,11 @@
   }
   function endBoot() {
     print('ok', 'Reached target Graphical Interface');
-    var wait = Math.max(fast ? 80 : 300, MIN_MS - (Date.now() - t0));
+    var wait = Math.max(fast ? 40 : 120, MIN_MS - (Date.now() - t0));
     setTimeout(function () {
       if (finished) return;
       print('raw', '<span class="prompt">raw_air@biyuan</span>:<span class="hi">~</span>$ startx');
-      setTimeout(exit, fast ? 60 : 250);
+      setTimeout(exit, fast ? 40 : 120);
     }, wait);
   }
   // 儲存空間、快取名稱是非同步的，先去拿，拿得到就會列出來
