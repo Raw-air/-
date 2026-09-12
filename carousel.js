@@ -212,7 +212,12 @@ function setup2DCarouselInteraction() {
       put(el,
         cfg.camera + `translate3d(${p.x.toFixed(1)}px,${y.toFixed(1)}px,${p.z.toFixed(1)}px) rotateY(${p.rot.toFixed(2)}deg) scale(${p.scale.toFixed(3)})`,
         p.alpha.toFixed(3), p.near, p.blur, p.lefty);
-      const layer = Math.round(p.z) + 2000;
+      // 疊放順序：整排都同向側立 (左緣靠近鏡頭)，所以要沿「資料夾正面的法線」排，不能只看中心 z。
+      // 舊版用中心 z，弧頂右邊的資料夾 z 反而變小，被畫到前一本後面，右側看起來前後錯亂。
+      // 抽出來的那本依抽出程度往最上層加權。
+      const yawR = cfg.railYaw * RAD;
+      const bump = ad < .5 ? 1 - smooth(ad / .5) : 0;
+      const layer = 2000 + Math.round(p.x * Math.sin(yawR) + p.z * Math.cos(yawR)) + Math.round(1500 * bump * Math.max(ext.ex, sheet.amt));
       if (el._layer !== layer) { el.style.zIndex = layer; el._layer = layer; }
       // 資料紙要正對使用者，所以把這本的 yaw 反轉回去
       if (isActive) {

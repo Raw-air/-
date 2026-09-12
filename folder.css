@@ -763,3 +763,27 @@ body.light-mode #page-student-files .sf-empty-hint div {color:#566c5b!important;
 #page-student-files .sf-folder > .fd-front,
 #page-student-files .sf-folder > .fd-paper,
 #page-student-files .sf-folder > .fd-edge {backface-visibility:hidden;-webkit-backface-visibility:hidden;}
+
+/* ─── 效能＋圓角修正 (滑動卡頓、破圖、右側前後錯亂) ─────────────────── */
+/* 非選取的資料夾不做即時毛玻璃：13 本各自每幀重算背景模糊是手機滑動卡頓的主因，
+   而且 Android 上 3D 旋轉 + backdrop-filter 會把模糊區畫成直角，看起來像破圖。改用烘好的較實底色。 */
+#page-student-files .sf-folder:not(.active) > .fd-front {
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+  background:linear-gradient(165deg,rgba(250,252,250,.8),rgba(233,240,235,.7) 34%,rgba(229,237,231,.76) 63%,rgba(196,209,200,.6) 90%,rgba(255,255,255,.66));
+}
+body.light-mode #page-student-files .sf-folder:not(.active) > .fd-front {background:linear-gradient(160deg,#fffffff2,#e5ebe4ea 38%,#d7e0d6e6 66%,#b7c5bad0 92%);}
+/* 拖曳中連選取那本也先不取樣背景 (原本 .sf-moving 規則權重不夠，被上面的 #id 規則蓋掉了) */
+#page-student-files.sf-moving .sf-folder > .fd-front {backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
+/* 遠處的次像素模糊每本都多一層濾鏡合成，拖曳時先關掉 */
+#page-student-files.sf-moving .sf-folder > .fd-paper,
+#page-student-files.sf-moving .sf-folder > .fd-back {filter:none!important;}
+/* 子層不再各自 will-change：每本少 2 個合成層 */
+#page-student-files .sf-folder.fd-near > .fd-front,
+#page-student-files .sf-folder.fd-near > .fd-back {will-change:auto;}
+/* 圓角：側邊厚度與頂面原本貼滿整條邊，會從 18px 圓角外面凸出一塊方角。縮到圓角內側。 */
+#page-student-files .sf-folder > .fd-spine {top:var(--fd-radius);bottom:var(--fd-radius);}
+#page-student-files .sf-folder > .fd-top {left:var(--fd-radius);right:var(--fd-radius);}
+/* 3D 旋轉後邊緣鋸齒：透明外框讓瀏覽器對邊緣做抗鋸齒 */
+#page-student-files .sf-folder > .fd-front,
+#page-student-files .sf-folder > .fd-back,
+#page-student-files .sf-folder > .fd-edge {outline:1px solid transparent;}
