@@ -31,8 +31,8 @@ body.rawair-booting #loading-overlay { opacity: 0 !important; }
   height: 1.15em;
   min-height: 1.15em;
   line-height: 1.15em;
-  color: #39ff9f;
-  text-shadow: 0 0 6px rgba(57, 255, 159, .55);
+  color: #c084fc;
+  text-shadow: 0 0 6px rgba(168, 85, 247, .6);
   font-weight: 700;
 }
 /* 固定格子：每個字元剛好 0.6em 寬、1.15em 高，不管手機用哪個字型都對齊 */
@@ -45,8 +45,8 @@ body.rawair-booting #loading-overlay { opacity: 0 !important; }
   font-weight: 700;
 }
 #rb-term .rb-art b.rb-full {
-  background: #39ff9f;
-  box-shadow: 0 0 5px rgba(57, 255, 159, .45);
+  background: #a855f7;
+  box-shadow: 0 0 5px rgba(168, 85, 247, .5);
 }
 #rb-term .rb-status { margin-top: .35em; color: #c9d1d9; }
 #rb-term .ok { color: #3fb950; }

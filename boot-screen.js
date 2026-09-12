@@ -242,21 +242,93 @@
   }
   document.addEventListener('DOMContentLoaded', modulesLoaded);
 
-  var dataLine = null;
+  // ── 進度條跑完後：把真的載入結果一行一行印出來，直到整個螢幕寫滿 ──
+  var infoStarted = false;
+  var extra = { storage: null, caches: null };
+  function collectInfo() {
+    var L = [];
+    var S = (typeof state !== 'undefined') ? state : null;
+    var C = window.CONFIG || {};
+    var students = (S && S.students) || [];
+    var live = students.filter(function (s) { return !s.isEmpty && !s.hidden; });
+    L.push([live.length ? 'ok' : 'warn', live.length ? 'Roster applied - ' + live.length + ' residents / ' + students.length + ' beds' : 'Roster sync returned no records']);
+    (C.SQUADS || []).forEach(function (sq) {
+      var beds = students.filter(function (s) { return s.squad === sq.id; });
+      var n = beds.filter(function (s) { return !s.isEmpty && !s.hidden; }).length;
+      L.push(['ok', 'Mounted squad ' + sq.id + ' ' + sq.floor + 'F ' + (sq.odd ? 'odd ' : 'even') + '  ' + n + '/' + beds.length + ' beds']);
+    });
+    if (S) {
+      var today = S.currentDate || '';
+      var leave = 0, absent = 0;
+      live.forEach(function (s) { var v = s.attendance && s.attendance[today]; if (v === '◎') leave++; else if (v === '✘') absent++; });
+      var sem = S.rosterSemester;
+      var semText = sem && typeof sem === 'object'
+        ? (sem.name || '-') + (sem.start ? '  ' + sem.start + ' ~ ' + (sem.end || '') : '')
+        : (sem || C.SEMESTER || '-');
+      L.push(['ok', 'Semester ' + semText]);
+      L.push(['ok', 'Loaded ' + (S.dateColumns || []).length + ' date columns']);
+      L.push(['ok', 'Attendance date ' + today + '  leave ' + leave + '  absent ' + absent]);
+      L.push(['ok', 'Roll-call confirmed ' + (S.confirmedSquads || []).length + ' / ' + (C.SQUADS || []).length + ' squads']);
+      L.push(['ok', 'Loaded ' + (S.changelogs || []).length + ' changelog entries']);
+      L.push([(S.changes || []).length ? 'warn' : 'ok', 'Pending offline changes: ' + (S.changes || []).length]);
+    }
+    L.push(['ok', 'Duty roster ' + (C.DUTY_ROSTER || []).length + ' weeks loaded']);
+    L.push(['ok', 'Room rules: ' + (C.DOUBLE_ROOMS || []).length + ' double rooms, ' + (C.STORAGE_ROOMS || []).length + ' storage masked']);
+    L.push(['ok', 'Theme: ' + (body.classList.contains('light-mode') ? 'light' : 'dark') + '  power save: ' + (fast ? 'on' : 'off')]);
+    L.push(['ok', 'Display ' + window.innerWidth + 'x' + window.innerHeight + ' @' + (window.devicePixelRatio || 1) + 'x']);
+    var cn = navigator.connection;
+    if (cn && cn.effectiveType) L.push(['ok', 'Network ' + cn.effectiveType + (cn.downlink ? '  ' + cn.downlink + ' Mbps' : '') + (cn.rtt != null ? '  rtt ' + cn.rtt + 'ms' : '')]);
+    L.push([navigator.serviceWorker && navigator.serviceWorker.controller ? 'ok' : 'warn', 'Service Worker ' + (navigator.serviceWorker && navigator.serviceWorker.controller ? 'active' : 'not controlling yet') + (extra.caches ? '  cache ' + extra.caches : '')]);
+    if (extra.storage) L.push(['ok', 'Storage ' + fmt(extra.storage.usage || 0) + ' used / ' + fmt(extra.storage.quota || 0)]);
+    try {
+      var nav = performance.getEntriesByType('navigation')[0];
+      if (nav) L.push(['ok', 'DOM ready in ' + Math.round(nav.domContentLoadedEventEnd) + 'ms']);
+    } catch (_) {}
+    var apiMs = 0, apiBytes = 0;
+    reqs.forEach(function (r) { apiBytes += r.loaded; });
+    if (reqs.length) apiMs = Date.now() - reqs[0].t;
+    L.push(['ok', 'Data sync ' + fmt(apiBytes) + ' in ' + apiMs + 'ms']);
+    L.push(['ok', 'Started realtime KV poll listener']);
+    // 還沒寫滿就接著列出每間房 (真實房號與人數)
+    var rooms = {};
+    live.forEach(function (s) { if (s.room) rooms[s.room] = (rooms[s.room] || 0) + 1; });
+    Object.keys(rooms).sort().forEach(function (r) { L.push(['ok', 'Indexed room ' + r + '  ' + rooms[r] + ' residents']); });
+    return L;
+  }
   function maybeFinish() {
-    if (finished || !statusShown || !dataDone || dataLine) return;
-    var n = 0;
-    try { n = (typeof state !== 'undefined' && state.students) ? state.students.length : 0; } catch (_) {}
-    dataLine = print(n > 0 ? 'ok' : 'warn', n > 0 ? 'Roster applied - ' + n + ' residents' : 'Roster sync returned no records');
-    print('ok', 'Reached target Graphical Interface');
+    if (finished || !statusShown || !dataDone || infoStarted) return;
+    infoStarted = true;
+    clearTimeout(maxTimer);
     renderStatus();
-    var wait = Math.max(fast ? 80 : 350, MIN_MS - (Date.now() - t0));
+    var list = collectInfo(), k = 0;
+    (function nextInfo() {
+      if (finished) return;
+      if (k >= list.length || isFull()) { endBoot(); return; }
+      var item = list[k++];
+      var line = print('raw', spinTag() + esc(item[1]));
+      setTimeout(function () {
+        setLine(line, TAGS[item[0]] + esc(item[1]));
+        nextInfo();
+      }, fast ? 0 : 35 + Math.random() * 90);
+    })();
+  }
+  // 螢幕寫滿了沒：再多一行就會超出畫面
+  function isFull() {
+    var lineH = statusLine.offsetHeight || 18;
+    return term.scrollHeight + lineH * 2 > root.clientHeight - 20;
+  }
+  function endBoot() {
+    print('ok', 'Reached target Graphical Interface');
+    var wait = Math.max(fast ? 80 : 300, MIN_MS - (Date.now() - t0));
     setTimeout(function () {
       if (finished) return;
       print('raw', '<span class="prompt">raw_air@biyuan</span>:<span class="hi">~</span>$ startx');
       setTimeout(exit, fast ? 60 : 250);
     }, wait);
   }
+  // 儲存空間、快取名稱是非同步的，先去拿，拿得到就會列出來
+  try { navigator.storage.estimate().then(function (e) { extra.storage = e; }).catch(function () {}); } catch (_) {}
+  try { caches.keys().then(function (k) { extra.caches = k.filter(function (n) { return n.indexOf('biyuan-') === 0; }).join(','); }).catch(function () {}); } catch (_) {}
 
   function exit() {
     if (finished) return;
