@@ -9,7 +9,7 @@
 // 這裡不改變 localStorage 是主要來源這件事（測試會直接操作 localStorage 的 key），
 // 只是每次寫入時同步備份一份到 cookie 與 IndexedDB，開機時若 localStorage 缺值
 // 才從備援還原回去。
-const PREFS_KEYS = ['mute_sound', 'mute_haptic', 'white_mode', 'panzi_mode', 'power_save_mode', 'squad_custom', 'tablet_mode'];
+const PREFS_KEYS = ['mute_sound', 'mute_haptic', 'white_mode', 'panzi_mode', 'power_save_mode', 'squad_custom', 'tablet_mode', 'unified_color', 'unified_color_accent'];
 const PREFS_COOKIE_NAME = 'biyuan_prefs';
 const PREFS_IDB_NAME = 'biyuan';
 const PREFS_IDB_STORE = 'prefs';

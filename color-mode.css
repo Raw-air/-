@@ -1,0 +1,18 @@
+/* 統一色系模式的色票列 (設定頁)。色票容器有 data-uc-skip，行內顏色不會被改掉 */
+#uc-swatches { display: flex; flex-wrap: wrap; gap: 10px; padding: 4px 0 12px; }
+#uc-swatches[hidden] { display: none !important; }
+.uc-swatch {
+  width: 30px; height: 30px; border-radius: 50%; padding: 0; margin: 0;
+  border: 0; background: var(--c); cursor: pointer; position: relative;
+  box-shadow: 0 0 0 1px var(--border2);
+  transition: transform .15s ease, box-shadow .15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.uc-swatch:active { transform: scale(.9); }
+.uc-swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text); }
+.uc-custom {
+  display: inline-flex; overflow: hidden;
+  background: conic-gradient(from 0deg, #ff453a, #ff9f0a, #ffd60a, #30d158, #40c8e0, #0a84ff, #bf5af2, #ff453a);
+}
+.uc-custom::after { content: ''; position: absolute; inset: 7px; border-radius: 50%; background: var(--c, transparent); pointer-events: none; }
+.uc-custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
