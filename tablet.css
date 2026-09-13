@@ -257,6 +257,8 @@ html.tablet-mode #page-summary > .summary-row-2 { grid-column: 8 / -1; grid-temp
 html.tablet-mode #page-summary > .summary-row-3 { gap: 16px; }
 html.tablet-mode #page-summary .sm-stat { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-radius: 18px; font-size: 15px; }
 html.tablet-mode #page-summary .sm-stat b { font-size: 34px; }
+html.tablet-mode #page-summary .sm-stat span { font-size: 16px; display: flex; align-items: center; gap: 6px; }
+html.tablet-mode #page-summary .sm-stat span .ui-icon { width: 18px; height: 18px; }
 html.tablet-mode #page-summary > .squad-detail-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
 html.tablet-mode #page-summary > .empty-bed-action { grid-column: 1 / 6; }
 html.tablet-mode #page-summary > .summary-actions { grid-column: 6 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
