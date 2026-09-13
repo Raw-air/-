@@ -23,12 +23,17 @@
   <meta name="theme-color" content="#151518">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=149">
-  <link rel="stylesheet" href="motion.css?v=149">
-  <link rel="stylesheet" href="folder.css?v=149">
-  <link rel="stylesheet" href="liquid-nav.css?v=149">
-  <link rel="stylesheet" href="quick-menu.css?v=149">
-  <link rel="stylesheet" href="boot-screen.css?v=149">
+  <link rel="stylesheet" href="style.css?v=150">
+  <link rel="stylesheet" href="motion.css?v=150">
+  <link rel="stylesheet" href="folder.css?v=150">
+  <link rel="stylesheet" href="liquid-nav.css?v=150">
+  <link rel="stylesheet" href="quick-menu.css?v=150">
+  <link rel="stylesheet" href="boot-screen.css?v=150">
+  <link rel="stylesheet" href="tablet.css?v=150">
+  <script>
+    /* 平板模式在畫面出來前就套上，避免先閃一次手機版排版 */
+    try { if (localStorage.getItem('tablet_mode') === 'true') document.documentElement.classList.add('tablet-mode'); } catch (_) {}
+  </script>
   <link rel="manifest" href="manifest.json?v=4">
   <link rel="apple-touch-icon" href="icon-192.png?v=2">
   <script defer src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
@@ -147,7 +152,7 @@
 
   <!-- RAWAIR OS 開機畫面 (只在第一次打開 App 時出現) -->
   <div id="rawair-boot" role="status" aria-label="系統啟動中"><div id="rb-term"></div></div>
-  <script src="boot-screen.js?v=149"></script>
+  <script src="boot-screen.js?v=150"></script>
   <div id="toast-container" class="toast-container"></div>
 
   <!-- 返回 -->
@@ -1109,6 +1114,30 @@
             </div>
         </label>
       </div>
+      <!-- 平板模式（預設關閉，樣式在 tablet.css） -->
+      <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 8px 0;">
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <span>平板模式</span>
+          <span style="color:var(--dim); font-size:11px;">給平板、電腦橫向螢幕用：左側側欄 + 多欄分割畫面</span>
+        </div>
+        <label class="switch">
+            <input id="setting-tablet" aria-label="平板模式" type="checkbox" onchange="toggleTabletMode(this)">
+            <div class="slider">
+                <div class="circle">
+                    <svg class="cross" xml:space="preserve" style="enable-background:new 0 0 512 512" viewBox="0 0 365.696 365.696" y="0" x="0" height="6" width="6" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                        <g>
+                            <path data-original="#000000" fill="currentColor" d="M243.188 182.86 356.32 69.726c12.5-12.5 12.5-32.766 0-45.247L341.238 9.398c-12.504-12.503-32.770-12.503-45.250 0L182.860 122.528 69.727 9.374c-12.500-12.500-32.766-12.500-45.247 0L9.375 24.457c-12.500 12.504-12.500 32.770 0 45.250l113.152 113.152L9.398 295.990c-12.503 12.503-12.503 32.769 0 45.250L24.480 356.320c12.500 12.500 32.766 12.500 45.247 0l113.132-113.132L295.990 356.320c12.503 12.500 32.769 12.500 45.250 0l15.081-15.082c12.500-12.504 12.500-32.770 0-45.250zm0 0"></path>
+                        </g>
+                    </svg>
+                    <svg class="checkmark" xml:space="preserve" style="enable-background:new 0 0 512 512" viewBox="0 0 24 24" y="0" x="0" height="10" width="10" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                        <g>
+                            <path class="" data-original="#000000" fill="currentColor" d="M9.707 19.121a.997.997 0 0 1-1.414 0l-5.646-5.647a1.5 1.5 0 0 1 0-2.121l.707-.707a1.5 1.5 0 0 1 2.121 0L9 14.171l9.525-9.525a1.5 1.5 0 0 1 2.121 0l.707.707a1.5 1.5 0 0 1 0 2.121z"></path>
+                        </g>
+                    </svg>
+                </div>
+            </div>
+        </label>
+      </div>
       <!-- NEW: 顯示自訂客製化（預設關閉） -->
       <div class="setting-row" style="display:flex; justify-content:space-between; align-items:center; padding: 8px 0;">
         <div style="display:flex; flex-direction:column; gap:4px;">
@@ -1620,16 +1649,17 @@
     <button type="button" class="nav-item" data-page="settings"><span class="nav-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-label">設定</span></button>
   </nav>
 
-  <script src="config.js?v=149"></script>
-  <script src="api.js?v=149"></script>
-  <script src="phonetic-search.js?v=149"></script>
-  <script src="app.js?v=149"></script>
-  <script src="import.js?v=149"></script>
-  <script src="theme.js?v=149"></script>
-  <script src="carousel.js?v=149"></script>
-  <script src="dissolve.js?v=149"></script>
-  <script src="navigation.js?v=149"></script>
-  <script src="quick-menu.js?v=149"></script>
+  <script src="config.js?v=150"></script>
+  <script src="api.js?v=150"></script>
+  <script src="phonetic-search.js?v=150"></script>
+  <script src="app.js?v=150"></script>
+  <script src="import.js?v=150"></script>
+  <script src="theme.js?v=150"></script>
+  <script src="carousel.js?v=150"></script>
+  <script src="dissolve.js?v=150"></script>
+  <script src="navigation.js?v=150"></script>
+  <script src="quick-menu.js?v=150"></script>
+  <script src="tablet.js?v=150"></script>
 
   <!-- 幹部工作手冊 Modal -->
   <div id="duty-manual-modal" class="modal-overlay">

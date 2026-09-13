@@ -1,0 +1,324 @@
+/* ═══════════ 平板模式 (html.tablet-mode) ═══════════
+   設定 → 個人化設定 → 平板模式。針對 16:9 / 4:3 橫向大螢幕：
+   左側固定側欄取代底部導覽列，各頁改成多欄分割畫面、按鈕與字級放大。 */
+html.tablet-mode {
+  --tb-rail: 272px;
+  --tb-gap: 24px;
+  --tb-pad: 40px;
+}
+
+/* 側欄沒開平板模式時完全不存在 */
+.tb-rail { display: none; }
+
+html.tablet-mode body {
+  padding-left: var(--tb-rail);
+  padding-bottom: 32px;
+}
+html.tablet-mode .bottom-nav,
+html.tablet-mode .bottom-nav-glow,
+html.tablet-mode #qm-toggle { display: none !important; }
+
+/* ── 側欄 ── */
+html.tablet-mode .tb-rail {
+  position: fixed;
+  z-index: 600;
+  inset: 0 auto 0 0;
+  width: var(--tb-rail);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: calc(24px + var(--safe-t)) 18px calc(18px + var(--safe-b));
+  background: var(--bg2);
+  border-right: 1px solid var(--border2);
+  box-shadow: 8px 0 32px rgba(0, 0, 0, .18);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  color: var(--text);
+  animation: tbRailIn .42s cubic-bezier(.16, 1, .3, 1);
+}
+@keyframes tbRailIn { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.tb-brand { display: flex; align-items: center; gap: 12px; padding: 0 6px; }
+.tb-brand img { width: 48px; height: 48px; border-radius: 14px; box-shadow: 0 6px 18px rgba(139, 92, 246, .35); }
+.tb-brand b { display: block; font-size: 20px; font-weight: 800; letter-spacing: 1px; }
+.tb-brand small { display: block; font-size: 12px; color: var(--dim); letter-spacing: 2px; margin-top: 2px; }
+
+.tb-clock {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+.tb-clock b { display: block; font-size: 38px; line-height: 1; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+.tb-clock span { display: block; margin-top: 8px; font-size: 13px; color: var(--dim); font-weight: 600; }
+
+.tb-sec { font-size: 11px; font-weight: 700; color: var(--dim); letter-spacing: 3px; padding: 0 8px; margin-bottom: -8px; }
+
+.tb-nav { display: flex; flex-direction: column; gap: 6px; }
+.tb-nav button,
+.tb-tools button,
+.tb-foot button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tb-nav button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 60px;
+  padding: 10px 16px;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: left;
+  transition: background .2s, border-color .2s, transform .15s;
+}
+.tb-nav button:hover { background: var(--card); }
+.tb-nav button:active { transform: scale(.98); }
+.tb-nav button svg { width: 24px; height: 24px; flex: none; opacity: .7; }
+.tb-nav button b { display: block; font-size: 16px; font-weight: 700; }
+.tb-nav button small { display: block; font-size: 11px; color: var(--dim); margin-top: 2px; }
+.tb-nav button.active {
+  background: var(--blue);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(10, 132, 255, .32);
+}
+.tb-nav button.active svg { opacity: 1; }
+.tb-nav button.active small { color: rgba(255, 255, 255, .78); }
+
+.tb-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tb-tools button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 74px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  text-align: left;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.3;
+  transition: border-color .2s, transform .15s;
+}
+.tb-tools button:hover { border-color: var(--border2); }
+.tb-tools button:active { transform: scale(.96); }
+.tb-tools button svg { width: 20px; height: 20px; color: var(--tb-c, var(--blue)); }
+
+.tb-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 8px 0;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--dim);
+}
+.tb-foot button {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  font-size: 12px;
+}
+
+/* ── 共通：頁面變寬、字級與點擊區放大 ── */
+html.tablet-mode .page:not(#page-student-files):not(#page-resident-management) {
+  max-width: 1240px;
+  padding: calc(28px + var(--safe-t)) var(--tb-pad) 40px;
+}
+html.tablet-mode .page-title { font-size: 30px; font-weight: 800; margin-bottom: 24px; }
+html.tablet-mode .back-btn[id="back-btn"] { left: calc(var(--tb-rail) + 16px); }
+html.tablet-mode .empty-bed-action { padding: 22px 24px; border-radius: 18px; }
+html.tablet-mode .eb-title { font-size: 17px; }
+html.tablet-mode .eb-desc { font-size: 13px; }
+html.tablet-mode .modal-card { max-width: max(420px, min(560px, 60vw)); }
+
+/* ── 首頁：左邊中隊大方塊、右邊值星/幹部/手冊 ── */
+html.tablet-mode #page-home.active {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(320px, 1fr);
+  grid-template-rows: auto auto auto auto auto 1fr;
+  column-gap: 32px;
+  align-items: start;
+}
+html.tablet-mode #page-home > .home-hero {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: auto auto;
+  column-gap: 20px;
+  align-items: center;
+  text-align: left;
+  padding: 8px 0 28px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+html.tablet-mode #page-home .home-icon { grid-row: 1 / 3; width: 84px; height: 84px; margin: 0; }
+html.tablet-mode #page-home .home-title { font-size: 44px; line-height: 1.05; margin: 0; align-self: end; }
+html.tablet-mode #page-home .home-sub { margin: 4px 0 0; align-self: start; font-size: 15px; letter-spacing: 6px; }
+html.tablet-mode #page-home .home-date { grid-column: 3; grid-row: 2; margin: 0; justify-self: end; font-size: 15px; }
+html.tablet-mode #page-home .changelog-btn { position: static; grid-column: 3; grid-row: 1; justify-self: end; margin: 0; }
+
+html.tablet-mode #page-home > p.section-label:nth-of-type(1) { grid-column: 1; grid-row: 2; margin: 16px 0 14px; }
+html.tablet-mode #page-home > #squad-grid { grid-column: 1; grid-row: 3 / span 4; }
+html.tablet-mode #page-home > #duty-roster-widget { grid-column: 2; grid-row: 2; margin: 12px 0 0; padding: 16px 20px; }
+html.tablet-mode #page-home > p.section-label:nth-of-type(2) { grid-column: 2; grid-row: 3; margin: 22px 0 14px !important; }
+html.tablet-mode #page-home > #management-grid { grid-column: 2; grid-row: 4; }
+html.tablet-mode #page-home > #duty-manual-widget { grid-column: 2; grid-row: 5; margin: 14px 0 0 !important; }
+html.tablet-mode #page-home > div:last-child { grid-column: 2; grid-row: 6; justify-content: flex-start !important; margin: 18px 0 0 !important; }
+
+html.tablet-mode #squad-grid { gap: 18px; }
+html.tablet-mode #squad-grid .sq-card { padding: 36px 12px 30px; border-radius: 24px; }
+html.tablet-mode #squad-grid .sq-badge { width: 64px; height: 64px; border-radius: 18px; font-size: 26px; margin-bottom: 14px; }
+html.tablet-mode #squad-grid .sq-name { font-size: 24px; font-weight: 800; }
+html.tablet-mode #squad-grid .sq-desc { font-size: 13px; margin-top: 4px; }
+html.tablet-mode #squad-grid .sq-photo { aspect-ratio: 1 / 1; padding: 0; }
+html.tablet-mode #management-grid .sq-card { padding: 22px 18px !important; }
+
+/* ── 點名：頂部資訊橫條 + 多欄床位格 ── */
+html.tablet-mode #page-rollcall .rc-header {
+  margin: 0 0 20px;
+  padding: 18px 22px;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  top: 12px;
+  display: grid;
+  grid-template-columns: minmax(220px, auto) 1fr;
+  align-items: center;
+  column-gap: 28px;
+}
+html.tablet-mode #page-rollcall .rc-header-top { margin: 0; justify-content: flex-start; gap: 14px; flex-wrap: wrap; }
+html.tablet-mode #page-rollcall .rc-squad-name { position: static; transform: none; font-size: 28px; font-weight: 800; }
+html.tablet-mode #page-rollcall .rc-stats { gap: 12px; }
+html.tablet-mode #page-rollcall .rc-stat { padding: 12px 8px; border-radius: 14px; }
+html.tablet-mode #page-rollcall .rc-stat span { font-size: 13px; }
+html.tablet-mode #page-rollcall .rc-stat b { font-size: 30px; }
+html.tablet-mode #page-rollcall .date-picker-panel { grid-column: 1 / -1; }
+html.tablet-mode #page-rollcall .student-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 10px 12px;
+  padding-bottom: 120px;
+}
+html.tablet-mode #page-rollcall .room-divider { grid-column: 1 / -1; font-size: 14px; padding-top: 18px; }
+html.tablet-mode #page-rollcall .student-row { min-height: 64px; padding: 14px 16px; border-radius: 14px; font-size: 16px; }
+html.tablet-mode #page-rollcall .rc-confirm-container {
+  position: fixed;
+  left: calc(var(--tb-rail) + var(--tb-pad));
+  right: auto;
+  bottom: 24px;
+  width: min(480px, calc(100vw - var(--tb-rail) - 2 * var(--tb-pad) - 220px));
+  max-width: none;
+  margin: 0;
+  z-index: 60;
+}
+html.tablet-mode .fab-empty-bed {
+  left: auto;
+  right: 32px;
+  bottom: 24px;
+  width: auto;
+  max-width: none;
+  margin: 0;
+  border-radius: 999px;
+  padding: 16px 26px;
+}
+html.tablet-mode #back-btn { top: calc(20px + var(--safe-t)); }
+
+/* ── 總表：儀表板 ── */
+html.tablet-mode #page-summary.active {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+html.tablet-mode #page-summary > * { grid-column: 1 / -1; margin: 0; }
+html.tablet-mode #page-summary .summary-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+html.tablet-mode #page-summary .summary-header h1 { font-size: 30px; font-weight: 800; }
+html.tablet-mode #page-summary .summary-header .date-nav { margin: 0; }
+html.tablet-mode #page-summary > .big-stats { grid-column: 1 / 8; gap: 16px; }
+html.tablet-mode #page-summary .big-stat { padding: 30px 12px; border-radius: 22px; display: flex; flex-direction: column; justify-content: center; }
+html.tablet-mode #page-summary .big-stat-value { font-size: 56px; line-height: 1; }
+html.tablet-mode #page-summary .big-stat-label { font-size: 15px; margin-top: 10px; }
+html.tablet-mode #page-summary > .summary-row-2 { grid-column: 8 / -1; grid-template-columns: 1fr; gap: 16px; }
+html.tablet-mode #page-summary > .summary-row-3 { gap: 16px; }
+html.tablet-mode #page-summary .sm-stat { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-radius: 18px; font-size: 15px; }
+html.tablet-mode #page-summary .sm-stat b { font-size: 34px; }
+html.tablet-mode #page-summary > .squad-detail-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+html.tablet-mode #page-summary > .empty-bed-action { grid-column: 1 / 6; }
+html.tablet-mode #page-summary > .summary-actions { grid-column: 6 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+/* ── 歷史：左月曆、右明細 ── */
+html.tablet-mode #page-history.active {
+  display: grid;
+  grid-template-columns: minmax(360px, 440px) minmax(0, 1fr);
+  grid-template-rows: auto auto 1fr;
+  column-gap: 32px;
+  align-items: start;
+}
+html.tablet-mode #page-history > .page-title { grid-column: 1 / -1; }
+html.tablet-mode #page-history > .cal-nav { grid-column: 1; }
+html.tablet-mode #page-history > .calendar-grid { grid-column: 1; gap: 6px; }
+html.tablet-mode #page-history .calendar-grid > * { min-height: 52px; font-size: 15px; }
+html.tablet-mode #page-history > .hist-detail { grid-column: 2; grid-row: 2 / span 2; position: sticky; top: 20px; }
+html.tablet-mode #page-history > .hist-detail:empty {
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+  border-style: dashed;
+}
+html.tablet-mode #page-history > .hist-detail:empty::before { content: '← 點左邊月曆的日期看當天明細'; color: var(--dim); font-size: 15px; }
+
+/* ── 設定：雙欄瀑布 ── */
+html.tablet-mode #page-settings.active { column-count: 2; column-gap: var(--tb-gap); }
+html.tablet-mode #page-settings > .page-title { column-span: all; }
+html.tablet-mode #page-settings .settings-card { break-inside: avoid; padding: 22px; border-radius: 20px; margin-bottom: var(--tb-gap); }
+html.tablet-mode #page-settings .settings-card-header { font-size: 17px; }
+html.tablet-mode #page-settings .setting-row { min-height: 60px; }
+
+/* ── 工具與選項 / 幹部專區：卡片格 ── */
+html.tablet-mode #page-tools.active {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  align-content: start;
+}
+html.tablet-mode #page-tools > :first-child { grid-column: 1 / -1; }
+html.tablet-mode #page-tools > .empty-bed-action { margin: 0; min-height: 104px; }
+html.tablet-mode #page-management > div:last-child { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+html.tablet-mode #page-management > div:last-child > .empty-bed-action { margin: 0; min-height: 104px; }
+
+/* ── 直向平板 / 窄視窗：側欄收成圖示列 ── */
+@media (max-width: 1100px) {
+  html.tablet-mode { --tb-rail: 92px; --tb-pad: 28px; }
+  html.tablet-mode .tb-rail { padding-left: 12px; padding-right: 12px; align-items: center; }
+  html.tablet-mode .tb-brand div,
+  html.tablet-mode .tb-clock,
+  html.tablet-mode .tb-sec,
+  html.tablet-mode .tb-nav small,
+  html.tablet-mode .tb-foot span { display: none; }
+  html.tablet-mode .tb-nav button { flex-direction: column; gap: 4px; min-height: 64px; width: 68px; padding: 8px 4px; justify-content: center; text-align: center; }
+  html.tablet-mode .tb-nav button b { font-size: 12px; }
+  html.tablet-mode .tb-tools { grid-template-columns: 1fr; }
+  html.tablet-mode .tb-tools button { width: 56px; min-height: 52px; align-items: center; justify-content: center; font-size: 0; padding: 0; }
+  html.tablet-mode .tb-tools button svg { width: 22px; height: 22px; }
+  html.tablet-mode .tb-foot { border: 0; padding: 0; }
+}
+@media (max-width: 900px) {
+  html.tablet-mode #page-home.active { grid-template-columns: 1fr; }
+  html.tablet-mode #page-home > * { grid-column: 1 !important; grid-row: auto !important; }
+  html.tablet-mode #page-summary > .big-stats,
+  html.tablet-mode #page-summary > .summary-row-2 { grid-column: 1 / -1; }
+  html.tablet-mode #page-summary > .summary-row-2 { grid-template-columns: 1fr 1fr; }
+  html.tablet-mode #page-history.active { grid-template-columns: 1fr; }
+  html.tablet-mode #page-history > .hist-detail { grid-column: 1; grid-row: auto; position: static; }
+  html.tablet-mode #page-settings.active { column-count: 1; }
+}
