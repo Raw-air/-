@@ -110,6 +110,9 @@ html.tablet-mode .tb-rail {
 .tb-tools button:hover { border-color: var(--border2); }
 .tb-tools button:active { transform: scale(.96); }
 .tb-tools button svg { width: 20px; height: 20px; color: var(--tb-c, var(--blue)); }
+/* 全白模式：原本的亮黃/亮綠圖示貼在白底上看不清楚，壓暗三成、按鈕底改實白加深邊框 */
+body.light-mode .tb-tools button { background: #fff; border-color: var(--border2); box-shadow: 0 1px 3px rgba(0, 0, 0, .06); }
+body.light-mode .tb-tools button svg { color: color-mix(in srgb, var(--tb-c, var(--blue)) 68%, #000); }
 
 .tb-foot {
   margin-top: auto;
@@ -162,11 +165,13 @@ html.tablet-mode #page-home > .home-hero {
   margin-bottom: 8px;
   border-bottom: 1px solid var(--border);
 }
-html.tablet-mode #page-home .home-icon { grid-row: 1 / 3; width: 84px; height: 84px; margin: 0; }
-html.tablet-mode #page-home .home-title { font-size: 44px; line-height: 1.05; margin: 0; align-self: end; }
-html.tablet-mode #page-home .home-sub { margin: 4px 0 0; align-self: start; font-size: 15px; letter-spacing: 6px; }
-html.tablet-mode #page-home .home-date { grid-column: 3; grid-row: 2; margin: 0; justify-self: end; font-size: 15px; }
-html.tablet-mode #page-home .changelog-btn { position: static; grid-column: 3; grid-row: 1; justify-self: end; margin: 0; }
+/* 側欄最上面已經有 LOGO 跟「碧苑宿舍」，首頁頂部就不再重複，只留日期與更新公告一排 */
+html.tablet-mode #page-home > .home-hero { display: flex; justify-content: space-between; padding: 8px 0 20px; }
+html.tablet-mode #page-home .home-icon,
+html.tablet-mode #page-home .home-title,
+html.tablet-mode #page-home .home-sub { display: none; }
+html.tablet-mode #page-home .home-date { order: -1; margin: 0; font-size: 15px; }
+html.tablet-mode #page-home .changelog-btn { position: static; margin: 0; }
 
 html.tablet-mode #page-home > p.section-label:nth-of-type(1) { grid-column: 1; grid-row: 2; margin: 16px 0 14px; }
 html.tablet-mode #page-home > #squad-grid { grid-column: 1; grid-row: 3 / span 4; }

@@ -1563,7 +1563,7 @@ function renderHome() {
 
   const manualWidget = document.getElementById('duty-manual-widget');
   if (manualWidget) {
-    manualWidget.className = 'duty-manual-widget';
+    manualWidget.className = 'duty-manual-widget sq-card';
     void manualWidget.offsetWidth; // Force reflow
     manualWidget.classList.add(animClass);
     manualWidget.style.animationDelay = isInitialHomeRender ? '0.15s' : '0s';
