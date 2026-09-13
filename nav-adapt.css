@@ -22,6 +22,25 @@ html body .bottom-nav.liquid-nav.nav-on-dark {
 .liquid-nav::before {transition:background-color .45s ease,box-shadow .45s ease;}
 .liquid-nav .lens-shape {transition:transform .18s cubic-bezier(.2,.8,.2,1),background-color .45s ease;}
 .liquid-nav .nav-item,.liquid-nav .lens-item {transition:transform .2s,color .45s ease;}
+
+/* 首頁上方文字與按鈕 (同一支 nav-adapt.js 量)：bg-on-light = 後面亮 → 深字；bg-on-dark = 後面暗 → 亮字
+   html body 開頭讓權重蓋過 body.light-mode 的原規則 */
+html body .home-title.bg-on-light {color:#1c1c1e;text-shadow:0 1px 14px rgba(255,255,255,.55);}
+html body .home-title.bg-on-dark {color:#fff;text-shadow:0 1px 12px rgba(0,0,0,.5);}
+html body .home-sub.bg-on-light,html body .section-label.bg-on-light {color:rgba(0,0,0,.66);text-shadow:0 0 10px rgba(255,255,255,.5);}
+html body .home-sub.bg-on-dark,html body .section-label.bg-on-dark {color:rgba(255,255,255,.82);text-shadow:0 1px 8px rgba(0,0,0,.55);}
+html body .home-date.bg-on-light {color:#1c1c1e;background:rgba(255,255,255,.5);border-color:rgba(255,255,255,.7);}
+html body .home-date.bg-on-dark {color:#fff;background:rgba(0,0,0,.3);border-color:rgba(255,255,255,.2);}
+html body .qm-toggle.bg-on-light,html body .changelog-btn.bg-on-light {color:#1c1c1e;background:rgba(255,255,255,.58);border-color:rgba(255,255,255,.75);}
+html body .qm-toggle.bg-on-dark,html body .changelog-btn.bg-on-dark {color:#fff;background:rgba(20,20,26,.38);border-color:rgba(255,255,255,.2);}
+/* 更新公告的 NEW 圖示是 SVG 圖片，只能用濾鏡換深淺；
+   加 [src] 權重 (0,3,3) 才蓋得過 motion.css 淺色模式把圖示全變黑的 body.light-mode img[src*="Lp/ICON/"]:not(...) (0,3,2) */
+html body .changelog-btn.bg-on-light > img[src] {filter:brightness(0);opacity:.85;}
+html body .changelog-btn.bg-on-dark > img[src] {filter:brightness(0) invert(1);opacity:.95;}
+.home-title,.home-sub,.section-label {transition:color .45s ease,text-shadow .45s ease;}
+.home-date {transition:color .45s ease,background-color .45s ease,border-color .45s ease;}
+.qm-toggle {transition:transform .2s,background .45s ease,color .45s ease,border-color .45s ease;}
+
 @media (prefers-reduced-motion:reduce) {
-  .liquid-nav::before,.liquid-nav .nav-item,.liquid-nav .lens-item {transition:none;}
+  .liquid-nav::before,.liquid-nav .nav-item,.liquid-nav .lens-item,.home-title,.home-sub,.section-label,.home-date {transition:none;}
 }

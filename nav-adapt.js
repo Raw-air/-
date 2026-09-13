@@ -1,13 +1,20 @@
-/* 導覽列自適應顯色 (像 iOS 26 Liquid Glass)：
-   估算「膠囊後面實際看起來是什麼顏色」，字跟底對比不夠就自動切成亮底深字 / 暗底亮字。
-   做法：導覽列上取幾個點 → elementsFromPoint 由上往下疊色 (背景色、<img> 取樣)，
+/* 自適應顯色 (像 iOS 26 Liquid Glass)：
+   估算「元件後面實際看起來是什麼顏色」，後面亮就用深字、後面暗就用亮字。
+   套用對象：底部導覽列 + 首頁上方的標題/副標/日期/區塊標籤/漢堡鈕/更新公告鈕 (TARGETS)。
+   做法：元件上取幾個點 → elementsFromPoint 由上往下疊色 (背景色、<img> 取樣)，元件自己跟子元素跳過；
    pointer-events:none 的全螢幕背景層 (#custom-video-bg / .home-anim-bg) 不會被 elementsFromPoint 撈到，另外補在最底下。
-   圖片先縮成 48px 小圖快取，之後每次只查像素，成本 < 1ms。 */
+   圖片先縮成 48px 小圖快取，之後每次只查像素。畫面外、沒顯示的元件不量。 */
 (function(){
-  const nav=document.querySelector('.bottom-nav');
-  if(!nav)return;
-  const IMG_CACHE=new Map(); // src → {data,w,h} | null (被 taint 或還沒載完)
-  let tone='',pending=false,lastRun=0;
+  // hi/lo：亮度高於 hi 換深字、低於 lo 換亮字，中間維持原狀 (遲滯，背景剛好在門檻附近時不會一直閃)
+  // 導覽列是會壓暗背景的玻璃，門檻比較高；純文字的黑白字對比交叉點約在亮度 .18
+  const TARGETS=[
+    {sel:'.bottom-nav',on:'nav-on',hi:.42,lo:.24,xs:[.12,.31,.5,.69,.88],ys:[.35,.72]},
+    {sel:'#page-home .home-title,#page-home .home-sub,#page-home .home-date,.section-label',on:'bg-on',hi:.24,lo:.14,xs:[.15,.5,.85],ys:[.3,.7]},
+    {sel:'#qm-toggle,.changelog-btn',on:'bg-on',hi:.3,lo:.18,xs:[.2,.5,.8],ys:[.3,.7]},
+  ];
+  const IMG_CACHE=new Map(); // src → {data,w,h} | null (被 taint)
+  const TONE=new WeakMap();
+  let pending=false,lastRun=0;
 
   const parseColor=s=>{
     const m=/rgba?\(([^)]+)\)/.exec(s||'');if(!m)return null;
@@ -57,9 +64,9 @@
     return null;
   }
 
-  // 由上往下疊，直到不透明；回傳這個點看起來的顏色
-  function colorAt(x,y){
-    const stack=document.elementsFromPoint(x,y).filter(el=>!nav.contains(el)&&el!==document.documentElement&&el!==document.body);
+  // 由上往下疊 (跳過 self 自己)，直到不透明；回傳這個點看起來的顏色
+  function colorAt(self,x,y){
+    const stack=document.elementsFromPoint(x,y).filter(el=>!self.contains(el)&&el!==document.documentElement&&el!==document.body);
     for(const sel of ['#custom-video-bg img','#custom-video-bg','.home-anim-bg']){
       const el=document.querySelector(sel);
       if(el&&!stack.includes(el)&&!el.classList.contains('hidden-bg')&&!(el.parentElement&&el.parentElement.classList.contains('hidden-bg')))stack.push(el);
@@ -76,25 +83,39 @@
     return {r,g,b,a:1};
   }
 
-  function measure(){
-    pending=false;lastRun=performance.now();
-    if(document.hidden||getComputedStyle(nav).display==='none')return;
-    const rect=nav.getBoundingClientRect();if(rect.width<120)return;
-    // 膠囊左右中間 5 點 × 圖示/文字 2 排
+  function measureEl(el,t){
+    const rect=el.getBoundingClientRect();
+    if(rect.width<8||rect.height<8||rect.bottom<0||rect.top>innerHeight||rect.right<0||rect.left>innerWidth)return;
+    if(t.sel==='.bottom-nav'&&rect.width<120)return; // 導覽列還沒排版
+    // 文字元件只量字實際佔的寬度 (標題/標籤是整行寬的區塊，字只在中間或左邊)
+    let L0=rect.left,W=rect.width;
+    if(el.matches('.home-title,.home-sub,.section-label')){
+      const rg=document.createRange();rg.selectNodeContents(el);const tr=rg.getBoundingClientRect();
+      if(tr.width>4){L0=tr.left;W=tr.width;}
+    }
     let L=0,n=0;
-    for(const fx of [.12,.31,.5,.69,.88])for(const fy of [.35,.72]){
-      const c=colorAt(rect.left+rect.width*fx,rect.top+rect.height*fy);
-      L+=lum(c);n++;
+    for(const fx of t.xs)for(const fy of t.ys){
+      const x=Math.min(innerWidth-1,Math.max(0,L0+W*fx)),y=Math.min(innerHeight-1,Math.max(0,rect.top+rect.height*fy));
+      L+=lum(colorAt(el,x,y));n++;
     }
     L/=n;
-    // 遲滯：切換門檻兩邊各留一段，背景剛好在中間時不會一直閃
+    const tone=TONE.get(el)||'';
     let next=tone;
-    if(L>.42)next='light';else if(L<.24)next='dark';else if(!tone)next=L>.33?'light':'dark';
-    nav.dataset.bgLum=L.toFixed(3);
+    if(L>t.hi)next='light';else if(L<t.lo)next='dark';else if(!tone)next=L>(t.hi+t.lo)/2?'light':'dark';
+    el.dataset.bgLum=L.toFixed(3);
     if(next!==tone){
-      tone=next;
-      nav.classList.toggle('nav-on-light',tone==='light');
-      nav.classList.toggle('nav-on-dark',tone==='dark');
+      TONE.set(el,next);
+      el.classList.toggle(t.on+'-light',next==='light');
+      el.classList.toggle(t.on+'-dark',next==='dark');
+    }
+  }
+
+  function measure(){
+    pending=false;lastRun=performance.now();
+    if(document.hidden)return;
+    for(const t of TARGETS)for(const el of document.querySelectorAll(t.sel)){
+      if(!el.offsetParent&&getComputedStyle(el).position!=='fixed')continue; // 不在目前頁面
+      measureEl(el,t);
     }
   }
   function schedule(){
@@ -111,12 +132,13 @@
   const bgLayer=e=>{const t=e.target;if(t.closest&&t.closest('#custom-video-bg,.home-anim-bg,.page'))schedule();};
   document.addEventListener('animationend',bgLayer,true);
   document.addEventListener('transitionend',bgLayer,true);
-  nav.addEventListener('click',()=>setTimeout(schedule,450));
+  const nav=document.querySelector('.bottom-nav');
+  if(nav)nav.addEventListener('click',()=>setTimeout(schedule,450));
   new MutationObserver(schedule).observe(document.body,{attributes:true,attributeFilter:['class']});
   const bg=document.getElementById('custom-video-bg');
   if(bg)new MutationObserver(()=>{IMG_CACHE.clear();schedule();}).observe(bg,{childList:true,subtree:true,attributes:true,attributeFilter:['class','src']});
   // 保險：換頁、背景淡入等沒有事件的變化，每 1.5 秒補量一次 (背景分頁不跑)
   setInterval(()=>{if(!document.hidden)schedule();},1500);
   schedule();
-  window.navAdapt={measure,get tone(){return tone;}};
+  window.navAdapt={measure,toneOf:el=>TONE.get(el)||'',get tone(){return nav?TONE.get(nav)||'':'';}};
 })();
