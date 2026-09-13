@@ -1,25 +1,31 @@
-// 刪除動畫：Gargantua 級黑洞 — 光線行進的引力透鏡、傾斜吸積盤、潮汐粉塵流、鏡頭震動、崩塌閃光與衝擊波
-// (WebGL：粉塵畫到離屏貼圖，再由全螢幕透鏡 shader 逐像素彎曲；Canvas 2D 備援沒有透鏡)
+// 刪除動畫：Gargantua 級黑洞 — 光線行進的引力透鏡、傾斜吸積盤、卡片被拉成絲帶捲進去、潮汐粉塵流、鏡頭震動、崩塌閃光與衝擊波
+// (WebGL：卡片肖像與粉塵先畫到離屏貼圖，再由全螢幕透鏡 shader 逐像素彎曲；Canvas 2D 備援沒有透鏡)
 // ─────────────────────────────────────────────────────────────────────────────
 // 時間軸 (連續，沒有等待階段)：
-//   0ms       輕點一下 (震動)、隆隆聲淡入、房間的燈滅掉：整個畫面壓暗 90%，只留一盞聚光燈在這本資料夾上
-//   0-720     奇點在資料夾右上方點燃、長成黑洞：純黑陰影 + 光子環 + 傾斜 11° 的吸積盤 (接近側都卜勒增亮)
-//             黑暗裡浮出星空，星光經過黑洞附近被拉成弧 (愛因斯坦環)，背景還有一層淡淡的星雲霧氣被攪動
-//   220-980   崩解鋒面從右緣掃過資料夾：DOM 被遮罩吃掉、同一位置長出粉塵，聚光燈跟著鋒面縮小
-//             粉塵被引力拉成弧線與螺旋，靠近黑洞被潮汐加熱成橘白，進了透鏡區影像被推到光子環上消失
+//   0ms       輕點一下 (震動)、隆隆聲淡入、房間的燈滅掉：畫面壓暗 90%，只留一盞聚光燈在這本資料夾上；
+//             同一幀把資料夾的 DOM 用 Canvas 2D 重畫成一張「肖像」貼圖 (量測每個元素的位置與樣式，不用 html2canvas)
+//   0-720     奇點在資料夾右上方點燃、長成黑洞：純黑陰影 + 光子環 + 傾斜 15° 的吸積盤 (接近側都卜勒增亮)
+//             黑暗裡浮出星空與霧氣，經過黑洞附近被拉成弧 (愛因斯坦環)
+//   50        交接：DOM 藏起來，GPU 在同一個位置接手畫肖像 (整張閃一下白熱)。從此卡片是一條可以被拉扯、彎曲、透鏡化的絲帶，
+//             黑洞長大時卡片靠近它的角落先被透鏡扭曲、拉成弧，碰到潮汐半徑就撕開發熱
+//   330-1280  卡片被拉走：前端朝黑洞加速、整條拉長 1.45 倍、變窄、越靠前端越細 (義大利麵化)、沿漩渦方向彎曲、表面起漣漪；
+//             進到透鏡區的部分被彎成弧、貼著光子環拉長、進了陰影就消失
+//   ~400-1250 碰到 2.4R 潮汐半徑的部分碎成粉塵 (鋒面沿卡片長軸往尾端推進，900-1250 保證掃完)；
+//             粉塵被引力拉成螺旋、靠近時被潮汐加熱成橘白、在光子環上消失
 //   300-1000  畫面四周的暗處也有碎屑被拉進來；鏡頭從 200ms 起開始顫動、越來越劇烈；手機同步震動
-//   ~1250     粉塵幾乎吃光 → 內爆：陰影在 150ms 內縮成一點，吸積盤瞬間爆亮，隆隆聲拔高
+//   ~1300     粉塵幾乎吃光 → 內爆：陰影在 150ms 內縮成一點，吸積盤瞬間爆亮，隆隆聲拔高
 //   +150      崩塌閃光：白熱核心炸開、一圈重力波往外掃 (折射星空與殘餘粉塵)、鏡頭猛震一下、手機重擊
 //   +60       資料夾以「空床」在黑暗中長回來
 //   +100~620  燈光閃兩下回來，星空退場；殘餘粉塵被震波推開淡出
-//   ~2100ms   結束
+//   ~2200ms   結束
 //
-// 效能：canvas / WebGL context / 兩支 shader / VBO / FBO / 4000 顆 typed-array 粒子池全部在頁面載入時建好，
+// 效能：canvas / WebGL context / 三支 shader / VBO / FBO / 4000 顆 typed-array 粒子池全部在頁面載入時建好，
 // 並試畫一次 (暖機)。透鏡 shader 只在黑洞周圍 (rmax 倍視界半徑) 做光線行進，其他像素只是取樣 + 星空雜湊。
-// 掉幀時自動減少行進步數與粉塵密度 (quality)。每幀零配置。
+// 肖像貼圖每次刪除重畫一次 (~5-10ms，量測 DOM)。掉幀時自動減少行進步數與粉塵密度 (quality)。每幀零配置。
 (() => {
   const MAX = 4000;                       // 粒子池上限 (資料夾粉塵 + 暗處碎屑)
   const FLOATS = 8;                       // 每顆送進 GPU：x, y, size, r, g, b, a, 保留
+  const SEG = 28;                         // 絲帶切幾段 (越多越滑順；28 段在手機上夠彎)
   // ── 粒子狀態 (全部預先配置，永遠重複使用) ──────────────────────────────
   const px = new Float32Array(MAX), py = new Float32Array(MAX);
   const vx = new Float32Array(MAX), vy = new Float32Array(MAX);
@@ -28,18 +34,24 @@
   const age = new Float32Array(MAX), life = new Float32Array(MAX);
   const delay = new Float32Array(MAX), tang = new Float32Array(MAX), eaten = new Float32Array(MAX);
   const born = new Float32Array(MAX);     // 暗處碎屑：幾毫秒時出生
+  const cu = new Float32Array(MAX), cv = new Float32Array(MAX), cn = new Float32Array(MAX);   // 資料夾粉塵：出生在卡片上的哪一格 (局部座標 0~1) + 鋒面雜訊
   const buf = new Float32Array(MAX * FLOATS);
+  // ── 絲帶 (卡片肖像的載體)：每段的中心、法線、半寬、漣漪偏移；上一幀的中心拿來算速度 ──
+  const ribC = new Float32Array((SEG + 1) * 2), ribN = new Float32Array((SEG + 1) * 2), ribHW = new Float32Array(SEG + 1), ribRip = new Float32Array(SEG + 1);
+  const ribPrev = new Float32Array((SEG + 1) * 2);
+  const ribVerts = new Float32Array((SEG + 1) * 2 * 6);   // 三角帶：每個頂點 x, y, 絲帶 u, v, 貼圖 tx, ty
 
   let canvas = null, gl = null, ctx2d = null, dpr = 1, W = 0, H = 0;
-  let progDot = null, progLens = null, vboDot = null, vboQuad = null, fbo = null, fboTex = null, loc = {};
+  let progDot = null, progLens = null, progRib = null, vboDot = null, vboQuad = null, vboRib = null, fbo = null, fboTex = null, cardTex = null, loc = {};
   let quality = 1;                        // 這台裝置學到的品質 (0.5 ~ 1)：粉塵密度與光線行進步數
   let running = null;
-  const stats = { spawned: 0, peak: 0, frames: 0, ms: 0, masked: false, lens: false, soft: false };   // 上一場的實測數字
+  const stats = { spawned: 0, peak: 0, frames: 0, ms: 0, masked: false, lens: false, soft: false, portraitMs: 0, cells: 0 };   // 上一場的實測數字
   const isLight = () => document.body.classList.contains('light-mode');
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
   const easeInOut = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   const outExpo = t => t <= 0 ? 0 : t >= 1 ? 1 : 1 - Math.pow(2, -10 * t);
   const outCubic = t => 1 - Math.pow(1 - clamp(t, 0, 1), 3);
+  const inCubic = t => { t = clamp(t, 0, 1); return t * t * t; };
   const inQuart = t => { t = clamp(t, 0, 1); return t * t * t * t; };
   const smooth = t => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
 
@@ -70,6 +82,35 @@
   const QUAD_VS = `
     attribute vec2 a_quad;
     void main() { gl_Position = vec4(a_quad, 0.0, 1.0); }`;
+  // 絲帶：卡片肖像貼在一條會彎的帶子上 (頂點座標是世界座標 px)。鋒面之後 (局部 u 大於 u_front) 的部分已經碎成粉塵，不畫；
+  // 鋒面前緣一條白熱帶、靠近黑洞被潮汐加熱成橘色、交接那一瞬整張閃白
+  const RIB_VS = `
+    attribute vec2 a_pos; attribute vec2 a_ax; attribute vec2 a_uv;
+    uniform vec2 u_res; varying vec2 v_ax; varying vec2 v_uv; varying vec2 v_world;
+    void main() {
+      vec2 c = (a_pos / u_res) * 2.0 - 1.0;
+      gl_Position = vec4(c.x, -c.y, 0.0, 1.0);
+      v_ax = a_ax; v_uv = a_uv; v_world = a_pos;
+    }`;
+  const RIB_FS = `
+    precision mediump float;
+    uniform sampler2D u_tex; uniform vec2 u_hole; uniform float u_R;
+    uniform float u_front; uniform float u_feather; uniform float u_flare; uniform float u_alpha; uniform float u_time;
+    varying vec2 v_ax; varying vec2 v_uv; varying vec2 v_world;
+    void main() {
+      if (v_uv.x < 0.0 || v_uv.x > 1.0 || v_uv.y < 0.0 || v_uv.y > 1.0) discard;   // 絲帶外框比卡片大 (斜的)，框外沒有東西
+      vec4 c = texture2D(u_tex, v_uv);
+      float n = sin(v_ax.y * 23.7 + v_ax.x * 9.1 + u_time * 3.0) * 0.55 + sin(v_ax.y * 61.3 - v_ax.x * 17.7 + 1.3) * 0.3 + sin(v_ax.y * 137.0 + v_ax.x * 41.0) * 0.15;
+      float uu = v_ax.x + n * 0.035;
+      float keep = 1.0 - smoothstep(u_front - u_feather, u_front, uu);
+      float d = length(v_world - u_hole) / max(u_R, 1.0);
+      float heat = (1.0 - smoothstep(2.2, 5.0, d)) * 0.55;
+      vec3 col = mix(c.rgb, vec3(1.0, 0.72, 0.4) * c.a, heat);
+      float band = smoothstep(u_front - u_feather * 1.6, u_front - u_feather * 0.2, uu) * keep;
+      col += vec3(1.0, 0.7, 0.35) * band * (1.2 + u_flare * 2.0) * c.a;
+      col += vec3(1.0, 0.92, 0.8) * u_flare * 0.45 * c.a;
+      gl_FragColor = vec4(col * keep * u_alpha, c.a * keep * u_alpha);
+    }`;
   // 透鏡：每個像素射一條光線 (正交投影，+z 往畫面深處)，靠近黑洞時用 a = -K·r̂/r² 逐步彎曲。
   //   進視界 (r<1) → 黑；穿過吸積盤平面 → 累積發光 (差速旋轉的亂流、都卜勒增亮、內熱外冷)；
   //   逃出球面 → 沿最後方向打到 z=ZBG 的背景平面，那裡的座標就是去取樣粉塵貼圖 / 星空 / 霧氣的位置。
@@ -261,6 +302,15 @@
     gl.deleteShader(v); gl.deleteShader(f);
     return gl.getProgramParameter(p, gl.LINK_STATUS) ? p : null;
   }
+  function makeTex() {
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  }
 
   function init() {
     if (canvas) return;
@@ -275,7 +325,7 @@
         || canvas.getContext('experimental-webgl', { alpha: true, premultipliedAlpha: true, antialias: false, depth: false });
     } catch (e) { gl = null; }
     // 軟體算圖 (SwiftShader / llvmpipe：遠端桌面、VM、headless) 跑不動全螢幕透鏡 pass (實測一幀 335ms)，
-    // 改走 Canvas 2D 備援 (黑暗、聚光燈、簡化黑洞、閃光、衝擊波都有，只是沒有透鏡)
+    // 改走 Canvas 2D 備援 (黑暗、聚光燈、絲帶、簡化黑洞、閃光、衝擊波都有，只是沒有透鏡)
     if (gl) {
       try {
         const ext = gl.getExtension('WEBGL_debug_renderer_info');
@@ -295,7 +345,8 @@
     if (gl) {
       progDot = link(DOT_VS, DOT_FS);
       progLens = link(QUAD_VS, LENS_FS);
-      if (!progDot || !progLens) gl = null;
+      progRib = link(RIB_VS, RIB_FS);
+      if (!progDot || !progLens || !progRib) gl = null;
     }
     if (gl) {
       vboDot = gl.createBuffer();
@@ -304,18 +355,21 @@
       vboQuad = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, vboQuad);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
-      // 離屏貼圖：粉塵先畫到這裡，透鏡 pass 再把它彎曲
-      fboTex = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, fboTex);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      vboRib = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, vboRib);
+      gl.bufferData(gl.ARRAY_BUFFER, ribVerts.byteLength, gl.DYNAMIC_DRAW);
+      // 離屏貼圖：絲帶與粉塵先畫到這裡，透鏡 pass 再把它彎曲；肖像貼圖每次刪除重傳
+      fboTex = makeTex();
+      cardTex = makeTex();
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(16));
       fbo = gl.createFramebuffer();
       const U = (p, n) => gl.getUniformLocation(p, n);
       loc = {
         dPos: gl.getAttribLocation(progDot, 'a_pos'), dSize: gl.getAttribLocation(progDot, 'a_size'),
         dCol: gl.getAttribLocation(progDot, 'a_col'), dRes: U(progDot, 'u_res'), dDpr: U(progDot, 'u_dpr'),
+        rPos: gl.getAttribLocation(progRib, 'a_pos'), rAx: gl.getAttribLocation(progRib, 'a_ax'), rUv: gl.getAttribLocation(progRib, 'a_uv'),
+        rRes: U(progRib, 'u_res'), rTex: U(progRib, 'u_tex'), rHole: U(progRib, 'u_hole'), rR: U(progRib, 'u_R'),
+        rFront: U(progRib, 'u_front'), rFeather: U(progRib, 'u_feather'), rFlare: U(progRib, 'u_flare'), rAlpha: U(progRib, 'u_alpha'), rTime: U(progRib, 'u_time'),
         quad: gl.getAttribLocation(progLens, 'a_quad'),
         tex: U(progLens, 'u_tex'), res: U(progLens, 'u_res'), dpr: U(progLens, 'u_dpr'),
         hole: U(progLens, 'u_hole'), R: U(progLens, 'u_R'), holeA: U(progLens, 'u_holeA'),
@@ -331,12 +385,25 @@
     resize();
     warmUp();
     window.addEventListener('resize', resize);
+    // 第一次畫肖像要 ~70ms (JIT、字型)，之後 ~6ms：進到資料微動頁 1.5 秒後先偷偷畫一次暖機
+    window.addEventListener('app:navigate', () => { for (const delay of [1500, 3000, 5000]) setTimeout(() => {
+      try {
+        if (running || !canvas || typeof currentPage === 'undefined' || currentPage !== 'student-files') return;
+        // AudioContext 第一次建立實測 ~140ms：在這裡先建好 (沒手勢會停在 suspended，之後按垃圾桶那個手勢裡 resume)
+        if (typeof audioCtx !== 'undefined' && !audioCtx && typeof initAudioCtx === 'function') { try { initAudioCtx(); } catch (_) {} }
+        if (stats.warm) return;
+        const f = document.querySelector('.sf-folder.active');
+        const r = f && f.getBoundingClientRect();
+        if (r && r.width) { paintPortrait(f, { l: r.left, t: r.top - r.height * 1.6, r: r.right, b: r.bottom }, true); stats.warm = true; }
+      } catch (_) {}
+    }, delay); });
   }
-  // 暖機：載入時就真的把兩個 pass 都畫一次 (shader 送上 GPU、FBO 配好、合成層建好)，第一次刪除才不會頓
+  // 暖機：載入時就真的把三個 pass 都畫一次 (shader 送上 GPU、FBO 配好、合成層建好)，第一次刪除才不會頓
   function warmUp() {
     if (gl) {
       buf[0] = 6; buf[1] = 6; buf[2] = 2; buf[3] = buf[4] = buf[5] = 1; buf[6] = 0.004;
-      drawScene(1, { hx: 6, hy: 6, R: 1, holeA: .001, t: 0, dim: .001, starA: 0, spot: [0, 0, 0, 0], front: -1, feather: 1, sx: 0, sy: 0, ripple: -1, flash: 0, feed: 0 });
+      ribVerts.set([2, 2, 0, 0, 0, 0, 2, 4, 0, 1, 0, 1, 4, 2, 1, 0, 1, 0, 4, 4, 1, 1, 1, 1]);
+      drawScene(1, { hx: 6, hy: 6, R: 1, holeA: .001, t: 0, dim: .001, starA: 0, spot: [0, 0, 0, 0], front: -1, feather: 1, sx: 0, sy: 0, ripple: -1, flash: 0, feed: 0, rib: 4, ribFront: 2, ribFeather: .05, ribFlare: 0, ribAlpha: .001 });
       gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
     } else if (ctx2d) {
       ctx2d.fillStyle = '#fff'; ctx2d.fillRect(0, 0, 4, 4); ctx2d.clearRect(0, 0, canvas.width, canvas.height);
@@ -372,26 +439,44 @@
     gl.bindBuffer(gl.ARRAY_BUFFER, vboDot);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, buf.subarray(0, n * FLOATS));
     const stride = FLOATS * 4;
+    gl.disableVertexAttribArray(loc.rPos); gl.disableVertexAttribArray(loc.rAx); gl.disableVertexAttribArray(loc.rUv); gl.disableVertexAttribArray(loc.quad);
     gl.enableVertexAttribArray(loc.dPos); gl.vertexAttribPointer(loc.dPos, 2, gl.FLOAT, false, stride, 0);
     gl.enableVertexAttribArray(loc.dSize); gl.vertexAttribPointer(loc.dSize, 1, gl.FLOAT, false, stride, 8);
     gl.enableVertexAttribArray(loc.dCol); gl.vertexAttribPointer(loc.dCol, 4, gl.FLOAT, false, stride, 12);
     gl.uniform2f(loc.dRes, W, H); gl.uniform1f(loc.dDpr, dpr);
     gl.drawArrays(gl.POINTS, 0, n);
   }
-  // 一幀：粉塵 → FBO，然後全螢幕透鏡 pass 把 FBO + 星空 + 黑洞 + 黑暗 + 閃光合成到畫布
+  function drawRibbon(count, u) {
+    if (!count) return;
+    gl.useProgram(progRib);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vboRib);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, ribVerts.subarray(0, count * 6));
+    gl.disableVertexAttribArray(loc.dPos); gl.disableVertexAttribArray(loc.dSize); gl.disableVertexAttribArray(loc.dCol); gl.disableVertexAttribArray(loc.quad);
+    gl.enableVertexAttribArray(loc.rPos); gl.vertexAttribPointer(loc.rPos, 2, gl.FLOAT, false, 24, 0);
+    gl.enableVertexAttribArray(loc.rAx); gl.vertexAttribPointer(loc.rAx, 2, gl.FLOAT, false, 24, 8);
+    gl.enableVertexAttribArray(loc.rUv); gl.vertexAttribPointer(loc.rUv, 2, gl.FLOAT, false, 24, 16);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, cardTex); gl.uniform1i(loc.rTex, 0);
+    gl.uniform2f(loc.rRes, W, H); gl.uniform2f(loc.rHole, u.hx, u.hy); gl.uniform1f(loc.rR, u.R);
+    gl.uniform1f(loc.rFront, u.ribFront); gl.uniform1f(loc.rFeather, u.ribFeather); gl.uniform1f(loc.rFlare, u.ribFlare);
+    gl.uniform1f(loc.rAlpha, u.ribAlpha); gl.uniform1f(loc.rTime, u.t);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, count);
+  }
+  // 一幀：絲帶 + 粉塵 → FBO，然後全螢幕透鏡 pass 把 FBO + 星空 + 黑洞 + 黑暗 + 閃光合成到畫布
   function drawScene(n, u) {
     if (stats.lens) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
       gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
       gl.enable(gl.BLEND);
+      drawRibbon(u.rib, u);
       drawDots(n);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
-    if (!stats.lens) { gl.enable(gl.BLEND); drawDots(n); return; }   // FBO 不能用：至少粉塵還在
+    if (!stats.lens) { gl.enable(gl.BLEND); drawRibbon(u.rib, u); drawDots(n); return; }   // FBO 不能用：至少絲帶與粉塵還在
     gl.disable(gl.BLEND);                                             // 透鏡 pass 直接輸出整層 (預乘)
     gl.useProgram(progLens);
-    gl.disableVertexAttribArray(loc.dSize); gl.disableVertexAttribArray(loc.dCol);
+    gl.disableVertexAttribArray(loc.dPos); gl.disableVertexAttribArray(loc.dSize); gl.disableVertexAttribArray(loc.dCol);
+    gl.disableVertexAttribArray(loc.rPos); gl.disableVertexAttribArray(loc.rAx); gl.disableVertexAttribArray(loc.rUv);
     gl.bindBuffer(gl.ARRAY_BUFFER, vboQuad);
     gl.enableVertexAttribArray(loc.quad); gl.vertexAttribPointer(loc.quad, 2, gl.FLOAT, false, 0, 0);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, fboTex); gl.uniform1i(loc.tex, 0);
@@ -403,6 +488,270 @@
     gl.uniform1f(loc.steps, Math.round(22 + 26 * quality)); gl.uniform1f(loc.rmax, 5.0 + 1.6 * quality);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.enable(gl.BLEND);
+  }
+  // 肖像貼圖上傳 (Canvas 2D 是直通色，要預乘才跟粉塵同一種混合)
+  function uploadCard(cvs) {
+    if (!gl) return;
+    gl.bindTexture(gl.TEXTURE_2D, cardTex);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cvs); } catch (e) { console.warn('[Dissolve] card texture', e); }
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  }
+
+  // ── 資料夾「肖像」：把 DOM 用 Canvas 2D 重畫一份 (量測每個元素的 rect + computed style)，交給 GPU 當貼圖 ──
+  // 只畫我們自己這個元件會用到的東西：圓角矩形背景 (純色 / 線性・放射漸層)、邊框、::before/::after、文字、
+  // 輸入框的值、核取方塊、SVG 圖示 (序列化成 image，非同步補畫)。不畫 backdrop-filter 與陰影 (消散狀態本來就關掉)。
+  // 交接時資料夾是正面朝前的 (紙打開時 rotateY≈0)，所以 rect 就是真正的位置，肖像跟 DOM 對得上。
+  let portraitCanvas = null;
+  function splitTop(s) {   // 依最外層逗號切開
+    const out = []; let depth = 0, cur = '';
+    for (const ch of s) {
+      if (ch === '(') depth++; else if (ch === ')') depth--;
+      if (ch === ',' && depth === 0) { out.push(cur.trim()); cur = ''; } else cur += ch;
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out;
+  }
+  function alphaOf(color) {
+    if (!color || color === 'transparent' || color === 'none') return 0;
+    const m = color.match(/^rgba?\(([^)]*)\)/);
+    if (!m) return 1;
+    const parts = m[1].split(/[\s,\/]+/).filter(Boolean);
+    return parts.length >= 4 ? parseFloat(parts[3]) : 1;
+  }
+  function withAlpha(color, a) {
+    const m = color.match(/^rgba?\(([^)]*)\)/);
+    if (!m) return color;
+    const p = m[1].split(/[\s,\/]+/).filter(Boolean);
+    return `rgba(${p[0]},${p[1]},${p[2]},${(p.length >= 4 ? parseFloat(p[3]) : 1) * a})`;
+  }
+  function parseStops(parts) {
+    const stops = parts.map(p => {
+      const k = p.lastIndexOf(')');
+      let c = p, pos = null;
+      if (k >= 0) { c = p.slice(0, k + 1); const rest = p.slice(k + 1).trim(); if (rest.endsWith('%')) pos = parseFloat(rest) / 100; }
+      else { const sp = p.lastIndexOf(' '); if (sp > 0 && p.slice(sp + 1).endsWith('%')) { pos = parseFloat(p.slice(sp + 1)) / 100; c = p.slice(0, sp); } }
+      return { c, pos };
+    }).filter(s => /^(rgb|hsl|#|[a-z]+$)/i.test(s.c));
+    if (stops.length && stops[0].pos === null) stops[0].pos = 0;
+    if (stops.length && stops[stops.length - 1].pos === null) stops[stops.length - 1].pos = 1;
+    for (let i = 1; i < stops.length - 1; i++) {   // 沒給位置的平均分配
+      if (stops[i].pos !== null) continue;
+      let j = i + 1; while (stops[j].pos === null) j++;
+      const a = stops[i - 1].pos, b = stops[j].pos;
+      for (let k = i; k < j; k++) stops[k].pos = a + (b - a) * (k - i + 1) / (j - i + 1);
+    }
+    return stops;
+  }
+  function makeGradient(c, str, x, y, w, h) {
+    const m = str.match(/^(linear|radial)-gradient\((.*)\)$/s);
+    if (!m) return null;
+    const parts = splitTop(m[2]);
+    if (m[1] === 'linear') {
+      let angle = Math.PI;   // 沒寫方向 = 由上往下
+      const first = parts[0];
+      if (/deg$/.test(first)) { angle = parseFloat(first) * Math.PI / 180; parts.shift(); }
+      else if (/rad$/.test(first)) { angle = parseFloat(first); parts.shift(); }
+      else if (/turn$/.test(first)) { angle = parseFloat(first) * 2 * Math.PI; parts.shift(); }
+      else if (/^to /.test(first)) {
+        let ax = 0, ay = 0;
+        for (const t of first.slice(3).split(/\s+/)) { if (t === 'right') ax = 1; else if (t === 'left') ax = -1; else if (t === 'top') ay = -1; else if (t === 'bottom') ay = 1; }
+        angle = Math.atan2(ax, -ay); parts.shift();
+      }
+      const stops = parseStops(parts); if (stops.length < 2) return null;
+      const dx = Math.sin(angle), dy = -Math.cos(angle);
+      const len = Math.abs(w * dx) + Math.abs(h * dy);
+      const cx = x + w / 2, cy = y + h / 2;
+      const g = c.createLinearGradient(cx - dx * len / 2, cy - dy * len / 2, cx + dx * len / 2, cy + dy * len / 2);
+      for (const s of stops) try { g.addColorStop(clamp(s.pos, 0, 1), s.c); } catch (_) {}
+      return g;
+    }
+    // 放射：只看「at x y」的中心，形狀與大小用半對角線近似
+    let cx = x + w / 2, cy = y + h / 2;
+    if (!/^(rgb|hsl|#|[a-z]+$)/i.test(parts[0]) || /^(circle|ellipse|closest|farthest)/.test(parts[0])) {
+      const at = parts[0].match(/at\s+([\d.]+)%\s+([\d.]+)%/);
+      if (at) { cx = x + w * parseFloat(at[1]) / 100; cy = y + h * parseFloat(at[2]) / 100; }
+      parts.shift();
+    }
+    const stops = parseStops(parts); if (stops.length < 2) return null;
+    const g = c.createRadialGradient(cx, cy, 0, cx, cy, Math.hypot(w, h) * .5);
+    for (const s of stops) try { g.addColorStop(clamp(s.pos, 0, 1), s.c); } catch (_) {}
+    return g;
+  }
+  function radiiOf(cs) { return ['borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomRightRadius', 'borderBottomLeftRadius'].map(k => parseFloat(cs[k]) || 0); }
+  function roundPath(c, x, y, w, h, r) {
+    const m = Math.max(0, Math.min(w, h) / 2);
+    const [tl, tr, br, bl] = r.map(v => clamp(v, 0, m));
+    c.beginPath();
+    c.moveTo(x + tl, y);
+    c.lineTo(x + w - tr, y); c.arcTo(x + w, y, x + w, y + tr, tr);
+    c.lineTo(x + w, y + h - br); c.arcTo(x + w, y + h, x + w - br, y + h, br);
+    c.lineTo(x + bl, y + h); c.arcTo(x, y + h, x, y + h - bl, bl);
+    c.lineTo(x, y + tl); c.arcTo(x, y, x + tl, y, tl);
+    c.closePath();
+  }
+  function drawBox(c, cs, x, y, w, h) {
+    if (w <= 0 || h <= 0) return;
+    const r = radiiOf(cs);
+    const bgs = cs.backgroundImage && cs.backgroundImage !== 'none' ? splitTop(cs.backgroundImage) : [];
+    const bc = cs.backgroundColor;
+    if (alphaOf(bc) > 0 || bgs.length) {
+      roundPath(c, x, y, w, h, r);
+      if (alphaOf(bc) > 0) { c.fillStyle = bc; c.fill(); }
+      for (let i = bgs.length - 1; i >= 0; i--) { const g = makeGradient(c, bgs[i], x, y, w, h); if (g) { c.fillStyle = g; c.fill(); } }
+    }
+    const bw = parseFloat(cs.borderTopWidth) || 0;
+    if (bw > 0 && cs.borderTopStyle !== 'none' && alphaOf(cs.borderTopColor) > 0) {
+      c.lineWidth = bw; c.strokeStyle = cs.borderTopColor;
+      roundPath(c, x + bw / 2, y + bw / 2, w - bw, h - bw, r.map(v => Math.max(0, v - bw / 2)));
+      c.stroke();
+    }
+  }
+  function fontOf(cs) { return `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`; }
+  function setFont(c, cs) {
+    c.font = fontOf(cs);
+    c.textBaseline = 'middle'; c.textAlign = 'left';
+    if ('letterSpacing' in c) { try { c.letterSpacing = cs.letterSpacing === 'normal' ? '0px' : cs.letterSpacing; } catch (_) {} }
+  }
+  function wrapLines(c, text, width) {
+    const lines = [];
+    for (const para of text.split('\n')) {
+      let i = 0;
+      if (!para) { lines.push(''); continue; }
+      while (i < para.length) {
+        let j = i + 1;
+        while (j < para.length && c.measureText(para.slice(i, j + 1)).width <= width) j++;
+        lines.push(para.slice(i, j)); i = j;
+      }
+    }
+    return lines;
+  }
+  function drawTextNodes(c, el, cs, range) {
+    let set = false;
+    for (const node of el.childNodes) {
+      if (node.nodeType !== 3) continue;
+      let text = node.nodeValue.replace(/\s+/g, ' ');
+      if (!text.trim()) continue;
+      if (cs.textTransform === 'uppercase') text = text.toUpperCase();
+      range.selectNodeContents(node);
+      const rects = Array.from(range.getClientRects()).filter(q => q.width > 0 && q.height > 0);
+      if (!rects.length) continue;
+      if (!set) { setFont(c, cs); c.fillStyle = cs.color; set = true; }
+      const t = text.trim();
+      if (rects.length === 1) { c.fillText(t, rects[0].left, rects[0].top + rects[0].height / 2); continue; }
+      let i = 0;   // 多行：依每一行的框寬用 measureText 拆字
+      for (const q of rects) {
+        let j = i + 1;
+        while (j < t.length && c.measureText(t.slice(i, j + 1)).width <= q.width + 1) j++;
+        c.fillText(t.slice(i, j), q.left, q.top + q.height / 2); i = j;
+        if (i >= t.length) break;
+      }
+    }
+  }
+  function drawSvg(c, svg, alpha, onDone) {
+    const r = svg.getBoundingClientRect();
+    if (!(r.width > 0 && r.height > 0)) return;
+    const color = getComputedStyle(svg).color;
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.setAttribute('width', String(r.width)); clone.setAttribute('height', String(r.height));
+    clone.style.color = color;
+    const src = new XMLSerializer().serializeToString(clone).replace(/currentColor/g, color);
+    const img = new Image();
+    img.onload = () => { try { c.save(); c.globalAlpha = alpha; c.drawImage(img, r.left, r.top, r.width, r.height); c.restore(); onDone(); } catch (_) {} };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(src);
+  }
+  function drawPseudo(c, el, which, r, alpha, negative) {
+    let ps;
+    try { ps = getComputedStyle(el, which); } catch (_) { return; }
+    if (!ps || ps.content === 'none' || ps.content === 'normal' || ps.display === 'none') return;
+    if (((parseInt(ps.zIndex) || 0) < 0) !== !!negative) return;   // z-index 負的畫在內容下面 (綠色材質層)
+    const op = parseFloat(ps.opacity); if (!(op > .01)) return;
+    let x = r.left, y = r.top, w = r.width, h = r.height;
+    const W = parseFloat(ps.width), Hh = parseFloat(ps.height);
+    if (ps.position === 'absolute' || ps.position === 'fixed') {
+      const L = parseFloat(ps.left), T = parseFloat(ps.top), Rr = parseFloat(ps.right), B = parseFloat(ps.bottom);
+      const bw = parseFloat(getComputedStyle(el).borderTopWidth) || 0;   // 絕對定位是相對 padding box
+      const px0 = r.left + bw, py0 = r.top + bw, pw = r.width - 2 * bw, ph = r.height - 2 * bw;
+      w = !isNaN(W) ? W : (!isNaN(L) && !isNaN(Rr) ? pw - L - Rr : pw);
+      h = !isNaN(Hh) ? Hh : (!isNaN(T) && !isNaN(B) ? ph - T - B : ph);
+      x = !isNaN(L) ? px0 + L : !isNaN(Rr) ? px0 + pw - Rr - w : px0;
+      y = !isNaN(T) ? py0 + T : !isNaN(B) ? py0 + ph - B - h : py0;
+    } else { if (!isNaN(W)) w = W; if (!isNaN(Hh)) h = Hh; }
+    if (w <= 0 || h <= 0) return;
+    c.save(); c.globalAlpha = alpha * op;
+    drawBox(c, ps, x, y, w, h);
+    c.restore();
+  }
+  function paintPortrait(root, box, warm) {   // warm：暖機用，連藏起來的紙 (visibility/opacity 0) 也畫，第一次的字型與樣式成本先付掉
+    const t0 = performance.now();
+    const pw = Math.max(1, box.r - box.l), ph = Math.max(1, box.b - box.t);
+    const scale = Math.min(dpr, 2048 / Math.max(pw, ph));
+    if (!portraitCanvas) portraitCanvas = document.createElement('canvas');
+    const cvs = portraitCanvas;
+    const nw = Math.ceil(pw * scale), nh = Math.ceil(ph * scale);
+    if (cvs.width !== nw || cvs.height !== nh) { cvs.width = nw; cvs.height = nh; }
+    const c = cvs.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, nw, nh);
+    c.setTransform(scale, 0, 0, scale, -box.l * scale, -box.t * scale);
+    const state = { canvas: cvs, dirty: false };
+    const range = document.createRange();
+    const skip = /\bfd-spine\b|\bfd-top\b/;
+    function walk(el, alpha) {
+      if (el.nodeType !== 1) return;
+      if (el instanceof SVGElement) { drawSvg(c, el, alpha, () => { state.dirty = true; }); return; }
+      if (skip.test(el.className)) return;                 // 轉過 90° 的側邊：正面看是一條線
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || (cs.visibility === 'hidden' && !warm)) return;
+      const op = parseFloat(cs.opacity); if (!(op > .01) && !warm) return;
+      alpha *= warm ? 1 : op;
+      const r = el.getBoundingClientRect();
+      c.globalAlpha = alpha;
+      drawBox(c, cs, r.left, r.top, r.width, r.height);
+      drawPseudo(c, el, '::before', r, alpha, true); drawPseudo(c, el, '::after', r, alpha, true);
+      c.globalAlpha = alpha;
+      drawPseudo(c, el, '::before', r, alpha, false);
+      c.globalAlpha = alpha;
+      const tag = el.tagName;
+      if (tag === 'INPUT' && el.type === 'checkbox') {
+        const s = Math.min(r.width, r.height), bx = r.left + (r.width - s) / 2, by = r.top + (r.height - s) / 2;
+        roundPath(c, bx, by, s, s, [3, 3, 3, 3]);
+        if (el.checked) {
+          c.fillStyle = cs.accentColor && cs.accentColor !== 'auto' ? cs.accentColor : '#6366f1'; c.fill();
+          c.strokeStyle = '#fff'; c.lineWidth = Math.max(1.5, s * .12); c.lineCap = 'round'; c.lineJoin = 'round';
+          c.beginPath(); c.moveTo(bx + s * .26, by + s * .53); c.lineTo(bx + s * .44, by + s * .72); c.lineTo(bx + s * .76, by + s * .32); c.stroke();
+        } else {
+          c.fillStyle = isLight() ? 'rgba(255,255,255,.9)' : 'rgba(255,255,255,.1)'; c.fill();
+          c.strokeStyle = withAlpha(getComputedStyle(el.parentElement).color, .6); c.lineWidth = 1.2; c.stroke();
+        }
+      } else if (tag === 'INPUT' || tag === 'TEXTAREA') {
+        const pl = parseFloat(cs.paddingLeft) || 0, pr = parseFloat(cs.paddingRight) || 0, pt = parseFloat(cs.paddingTop) || 0;
+        const has = !!el.value, text = has ? el.value : (el.placeholder || '');
+        if (text) {
+          setFont(c, cs); c.fillStyle = has ? cs.color : withAlpha(cs.color, .45);
+          c.save(); roundPath(c, r.left, r.top, r.width, r.height, radiiOf(cs)); c.clip();
+          if (tag === 'INPUT') c.fillText(text, r.left + pl, r.top + r.height / 2);
+          else {
+            const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.3;
+            const lines = wrapLines(c, text, r.width - pl - pr);
+            lines.forEach((ln, i) => c.fillText(ln, r.left + pl, r.top + pt + lh * (i + .5)));
+          }
+          c.restore();
+        }
+      } else drawTextNodes(c, el, cs, range);
+      const clip = cs.overflow !== 'visible' && r.width > 0 && r.height > 0;
+      if (clip) { c.save(); roundPath(c, r.left, r.top, r.width, r.height, radiiOf(cs)); c.clip(); }
+      for (const ch of el.children) walk(ch, alpha);
+      if (clip) c.restore();
+      c.globalAlpha = alpha;
+      drawPseudo(c, el, '::after', r, alpha, false);
+    }
+    // 六層依 z-index 排 (紙打開時前板 z-index 21 蓋在紙的底部上)，同 z 照 DOM 順序
+    const kids = Array.from(root.children).map((el, i) => ({ el, i, z: parseInt(getComputedStyle(el).zIndex) || 0 })).sort((p, q) => p.z - q.z || p.i - q.i);
+    for (const k of kids) walk(k.el, 1);
+    c.globalAlpha = 1;
+    stats.portraitMs = performance.now() - t0;
+    return state;
   }
 
   // ── 顏色：依區塊取樣資料夾原本的視覺 (玻璃白、銀、薰衣草、紫、文字、內頁) ──
@@ -545,13 +894,16 @@
     } catch (e) { return null; }
   }
 
+
   // ── 主流程 ─────────────────────────────────────────────────────────────
   function run(root, opts = {}) {
     init();
     if (running) running.cancel();
     quality = Math.min(1, quality + .12);          // 上次掉幀降過的品質慢慢還回來
     const layers = Array.from(root.children).filter(el => !el.classList.contains('fd-spine') && !el.classList.contains('fd-top'));
-    const rigid = Array.from(root.querySelectorAll('.fd-spine, .fd-top'));   // 轉過的平面，遮罩座標對不上，直接藏
+    const rigid = Array.from(root.querySelectorAll('.fd-spine, .fd-top'));   // 轉過的平面：交接時一起藏
+    root.style.setProperty('--fd-del-scale', '1');   // 交接前 DOM 不能縮 (.985)，否則肖像接手那一幀會跳一下
+    root.classList.add('fd-dissolving');            // 消散狀態的樣式 (實底色、無毛玻璃、無陰影)：DOM 與肖像都用這套
     const rr = root.getBoundingClientRect();
     const box = layers.reduce((b, el) => {
       if (getComputedStyle(el).visibility === 'hidden') return b;
@@ -562,63 +914,70 @@
     const bw = box.r - box.l, bh = box.b - box.t;
     const mobile = innerWidth < 640;
     const page = document.getElementById('page-student-files');   // 鏡頭震動：整頁一起晃
-    // 崩解鋒面：從右緣往左掃。DOM 遮罩與粒子誕生共用同一個門檻 —
-    //   threshold(x, y) = 離右緣的比例 + noise(x, y)；progress 掃過門檻，該格的 DOM 消失、同一位置生出粉塵。
-    //   DOM 端做不到逐像素雜訊，所以用一條 FEATHER 寬的漸層過渡帶，粒子 (帶雜訊) 就密集出生在這條帶裡 → ▓▒░
-    const FEATHER = Math.max(44, bw * .1);
     // 黑洞：事件視界半徑 R (px)，看得到的陰影約 1.84R、吸積盤到 6.2R。放在資料夾右上角外側一點，
-    // 粉塵要有一段看得見的流線；陰影不能出畫面
+    // 絲帶要有一段看得見的流線；陰影不能出畫面
     const R = clamp(bw * .105, 22, 58);
-    const hx = clamp(box.r - bw * .02, 2.4 * R, innerWidth - 3.2 * R);
-    const hy = clamp(box.t + bh * .2, 2.6 * R, innerHeight - 3 * R);
+    // 黑洞在卡片右上角的外側 (絲帶的前端才拉得出去)，陰影不能出畫面 (吸積盤可以被切到)
+    const hx = clamp(box.r + bw * .15, 2.2 * R, innerWidth - 2.0 * R);
+    const hy = clamp(box.t - bh * .08, 2.2 * R, innerHeight - 3 * R);
     const horizon = R * 1.7;                        // 模擬裡的吞噬半徑：透鏡會把這裡的影像推到光子環上，粉塵就在環上消失
+    // 肖像：量 DOM、畫成貼圖 (要在 fd-dissolving 套上之後量，樣式才對)；圖示是非同步補畫，補到就重傳
+    const sample = sampler(root);
+    const portrait = paintPortrait(root, box);
+    uploadCard(portrait.canvas);
 
-    // ── 生成：整本切成細格，每顆粉塵就出生在自己那一格 (一定在資料夾矩形內)，顏色取自該格所在的區塊 ──
+    // ── 絲帶的座標系：長軸 d 從卡片中心指向黑洞 (任何角度都行)，橫向 n 與它垂直；
+    //    局部座標 (u 沿長軸 0~1、v 橫向 0~1) 是卡片繞成的外框，貼圖座標另外從局部座標換回卡片矩形 (框外沒有東西) ──
+    const C0x = (box.l + box.r) / 2, C0y = (box.t + box.b) / 2;
+    const psi0 = Math.atan2(hy - C0y, hx - C0x);
+    const dX = Math.cos(psi0), dY = Math.sin(psi0), nX = -dY, nY = dX;
+    const L0 = bw * Math.abs(dX) + bh * Math.abs(dY);          // 卡片沿長軸的投影長度
+    const W0 = bw * Math.abs(nX) + bh * Math.abs(nY);          // 沿橫向的投影寬度
+    const toLocal = (x, y) => [.5 + ((x - C0x) * dX + (y - C0y) * dY) / L0, .5 + ((x - C0x) * nX + (y - C0y) * nY) / W0];
+    const toTex = (u, v) => [(C0x + (u - .5) * L0 * dX + (v - .5) * W0 * nX - box.l) / bw, (C0y + (u - .5) * L0 * dY + (v - .5) * W0 * nY - box.t) / bh];
+    // ── 粉塵格：整本切成細格，每格記住自己在卡片上的局部座標 (0~1)，交接後就跟著絲帶走；顏色取自該格所在的區塊 ──
     const AMB = mobile ? 160 : 260;                 // 暗處被拉進來的碎屑
     const target = Math.round((mobile ? 1300 : innerWidth < 1024 ? 1800 : 2400) * quality);   // 桌機 1500-3000、手機 700-1400 (掉幀會再打折)
     let rnd = .137;
     const rand = () => (rnd = (rnd * 9301 + 49297) % 233280) / 233280;
-    const sample = sampler(root);
     // 三成五的格子會多一顆，所以格距要把 1.35 倍算進去，總數才會落在目標附近
     const step = Math.max(2.2, Math.sqrt(bw * bh * 1.35 / Math.min(target, MAX - AMB)));
-    const cells = [];
-    for (let y = box.t + step / 2; y < box.b; y += step) {
-      for (let x = box.l + step / 2; x < box.r; x += step) {
+    const cols = palette();
+    let n = 0;
+    for (let y = box.t + step / 2; y < box.b && n < MAX - AMB; y += step) {
+      for (let x = box.l + step / 2; x < box.r && n < MAX - AMB; x += step) {
         const reps = rand() < .35 ? 2 : 1;           // 三成五的格子多一顆：密度不平均，才像粉塵不像網點
-        for (let k = 0; k < reps; k++) {
+        for (let k = 0; k < reps && n < MAX - AMB; k++) {
           const jx = x + (rand() - .5) * step, jy = y + (rand() - .5) * step;
           const p = sample(jx, jy, rand());
           if (p < 0) continue;
-          cells.push({ x: jx, y: jy, p, d: (box.r - jx) / bw + noise(jx, jy) * .09 + (rand() - .5) * .025 });
+          const i = n++;
+          const lc = toLocal(jx, jy); cu[i] = lc[0]; cv[i] = lc[1];
+          cn[i] = noise(jx, jy) * .035 + (rand() - .5) * .02;   // 鋒面雜訊 (跟 shader 的雜訊尺度一樣，細節不同沒關係，過渡帶會蓋掉)
+          if (quality < .999 && ((i * .618034) % 1) >= quality) { cu[i] = 9; }   // 品質打折：這一格永遠不會被鋒面掃到
+          px[i] = jx; py[i] = jy; age[i] = -1; eaten[i] = 0; born[i] = 0;
+          const roll = rand();
+          // 七成 1-2px 極細粉塵、兩成 2-3px、8% 3-4px、2% 4-5px 亮碎片
+          sz0[i] = roll < .7 ? 1 + rand() : roll < .9 ? 2 + rand() : roll < .98 ? 3 + rand() : 4 + rand();
+          const col = cols[p], bright = roll >= .98 ? 1.3 : roll >= .9 ? 1.1 : 1;
+          cr[i] = Math.min(1, col[0] * bright); cg[i] = Math.min(1, col[1] * bright); cb[i] = Math.min(1, col[2] * bright);
+          ca[i] = roll < .7 ? .5 + rand() * .32 : roll < .98 ? .72 + rand() * .25 : 1;
+          life[i] = 2600 + rand() * 600;                 // 只是保險；正常死法是進事件視界
+          delay[i] = 20 + rand() * 40;                   // 剝離後先跟著絲帶飄這麼久，才受引力影響
+          tang[i] = (rand() < .5 ? -1 : 1) * (.7 + rand() * .9);
+          vx[i] = (rand() - .5) * 26;                    // 剝離時的雜訊初速 (出生時再加上絲帶當下的速度)
+          vy[i] = (rand() - .5) * 26;
         }
       }
     }
-    cells.sort((a, b) => a.d - b.d);
-    const n = Math.min(MAX - AMB, cells.length);
-    const cols = palette();
-    for (let i = 0; i < n; i++) {
-      const c = cells[i];
-      px[i] = c.x; py[i] = c.y; age[i] = -1; eaten[i] = 0; born[i] = 0;
-      const roll = rand();
-      // 七成 1-2px 極細粉塵、兩成 2-3px、8% 3-4px、2% 4-5px 亮碎片
-      sz0[i] = roll < .7 ? 1 + rand() : roll < .9 ? 2 + rand() : roll < .98 ? 3 + rand() : 4 + rand();
-      const col = cols[c.p], bright = roll >= .98 ? 1.3 : roll >= .9 ? 1.1 : 1;
-      cr[i] = Math.min(1, col[0] * bright); cg[i] = Math.min(1, col[1] * bright); cb[i] = Math.min(1, col[2] * bright);
-      ca[i] = roll < .7 ? .5 + rand() * .32 : roll < .98 ? .72 + rand() * .25 : 1;
-      life[i] = 2600 + rand() * 600;                 // 只是保險；正常死法是進事件視界
-      delay[i] = 20 + rand() * 40;                   // 剝離後先留在原位這麼久，才受引力影響
-      tang[i] = (rand() < .5 ? -1 : 1) * (.7 + rand() * .9);
-      // 初速：幾乎不動，只有一點點雜訊 (剛剝離時要看得出是從資料夾本體長出來的)
-      vx[i] = (rand() - .5) * 26;
-      vy[i] = -(3 + rand() * 12) + (rand() - .5) * 16;
-    }
+    const nCells = n; stats.cells = n;
     // 暗處碎屑：黑洞周圍半個畫面外的一圈，300~1000ms 之間陸續被拉進來，帶點切向速度所以會繞
     const diag = Math.hypot(innerWidth, innerHeight);
-    const total = n + AMB;
-    for (let i = n; i < total; i++) {
+    const total = nCells + AMB;
+    for (let i = nCells; i < total; i++) {
       const a = rand() * 6.2832, d = diag * (.32 + rand() * .5);
       px[i] = clamp(hx + Math.cos(a) * d, -20, innerWidth + 20); py[i] = clamp(hy + Math.sin(a) * d, -20, innerHeight + 20);
-      age[i] = -1; eaten[i] = 0; born[i] = 300 + rand() * 700;
+      age[i] = -1; eaten[i] = 0; born[i] = 300 + rand() * 700; cu[i] = 9;
       sz0[i] = 1 + rand() * 1.2;
       const g = .5 + rand() * .3;
       cr[i] = g * .8; cg[i] = g * .85; cb[i] = g;
@@ -629,11 +988,60 @@
       vx[i] = -Math.sin(a) * s * tang[i]; vy[i] = Math.cos(a) * s * tang[i];
     }
 
-    const WIPE_T0 = 220, WIPE_T1 = 980, OVER = 1.14;   // progress 掃過 1 之後再多一點，雜訊最高的格子才會全剝離
+    // ── 絲帶的幾何：交接時就是卡片 (前端 E0 = 外框沿長軸的最前點、方向 psi0、長 L0、寬 W0)，之後被拉向黑洞 ──
+    const E0x = C0x + dX * L0 / 2, E0y = C0y + dY * L0 / 2;
+    const pdx = hx - E0x, pdy = hy - E0y, pd = Math.hypot(pdx, pdy);
+    const pullX = pd > 1 ? pdx / pd : dX, pullY = pd > 1 ? pdy / pd : dY;   // 拉的方向
+    const travel = pd + L0;                                            // 前端走這麼遠，尾端就進到黑洞
+    const swirl = 1;                                                   // 彎曲的方向
+    const T_SWAP = 50, T_MOVE = 330, T_PULL = 950;                     // 交接 (要趁透鏡還弱的時候，肖像接手才不會跳)、開始被拉、拉進去要多久
+    let ribCount = 0;
+    // 每幀重算絲帶：由前端往尾端積分 (方向以固定曲率往後轉)，寬度變窄、往前端漸細、疊上漣漪。
+    // 回傳幾何鋒面：從前端往回走，第一個離黑洞 ≥ 潮汐半徑的位置 (局部 u)；之前的部分已經碎成粉塵
+    function layRibbon(t, Rn) {
+      const shredNow = Math.max(8, 2.4 * Rn);                            // 潮汐半徑跟著黑洞長大：洞還小的時候不會先把角撕掉
+      const q = t < T_MOVE ? 0 : 1.15 * inCubic((t - T_MOVE) / T_PULL);   // 被拉進去的進度 (1 = 尾端到黑洞)
+      const q1 = clamp(q, 0, 1);
+      const psi1 = psi0 + swirl * .5 * q1;                              // 前端切線方向：越接近越往漩渦方向轉
+      const sp = Math.sin(Math.PI * q1) * .18 * travel * swirl;          // 側向偏移 → 螺旋路徑
+      const Ex = E0x + pullX * travel * q + nX * sp, Ey = E0y + pullY * travel * q + nY * sp;
+      const L = L0 * (1 + .45 * Math.pow(q1, 1.2));                      // 拉長 (最多 1.45 倍)
+      const sv = 1 - .45 * Math.pow(q1, .9);                             // 整體變窄
+      const taper = .6 * q1;                                             // 越靠前端越細 (義大利麵化)
+      const bend = swirl * 1.3 * Math.pow(q1, .8);                       // 沿漩渦方向彎 (弧度，整條累積)
+      const rip = .04 * q1 * W0, phase = t * .012;                       // 表面漣漪
+      const k = bend / L;
+      for (let j = 0; j <= SEG; j++) {
+        const u = j / SEG, sArc = (1 - u) * L;
+        let x, y;
+        if (Math.abs(bend) < 1e-4) { x = Ex - Math.cos(psi1) * sArc; y = Ey - Math.sin(psi1) * sArc; }
+        else { const ps = psi1 - k * sArc; x = Ex - (Math.sin(psi1) - Math.sin(ps)) / k; y = Ey + (Math.cos(psi1) - Math.cos(ps)) / k; }
+        const psi = psi1 - k * sArc;
+        const nx = -Math.sin(psi), ny = Math.cos(psi);
+        const hw = W0 * sv * (1 - taper * u * u) / 2;
+        const ro = rip * Math.sin(u * 7 + phase);
+        ribC[j * 2] = x; ribC[j * 2 + 1] = y; ribN[j * 2] = nx; ribN[j * 2 + 1] = ny; ribHW[j] = hw; ribRip[j] = ro;
+        const o = j * 12, t0c = toTex(u, 0), t1c = toTex(u, 1);
+        ribVerts[o] = x + nx * (ro - hw); ribVerts[o + 1] = y + ny * (ro - hw); ribVerts[o + 2] = u; ribVerts[o + 3] = 0; ribVerts[o + 4] = t0c[0]; ribVerts[o + 5] = t0c[1];
+        ribVerts[o + 6] = x + nx * (ro + hw); ribVerts[o + 7] = y + ny * (ro + hw); ribVerts[o + 8] = u; ribVerts[o + 9] = 1; ribVerts[o + 10] = t1c[0]; ribVerts[o + 11] = t1c[1];
+      }
+      ribCount = (SEG + 1) * 2;
+      let uf = 1.05;
+      for (let j = SEG; j >= 0; j--) {
+        const dj = Math.hypot(ribC[j * 2] - hx, ribC[j * 2 + 1] - hy);
+        if (dj >= shredNow) {
+          if (j < SEG) { const dn = Math.hypot(ribC[j * 2 + 2] - hx, ribC[j * 2 + 3] - hy); const f = clamp((shredNow - dj) / Math.min(-1e-3, dn - dj), 0, 1); uf = (j + f) / SEG; }
+          break;
+        }
+        if (j === 0) uf = -.1;
+      }
+      return { q, uf };
+    }
+
     // 引力：a = GM/(d²+soft)。最遠的粉塵離黑洞 ~600px，要在 500ms 內被拉過去，所以 GM 要夠大；
     // 加速度與速度都設上限，才不會在近距離爆掉 / 一幀衝過視界
     const GM = 1.9e9, SOFT = (R * .9) * (R * .9), AMAX = 15000, VMAX = 2800;
-    let emit = 0, alive = 0, frame = 0, t0 = 0, lastNow = 0, slow = 0, feed = 0, blasted = false;
+    let alive = 0, frame = 0, t0 = 0, lastNow = 0, slow = 0, feed = 0, blasted = false, spawnedCells = 0;
     let hidden = false, released = false, finished = false, cancelled = false;
     let collapseAt = -1, flashT = -1, hapIdx = 0, rumbled = false, settled = false;
     let resolveDone, resolveReflow, reflowed = false;
@@ -641,25 +1049,17 @@
     const reflow = new Promise(r => resolveReflow = r);
 
     stats.spawned = 0; stats.peak = 0; stats.frames = 0; stats.ms = 0; stats.masked = false;
-    root.classList.add('fd-dissolving');
     canvas.classList.add('is-running');
-    const audio = startRumble();
+    // 聲音：AudioContext 第一次建立實測要 ~140ms，別卡在按下去那一幀。平常點過按鈕就已經有 context (同步開)，
+    // 沒有的話延到下一個 tick 才建 (第一幀先畫出來)
+    let audio = (typeof audioCtx !== 'undefined' && audioCtx) ? startRumble() : null;
+    let audioPending = !audio;
     HAP.ignite();
-    const masks = layers.map(el => {                 // 在 fd-dissolving (scale .985) 套上之後才量，遮罩才對得準
-      const r = el.getBoundingClientRect();
-      return { el, k: r.width && el.offsetWidth ? r.width / el.offsetWidth : 1, right: r.right };
-    });
-    // 遮罩：to left 的 0px 在右緣。鋒面右邊全透明、左邊保留，中間 FEATHER 寬的漸層就是正在崩解的那一帶
-    function setMask(m, frontX) {
-      stats.masked = true;
-      const dRight = (m.right - frontX) / m.k;
-      const v = `linear-gradient(to left, transparent ${Math.max(0, dRight - FEATHER * .5).toFixed(1)}px, #000 ${(dRight + FEATHER * .5).toFixed(1)}px)`;
-      m.el.style.webkitMaskImage = v; m.el.style.maskImage = v;
-    }
     function restore() {
-      released = true;                        // 補位之後就別再寫遮罩了 (資料夾已經長回來)
-      for (const m of masks) { m.el.style.webkitMaskImage = ''; m.el.style.maskImage = ''; m.el.style.visibility = ''; }
+      released = true;                        // 補位之後就別再動 DOM 了 (資料夾已經長回來)
+      for (const el of layers) el.style.visibility = '';
       for (const s of rigid) { s.style.visibility = ''; s.style.opacity = ''; }
+      root.style.removeProperty('--fd-del-scale');
       root.classList.remove('fd-dissolving');
     }
     function finish(ok) {
@@ -696,11 +1096,12 @@
       if (!t0) { t0 = now; lastNow = now; }
       const t = now - t0, dtms = Math.min(48, now - lastNow); lastNow = now;
       const dt = dtms / 1000;
-      // 自適應品質：連續兩幀掉到 45fps 以下就降 (粉塵少生一些、光線行進步數減少；已經生出來的不動)
+      if (audioPending && t > 0) { audioPending = false; audio = startRumble(); }   // 第二幀才建 AudioContext (第一幀已經畫出來了)
+      // 自適應品質：連續兩幀掉到 45fps 以下就降 (光線行進步數減少；粉塵已經生出來的不動)
       if (dtms > 22) { if (++slow >= 2) { quality = Math.max(.5, quality * (dtms > 28 ? .65 : .8)); slow = 0; } } else slow = 0;
 
       // ── 階段切換 ──
-      if (collapseAt < 0 && t >= 1150 && emit >= n && (alive <= Math.max(6, stats.spawned * .03) || t > 1500)) { collapseAt = t; if (audio) audio.collapse(); HAP.collapse(); }
+      if (collapseAt < 0 && t >= 1250 && spawnedCells >= nCells && (alive <= Math.max(6, stats.spawned * .03) || t > 1600)) { collapseAt = t; if (audio) audio.collapse(); HAP.collapse(); }
       if (collapseAt >= 0 && flashT < 0 && t >= collapseAt + 150) { flashT = t; if (audio) audio.flash(); HAP.flash(); }
       if (!rumbled && t >= 280) { rumbled = true; HAP.rumble(); }
       if (HAP.ios()) while (hapIdx < IOS_TAPS.length && t >= IOS_TAPS[hapIdx] && collapseAt < 0) { HAP.tick(); hapIdx++; }
@@ -721,19 +1122,39 @@
       }
       const starA = smooth((dim / DIM - .15) / .65);
 
-      // ── 崩解鋒面：DOM 遮罩與粒子誕生同步 ──
-      const prog = t < WIPE_T0 ? 0 : easeInOut(clamp((t - WIPE_T0) / (WIPE_T1 - WIPE_T0), 0, 1)) * OVER;
-      while (t >= WIPE_T0 && emit < n && cells[emit].d <= prog) {
-        if (quality >= .999 || ((emit * .618034) % 1) < quality) { age[emit] = 0; stats.spawned++; }   // 保留比例 = quality
-        emit++;
+      // ── 交接：DOM 藏起來，絲帶從同一個位置接手 ──
+      if (!hidden && t >= T_SWAP) {
+        hidden = true; stats.masked = true;
+        for (const el of layers) el.style.visibility = 'hidden';
+        for (const s of rigid) s.style.visibility = 'hidden';
+        layRibbon(t, Rnow); ribPrev.set(ribC);
       }
-      const frontX = box.r - prog * bw;
-      if (!released) {
-        if (t >= WIPE_T0 && !hidden) for (const m of masks) setMask(m, frontX);
-        for (const s of rigid) s.style.opacity = String(Math.max(0, 1 - prog * 1.6));
-        if (prog >= OVER && !hidden) { hidden = true; for (const m of masks) m.el.style.visibility = 'hidden'; }
+      if (portrait.dirty) { portrait.dirty = false; uploadCard(portrait.canvas); }   // 圖示補畫好了
+      // ── 絲帶與鋒面 ──
+      let uFront = 1.2;
+      if (hidden) {
+        ribPrev.set(ribC);
+        const lay = layRibbon(t, Rnow);
+        // 幾何鋒面 (碰到潮汐半徑) 與時間鋒面 (900-1250 保證掃完) 取小
+        uFront = Math.min(lay.uf, 1.05 - 1.2 * easeInOut(clamp((t - 900) / 350, 0, 1)));
+        if (flashT >= 0) uFront = -1;
+        // 出生：鋒面掃過的格子在絲帶上對應的位置長出粉塵，初速 = 該處絲帶的速度 (× .7，碎片會落後) + 雜訊
+        if (attract) for (let i = 0; i < nCells; i++) {
+          if (age[i] !== -1 || cu[i] + cn[i] < uFront) continue;
+          const fj = clamp(cu[i], 0, 1) * SEG, j0 = Math.min(SEG - 1, Math.floor(fj)), f = fj - j0, a0 = j0 * 2, a1 = a0 + 2;
+          const cx = ribC[a0] + (ribC[a1] - ribC[a0]) * f, cy = ribC[a0 + 1] + (ribC[a1 + 1] - ribC[a0 + 1]) * f;
+          const nx = ribN[a0] + (ribN[a1] - ribN[a0]) * f, ny = ribN[a0 + 1] + (ribN[a1 + 1] - ribN[a0 + 1]) * f;
+          const hw = ribHW[j0] + (ribHW[j0 + 1] - ribHW[j0]) * f, ro = ribRip[j0] + (ribRip[j0 + 1] - ribRip[j0]) * f;
+          const off = ro + (cv[i] * 2 - 1) * hw;
+          px[i] = cx + nx * off; py[i] = cy + ny * off;
+          if (dt > 0) {
+            const pvx = (cx - (ribPrev[a0] + (ribPrev[a1] - ribPrev[a0]) * f)) / dt, pvy = (cy - (ribPrev[a0 + 1] + (ribPrev[a1 + 1] - ribPrev[a0 + 1]) * f)) / dt;
+            vx[i] += clamp(pvx, -VMAX, VMAX) * .7; vy[i] += clamp(pvy, -VMAX, VMAX) * .7;
+          }
+          age[i] = 0; stats.spawned++; spawnedCells++;
+        }
       }
-      for (let i = n; i < total; i++) if (age[i] === -1 && attract && t >= born[i]) { age[i] = 0; stats.spawned++; }
+      for (let i = nCells; i < total; i++) if (age[i] === -1 && attract && t >= born[i]) { age[i] = 0; stats.spawned++; }
       // 補位：崩塌閃光之後，資料夾在黑暗裡長回來，燈亮的時候已經在抽出了
       if (!reflowed && flashT >= 0 && t >= flashT + 60) { reflowed = true; resolveReflow(true); }
 
@@ -797,8 +1218,11 @@
       const [sx, sy] = shakeAt(t);
       if (page) page.style.transform = (sx || sy) ? `translate3d(${sx.toFixed(2)}px,${sy.toFixed(2)}px,0)` : '';
       const spot = [box.l - 14, box.t - 14, box.r + 14, box.b + 14];
-      const front = (hidden || released) ? -1e4 : t < WIPE_T0 ? box.r + 14 : frontX + FEATHER * .6;
-      const u = { hx, hy, R: Rnow, holeA, t: t / 1000, dim, starA, spot, front, feather: 48, sx, sy, ripple, flash, feed: feedU };
+      const front = hidden ? -1e4 : box.r + 14;      // 交接前聚光燈照著整本；之後絲帶自己會發光
+      const ribAlpha = flashT >= 0 ? Math.max(0, 1 - (t - flashT) / 200) : 1;
+      const ribFlare = hidden ? Math.exp(-(t - T_SWAP) / 110) : 0;
+      const u = { hx, hy, R: Rnow, holeA, t: t / 1000, dim, starA, spot, front, feather: 48, sx, sy, ripple, flash, feed: feedU,
+        rib: hidden && ribAlpha > 0 ? ribCount : 0, ribFront: uFront, ribFeather: .06, ribFlare, ribAlpha };
 
       // ── 畫 ──
       if (gl) {
@@ -816,6 +1240,30 @@
             c.beginPath(); c.roundRect ? c.roundRect(spot[0], spot[1], right - spot[0], spot[3] - spot[1], 22) : c.rect(spot[0], spot[1], right - spot[0], spot[3] - spot[1]); c.fill();
             c.globalCompositeOperation = 'source-over';
           }
+        }
+        if (u.rib) {                                     // 絲帶：每一段裁出四邊形，用三點仿射把整張肖像貼進去
+          const img = portrait.canvas, iw = img.width, ih = img.height;
+          c.save(); c.globalAlpha = ribAlpha;
+          for (let j = 0; j < SEG; j++) {
+            if (j / SEG > uFront) break;
+            const o = j * 12, A = [ribVerts[o], ribVerts[o + 1]], B = [ribVerts[o + 12], ribVerts[o + 13]], Cc = [ribVerts[o + 6], ribVerts[o + 7]], Dd = [ribVerts[o + 18], ribVerts[o + 19]];
+            const TA = [ribVerts[o + 4] * iw, ribVerts[o + 5] * ih], TB = [ribVerts[o + 16] * iw, ribVerts[o + 17] * ih], TC = [ribVerts[o + 10] * iw, ribVerts[o + 11] * ih];
+            // 解 [a c e; b d f]：TA→A、TB→B、TC→C
+            const det = (TB[0] - TA[0]) * (TC[1] - TA[1]) - (TC[0] - TA[0]) * (TB[1] - TA[1]);
+            if (Math.abs(det) < 1e-6) continue;
+            const a = ((B[0] - A[0]) * (TC[1] - TA[1]) - (Cc[0] - A[0]) * (TB[1] - TA[1])) / det;
+            const cc = ((Cc[0] - A[0]) * (TB[0] - TA[0]) - (B[0] - A[0]) * (TC[0] - TA[0])) / det;
+            const b = ((B[1] - A[1]) * (TC[1] - TA[1]) - (Cc[1] - A[1]) * (TB[1] - TA[1])) / det;
+            const d = ((Cc[1] - A[1]) * (TB[0] - TA[0]) - (B[1] - A[1]) * (TC[0] - TA[0])) / det;
+            const e = A[0] - a * TA[0] - cc * TA[1], f = A[1] - b * TA[0] - d * TA[1];
+            c.save();
+            c.setTransform(dpr, 0, 0, dpr, dpr * sx, dpr * sy);
+            c.beginPath(); c.moveTo(A[0], A[1]); c.lineTo(B[0], B[1]); c.lineTo(Dd[0], Dd[1]); c.lineTo(Cc[0], Cc[1]); c.closePath(); c.clip();
+            c.transform(a, b, cc, d, e, f);
+            c.drawImage(img, 0, 0);
+            c.restore();
+          }
+          c.restore(); c.setTransform(dpr, 0, 0, dpr, dpr * sx, dpr * sy);
         }
         for (let i = 0; i < w; i++) {
           const o = i * FLOATS, s = buf[o + 2];
@@ -854,13 +1302,14 @@
     return running;
   }
 
-  // 量測用：畫 frames 幀最壞情況 (黑洞全開、全黑、星空、1500 顆粉塵)，用 gl.finish() 等 GPU 做完，回傳每幀毫秒
+  // 量測用：畫 frames 幀最壞情況 (黑洞全開、全黑、星空、絲帶、1500 顆粉塵)，讀回 1 像素等 GPU 做完，回傳每幀毫秒
   function bench(frames = 30) {
     init();
     if (!gl || running) return null;
     for (let i = 0; i < 1500; i++) { const o = i * FLOATS; buf[o] = (i * 37) % W; buf[o + 1] = (i * 91) % H; buf[o + 2] = 1 + (i % 4); buf[o + 3] = buf[o + 4] = buf[o + 5] = .9; buf[o + 6] = .8; }
     const R = clamp(Math.min(W, H) * .78 * .105, 22, 58);
-    const u = { hx: W * .7, hy: H * .3, R, holeA: 1, t: 1, dim: DIM, starA: 1, spot: [W * .1, H * .3, W * .6, H * .7], front: W * .4, feather: 48, sx: 2, sy: 1, ripple: -1, flash: 0, feed: .5 };
+    ribVerts.set([W * .1, H * .35, 0, 0, 0, 0, W * .1, H * .65, 0, 1, 0, 1, W * .6, H * .3, 1, 0, 1, 0, W * .6, H * .6, 1, 1, 1, 1]);
+    const u = { hx: W * .7, hy: H * .3, R, holeA: 1, t: 1, dim: DIM, starA: 1, spot: [W * .1, H * .3, W * .6, H * .7], front: -1e4, feather: 48, sx: 2, sy: 1, ripple: -1, flash: 0, feed: .5, rib: 4, ribFront: .7, ribFeather: .06, ribFlare: 0, ribAlpha: 1 };
     const sync = () => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));   // 讀回 1 像素 = 真的等 GPU 做完 (finish 在 ANGLE 上不一定會等)
     sync();
     const a = performance.now();
@@ -870,7 +1319,7 @@
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
     return { msPerFrame: ms, px: canvas.width * canvas.height, quality, R };
   }
-  window.sfDissolve = { init, run, stats, bench, get quality() { return quality; }, set quality(v) { quality = clamp(+v || 1, .5, 1); }, get webgl() { return !!gl; }, get lens() { return stats.lens; }, get max() { return MAX; }, get running() { return !!running; } };
+  window.sfDissolve = { init, run, stats, bench, paintPortrait, get quality() { return quality; }, set quality(v) { quality = clamp(+v || 1, .5, 1); }, get webgl() { return !!gl; }, get lens() { return stats.lens; }, get max() { return MAX; }, get running() { return !!running; } };
 
   // ── 垃圾桶：清空這一床的資料 ──────────────────────────────────────────
   // 床位本身不會從房間裡消失，所以黑洞崩塌之後，同一本資料夾會以「空床」重新長回來；
