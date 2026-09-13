@@ -1,185 +1,83 @@
-/* ═══════════ 平板模式變形動畫 (tablet-transform.js) ═══════════
-   開 / 關平板模式時整個版面像變形金剛一樣拆開、掃描、重新組裝。
-   html.tb-tf 只在動畫進行中存在 (約 1.5 秒)。 */
+/* ═══════════ 平板模式無縫變形 (tablet-transform.js) ═══════════
+   開 / 關平板模式時，每個元件各自從舊位置滑到新位置，側欄從左邊展開、底部導覽列往下收。
+   html.tb-tf 只在動畫進行中存在。 */
 
-/* 動畫期間：關掉會跟 transform 打架的 CSS 動畫、以及昂貴的毛玻璃 */
+/* 動畫期間：關掉會跟位移打架的進場動畫 */
 html.tb-tf .page.active { animation: none !important; }
 html.tb-tf .tb-rail { animation: none !important; }
-html.tb-tf .sq-card, html.tb-tf .fab-empty-bed, html.tb-tf .input-overlay,
-html.tb-tf .liquid-nav::before, html.tb-tf .lens-blur {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-html.tb-tf .tb-tf-stage {
-  perspective: 1600px;
-  perspective-origin: 50% 40%;
-}
-html.tb-tf .tb-tf-piece {
-  will-change: transform, opacity;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-}
-html.tb-tf .tb-rail { perspective: 1200px; overflow: hidden; }
-html.tb-tf .tb-rail > * { will-change: transform, opacity; backface-visibility: hidden; }
+html.tb-tf .tb-rail > * { will-change: transform, opacity; }
 html.tb-tf .bottom-nav { will-change: transform, opacity; }
 
-/* ── 全螢幕覆蓋層 ── */
-.tb-tf-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9000;
-  pointer-events: none;
-  overflow: hidden;
-  --tf-c: 10, 132, 255;
-  --tf-c2: 139, 92, 246;
-  color: rgb(var(--tf-c));
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  opacity: 0;
-  transition: opacity .32s ease;
+/* ── View Transitions：所有元件的位移都用同一條緩動，慢慢滑過去 ── */
+::view-transition-group(*) {
+  animation-duration: .64s;
+  animation-timing-function: cubic-bezier(.22, 1, .36, 1);
 }
-.tb-tf-overlay.on { opacity: 1; }
-.tb-tf-overlay.off { transition-duration: .45s; }
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: .64s;
+  animation-timing-function: cubic-bezier(.22, 1, .36, 1);
+}
+/* 元件在位移途中尺寸會被拉伸，新舊快照交叉淡化把它蓋過去；不要用預設的 mix-blend-mode，
+   半透明卡片疊在一起會變亮一下 */
+::view-transition-image-pair(*) { isolation: isolate; }
+::view-transition-old(*) { mix-blend-mode: normal; }
+::view-transition-new(*) { mix-blend-mode: normal; }
 
-/* 背景暗一點 + 透視網格 (變形時的「機庫地板」) */
-.tb-tf-dim {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, .28);
+/* 側欄：新出現時整片從左邊滑進來，收掉時滑回去 (只有單邊快照時才是「出現 / 消失」) */
+::view-transition-new(tf-rail):only-child {
+  animation: tfRailIn .56s cubic-bezier(.22, 1, .36, 1) both;
 }
-body.light-mode .tb-tf-dim { background: rgba(20, 30, 60, .18); }
-.tb-tf-grid {
-  position: absolute;
-  inset: -40% -20%;
-  background-image:
-    linear-gradient(rgba(var(--tf-c), .32) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(var(--tf-c), .32) 1px, transparent 1px);
-  background-size: 48px 48px;
-  transform: perspective(900px) rotateX(58deg) translateY(-10%);
-  transform-origin: 50% 100%;
-  mask-image: radial-gradient(ellipse 80% 70% at 50% 75%, #000 10%, transparent 100%);
-  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 75%, #000 10%, transparent 100%);
-  animation: tbGridDrift 1.6s linear infinite;
-  opacity: .8;
+::view-transition-old(tf-rail):only-child {
+  animation: tfRailOut .42s cubic-bezier(.5, 0, .75, .2) both;
 }
-@keyframes tbGridDrift { from { background-position: 0 0; } to { background-position: 0 48px; } }
+@keyframes tfRailIn { from { transform: translateX(-100%); opacity: .6; } to { transform: none; opacity: 1; } }
+@keyframes tfRailOut { from { transform: none; opacity: 1; } to { transform: translateX(-100%); opacity: .6; } }
 
-/* 掃描光束：藍紫漸層豎條，橫掃整個畫面，經過的地方零件才「實體化」 */
-.tb-tf-beam {
-  position: absolute;
-  top: -10%;
-  bottom: -10%;
-  width: 220px;
-  left: 0;
-  transform: translateX(-100%);
-  background:
-    linear-gradient(90deg, transparent 0%, rgba(var(--tf-c), .06) 35%, rgba(var(--tf-c), .32) 48%, #fff 50%, rgba(var(--tf-c2), .32) 52%, rgba(var(--tf-c2), .06) 65%, transparent 100%);
-  filter: blur(.5px);
-  mix-blend-mode: screen;
-  opacity: 0;
+/* 側欄裡的每一塊：跟著側欄從左邊淡入 (由上到下錯開，delay 由 JS 產生) */
+::view-transition-new(tf-r0):only-child, ::view-transition-new(tf-r1):only-child, ::view-transition-new(tf-r2):only-child,
+::view-transition-new(tf-r3):only-child, ::view-transition-new(tf-r4):only-child, ::view-transition-new(tf-r5):only-child,
+::view-transition-new(tf-r6):only-child, ::view-transition-new(tf-r7):only-child, ::view-transition-new(tf-r8):only-child,
+::view-transition-new(tf-r9):only-child, ::view-transition-new(tf-r10):only-child, ::view-transition-new(tf-r11):only-child,
+::view-transition-new(tf-r12):only-child, ::view-transition-new(tf-r13):only-child, ::view-transition-new(tf-r14):only-child,
+::view-transition-new(tf-r15):only-child, ::view-transition-new(tf-r16):only-child, ::view-transition-new(tf-r17):only-child,
+::view-transition-new(tf-r18):only-child, ::view-transition-new(tf-r19):only-child {
+  animation-name: tfPartIn;
+  animation-duration: .48s;
+  animation-fill-mode: both;
 }
-body.light-mode .tb-tf-beam { mix-blend-mode: multiply; }
-.tb-tf-beam::after {
-  content: '';
-  position: absolute;
-  inset: 0 calc(50% - 1px);
-  background: #fff;
-  box-shadow: 0 0 18px 4px rgba(var(--tf-c), .9), 0 0 60px 12px rgba(var(--tf-c2), .5);
+::view-transition-old(tf-r0):only-child, ::view-transition-old(tf-r1):only-child, ::view-transition-old(tf-r2):only-child,
+::view-transition-old(tf-r3):only-child, ::view-transition-old(tf-r4):only-child, ::view-transition-old(tf-r5):only-child,
+::view-transition-old(tf-r6):only-child, ::view-transition-old(tf-r7):only-child, ::view-transition-old(tf-r8):only-child,
+::view-transition-old(tf-r9):only-child, ::view-transition-old(tf-r10):only-child, ::view-transition-old(tf-r11):only-child,
+::view-transition-old(tf-r12):only-child, ::view-transition-old(tf-r13):only-child, ::view-transition-old(tf-r14):only-child,
+::view-transition-old(tf-r15):only-child, ::view-transition-old(tf-r16):only-child, ::view-transition-old(tf-r17):only-child,
+::view-transition-old(tf-r18):only-child, ::view-transition-old(tf-r19):only-child {
+  animation-name: tfPartOut;
+  animation-duration: .26s;
+  animation-fill-mode: both;
 }
+@keyframes tfPartIn { from { transform: translateX(-28px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes tfPartOut { from { transform: none; opacity: 1; } to { transform: translateX(-20px); opacity: 0; } }
 
-/* 藍圖：新版面的線框，先畫線再由零件補上實體 */
-.tb-tf-bp { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.tb-tf-bp rect {
-  fill: rgba(var(--tf-c), .05);
-  stroke: rgba(var(--tf-c), .85);
-  stroke-width: 1.2;
-  vector-effect: non-scaling-stroke;
+/* 底部導覽列：往下收 / 從下面升回來 */
+::view-transition-old(tf-nav):only-child,
+::view-transition-old(tf-nav-glow):only-child {
+  animation: tfNavOut .38s cubic-bezier(.5, 0, .75, .2) both;
 }
-.tb-tf-bp line { stroke: rgba(var(--tf-c2), .55); stroke-width: 1; stroke-dasharray: 4 5; }
-.tb-tf-bp .tf-tick { stroke: rgb(var(--tf-c)); stroke-width: 2; }
+::view-transition-new(tf-nav):only-child,
+::view-transition-new(tf-nav-glow):only-child {
+  animation: tfNavIn .56s cubic-bezier(.22, 1, .36, 1) .12s both;
+}
+@keyframes tfNavOut { from { transform: none; opacity: 1; } to { transform: translateY(120%); opacity: 0; } }
+@keyframes tfNavIn { from { transform: translateY(120%); opacity: 0; } to { transform: none; opacity: 1; } }
 
-/* HUD 四角 + 文字 */
-.tb-tf-hud { position: absolute; inset: 18px; }
-.tb-tf-hud i {
-  position: absolute;
-  width: 26px;
-  height: 26px;
-  border: 2px solid rgba(var(--tf-c), .9);
-  animation: tbHudCorner .5s cubic-bezier(.16, 1, .3, 1) both;
-}
-.tb-tf-hud i:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; }
-.tb-tf-hud i:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0; }
-.tb-tf-hud i:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0; }
-.tb-tf-hud i:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0; }
-@keyframes tbHudCorner { from { transform: scale(2.4); opacity: 0; } to { transform: none; opacity: 1; } }
+/* 只在一邊存在的一般元件 (例如平板模式才有的區塊)：淡入 / 淡出即可，不要飛 */
+::view-transition-new(*):only-child { animation-name: tfFadeIn; }
+::view-transition-old(*):only-child { animation-name: tfFadeOut; }
+@keyframes tfFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tfFadeOut { from { opacity: 1; } to { opacity: 0; } }
 
-.tb-tf-title {
-  position: absolute;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  text-align: center;
-  font-size: 12px;
-  letter-spacing: 4px;
-  text-transform: uppercase;
-  padding: 8px 22px 10px;
-  border-radius: 14px;
-  background: rgba(8, 12, 24, .62);
-  border: 1px solid rgba(var(--tf-c), .35);
-  box-shadow: 0 0 24px rgba(var(--tf-c), .25);
-  opacity: .97;
-  text-shadow: 0 0 12px rgba(var(--tf-c), .8);
-}
-.tb-tf-title b { display: block; font-size: 22px; letter-spacing: 8px; margin-top: 2px; font-weight: 800; }
-.tb-tf-title b::after { content: '_'; animation: tbBlink .5s steps(2) infinite; }
-@keyframes tbBlink { to { opacity: 0; } }
-
-.tb-tf-pct {
-  position: absolute;
-  right: 42px;
-  bottom: 14px;
-  font-size: 48px;
-  font-weight: 800;
-  letter-spacing: 2px;
-  font-variant-numeric: tabular-nums;
-  text-shadow: 0 0 18px rgba(var(--tf-c), .7);
-  line-height: 1;
-}
-.tb-tf-pct small { font-size: 14px; letter-spacing: 3px; margin-left: 6px; opacity: .8; }
-
-.tb-tf-steps {
-  position: absolute;
-  left: 50%;
-  bottom: 22px;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 22px;
-  font-size: 11px;
-  letter-spacing: 3px;
-  padding: 6px 16px;
-  border-radius: 999px;
-  background: rgba(8, 12, 24, .55);
-}
-.tb-tf-steps span { opacity: .28; transition: opacity .2s, text-shadow .2s; }
-.tb-tf-steps span::before { content: '▸ '; }
-.tb-tf-steps span.lit { opacity: 1; text-shadow: 0 0 10px rgba(var(--tf-c), .9); }
-.tb-tf-steps span.done { opacity: .6; }
-.tb-tf-steps span.done::before { content: '✓ '; }
-
-/* 中央閃光：組裝完成那一下 */
-.tb-tf-flash {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, .55), rgba(var(--tf-c), .18) 35%, transparent 70%);
-  opacity: 0;
-  mix-blend-mode: screen;
-}
-
-/* 窄螢幕 (直向平板) 字小一點 */
-@media (max-width: 700px) {
-  .tb-tf-title b { font-size: 16px; letter-spacing: 5px; }
-  .tb-tf-pct { font-size: 34px; }
-  .tb-tf-steps { display: none; }
-}
 @media (prefers-reduced-motion: reduce) {
-  .tb-tf-overlay { display: none !important; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation-duration: 0s !important; }
 }
