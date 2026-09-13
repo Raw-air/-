@@ -1,0 +1,27 @@
+/* 導覽列自適應顯色 (程式在 nav-adapt.js)：
+   後面偏亮 → 白玻璃 + 深字；後面偏暗 → 深玻璃 + 亮字。
+   選擇器多掛 html body，權重 (0,3,2) 才蓋得過 body.light-mode .bottom-nav.liquid-nav (0,3,1)。 */
+html body .bottom-nav.liquid-nav.nav-on-light {
+  --nav-fill:rgba(255,255,255,.52);--nav-rim:rgba(255,255,255,.75);--nav-top:rgba(255,255,255,.95);
+  --nav-ink:rgba(28,28,32,.72);
+  --lens-fill:rgba(255,255,255,.12);--lens-ring:rgba(255,255,255,.85);
+  --rim-top:rgba(255,255,255,.8);
+  --nav-shadow:0 14px 34px rgba(0,0,0,.18),0 2px 6px rgba(0,0,0,.1);
+}
+html body .bottom-nav.liquid-nav.nav-on-dark {
+  --nav-fill:rgba(22,22,28,.5);--nav-rim:rgba(255,255,255,.18);--nav-top:rgba(255,255,255,.24);
+  --nav-ink:rgba(255,255,255,.82);
+  --lens-fill:rgba(255,255,255,.05);--lens-ring:rgba(255,255,255,.4);
+  --rim-top:rgba(255,255,255,.34);
+  --nav-shadow:0 14px 34px rgba(0,0,0,.34),0 2px 6px rgba(0,0,0,.2);
+}
+/* 選中的那顆：顏色不換，只加一圈細描邊光，在任何底上都讀得到 */
+.liquid-nav.nav-on-light .lens-item.active .nav-icon {filter:drop-shadow(0 0 1px rgba(255,255,255,.9)) drop-shadow(0 1px 4px rgba(0,0,0,.18));}
+.liquid-nav.nav-on-dark .lens-item.active .nav-icon {filter:drop-shadow(0 0 1px rgba(0,0,0,.6)) drop-shadow(0 1px 6px rgba(191,90,242,.45));}
+/* 換色要淡入，不要一下跳 */
+.liquid-nav::before {transition:background-color .45s ease,box-shadow .45s ease;}
+.liquid-nav .lens-shape {transition:transform .18s cubic-bezier(.2,.8,.2,1),background-color .45s ease;}
+.liquid-nav .nav-item,.liquid-nav .lens-item {transition:transform .2s,color .45s ease;}
+@media (prefers-reduced-motion:reduce) {
+  .liquid-nav::before,.liquid-nav .nav-item,.liquid-nav .lens-item {transition:none;}
+}
