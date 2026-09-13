@@ -4105,7 +4105,9 @@ function readExportRange(startId, endId) {
   if (start > end) return { error: '結束日期不能早於開始日期' };
   const days = Math.round((parseISODate(end) - parseISODate(start)) / 86400000) + 1;
   if (days > 16379) return { error: '日期可自由選擇，但單份 Excel 最多容納 16,379 個日期，請分段匯出。' };
-  const known = new Map(getExportColumnEntries().map(entry => [entry.iso, entry.column]));
+  // 同一天有兩個欄位 (舊式「9月12日」+ 新式 2026-09-12) 時，取第一個，跟總表 resolveAttendanceDate 同一欄
+  const known = new Map();
+  for (const entry of getExportColumnEntries()) if (!known.has(entry.iso)) known.set(entry.iso, entry.column);
   const columns = [];
   const cursor = parseISODate(start);
   for (let i=0;i<days;i++) {
