@@ -3,7 +3,7 @@
 // 側欄從左邊展開 (或收回)、底部導覽列往下收 (或升回來)。
 //   主路線：View Transitions API，每個元件給一個 view-transition-name，瀏覽器幫忙做位移 + 尺寸 + 交叉淡化
 //   備援：沒有 View Transitions 時用 FLIP (量舊 rect → 換版面 → 量新 rect → transform 從舊滑到新)
-// 切換時畫面上的文字會先變成亂碼，再一個字一個字解碼回來 (Scramble)。
+// 切換時畫面上的文字會先變成一堆怪符號像抽獎一樣狂轉，再減速、一個字一個字定格回原文 (Scramble)。
 // 只在 tablet.js 的 setTabletMode(on, animate=true) 時被呼叫；省電模式 / 減少動態就直接跳結果。
 (function () {
   const root = document.documentElement;
@@ -64,22 +64,26 @@
   const QM_SHOW = { opacity: 1, scale: '1' };
   const anim = (el, frames, opt) => { try { return el.animate(frames, Object.assign({ fill: 'both', easing: EASE, duration: DUR }, opt)); } catch (_) { return null; } };
 
-  // ══ 亂碼解碼 (切換時文字先變成亂碼，再一個字一個字變回來) ══
-  // 只改「文字節點的 nodeValue」，不插任何 span、不動 DOM 結構，所以不會重排整頁；
-  // 中文換成亂碼中文 (同樣是全形寬度，版面不會跳)，英文換英文、數字換數字。
-  // 每 45ms 才換一次字 (約 22fps)，看起來像電子訊號在跳，也不會每一格都重畫。
+  // ══ 亂碼解碼 (切換時文字先變成一堆怪符號，像抽獎轉盤一樣狂轉，再慢下來定格成原本的字) ══
+  // 只改「文字節點的 nodeValue」，不插 span、不動 DOM 結構，所以不會重排整頁。
+  // 每個字的一生：怪符號快速亂跳 → 快定格前換成亂碼中文、跳得越來越慢 (轉盤減速) → 定格成正確的字。
+  // 中文位置用「全形」符號 (＠＃Ｑ％…)，跟中文一樣寬，版面不會跳；英文數字位置用半形符號。
   // 別的程式在解碼途中改了同一段文字 (例如側欄時鐘跳分鐘)，就放掉那段不再管，不會把新文字蓋回舊的。
   const Scramble = (() => {
+    const SYM = '@#$%&*+=?!<>/~^QXZW{}[]';
+    const toFull = (s) => s.replace(/[!-~]/g, c => String.fromCharCode(c.charCodeAt(0) + 0xFEE0));
+    const POOL_SYM_FW = toFull(SYM);                       // 全形怪符號 (中文位置)
+    const POOL_SYM = SYM + '0123456789';                    // 半形怪符號 (英文數字位置)
     const POOL_CJK = '锟斤拷烫屯鎷鏈夌殑鍦版柟涓嶈兘浣犲ソ閿欒娆㈣繋璇曡瘯鐨勬槸浜嗕竴鍦ㄦ湁鍜屼汉涓粰闂佺粯瀹炵幇鍏抽敭鏁版嵁绯荤粺';
-    const POOL_UP = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const POOL_LO = 'abcdefghijklmnopqrstuvwxyz';
-    const POOL_DG = '0123456789';
     const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'CODE', 'PRE']);
-    const TICK = 45;
+    const TICK = 28;                                        // 迴圈最快多久看一次 (每個字自己決定要不要換)
     const MAX_NODES = 500;
-    const poolOf = (ch) => /[\u3400-\u9fff\uf900-\ufaff]/.test(ch) ? POOL_CJK
-      : /[A-Z]/.test(ch) ? POOL_UP : /[a-z]/.test(ch) ? POOL_LO : /[0-9]/.test(ch) ? POOL_DG : null;
+    const CJK_RE = /[\u3400-\u9fff\uf900-\ufaff]/;
+    const kindOf = (ch) => CJK_RE.test(ch) ? 2 : /[A-Za-z0-9]/.test(ch) ? 1 : 0;
     const pick = (s) => s[(Math.random() * s.length) | 0];
+    // p = 這個字從開始亂到定格走了多少 (0~1)；越接近 1 越常出現中文、換得越慢
+    const glyph = (kind, p) => kind === 2 ? (p > 0.68 && Math.random() < (p - 0.6) * 2.4 ? pick(POOL_CJK) : pick(POOL_SYM_FW)) : pick(POOL_SYM);
+    const swapGap = (p) => 26 + p * p * p * 210 + Math.random() * 18;
     const now = () => performance.now();
     const jobs = new Map();
     let raf = 0, last = 0, waiters = [];
@@ -111,11 +115,12 @@
       if (job) return job;
       if (jobs.size >= MAX_NODES) return null;
       const chars = Array.from(node.nodeValue);
-      const pools = chars.map(poolOf);
-      if (!pools.some(Boolean)) return null;               // 全是符號 / 空白，不用演
+      const kinds = chars.map(kindOf);
+      if (!kinds.some(Boolean)) return null;               // 全是符號 / 空白，不用演
       job = {
-        node, orig: node.nodeValue, written: node.nodeValue, chars, pools,
+        node, orig: node.nodeValue, written: node.nodeValue, chars, kinds,
         cur: chars.slice(),
+        nextAt: chars.map(() => 0),
         breakAt: chars.map(() => breakAt + Math.random() * 140),
         resolveAt: chars.map(() => Infinity),
       };
@@ -123,13 +128,13 @@
       start();
       return job;
     }
-    // 讓一段文字在 t0 開始由左到右解碼，spread 毫秒內解完 (每個字再加一點隨機)
+    // 讓一段文字在 t0 開始由左到右定格，spread 毫秒內全部定格 (每個字再加一點隨機，像轉盤一格格停)
     function decode(node, t0, spread) {
       const job = jobs.get(node) || add(node, now());
       if (!job) return 0;
       const n = job.chars.length;
-      for (let i = 0; i < n; i++) job.resolveAt[i] = t0 + (n > 1 ? i / (n - 1) : 0) * spread + Math.random() * 90;
-      return t0 + spread + 90;
+      for (let i = 0; i < n; i++) job.resolveAt[i] = Math.max(job.breakAt[i] + 260, t0 + (n > 1 ? i / (n - 1) : 0) * spread + Math.random() * 160);
+      return t0 + spread + 160 + 260;
     }
     function restore(job) {
       if (job.node.nodeValue === job.written && job.written !== job.orig) job.node.nodeValue = job.orig;
@@ -145,11 +150,13 @@
           if (job.node.nodeValue !== job.written || !job.node.isConnected) { jobs.delete(job.node); continue; }   // 被別人改掉了
           let out = '', pending = false;
           for (let i = 0; i < job.chars.length; i++) {
-            const pool = job.pools[i];
-            if (!pool || tn >= job.resolveAt[i]) { out += job.chars[i]; continue; }
+            const kind = job.kinds[i];
+            if (!kind || tn >= job.resolveAt[i]) { out += job.chars[i]; continue; }
             pending = true;
             if (tn < job.breakAt[i]) { out += job.chars[i]; continue; }
-            if (job.cur[i] === job.chars[i] || Math.random() < 0.55) job.cur[i] = pick(pool);
+            const span = job.resolveAt[i] - job.breakAt[i];
+            const p = span === Infinity ? 0 : Math.min(1, Math.max(0, (tn - job.breakAt[i]) / span));
+            if (tn >= job.nextAt[i]) { job.cur[i] = glyph(kind, p); job.nextAt[i] = tn + swapGap(p); }
             out += job.cur[i];
           }
           if (out !== job.written) { job.node.nodeValue = out; job.written = out; }
@@ -167,9 +174,9 @@
     }
     const idle = () => jobs.size ? new Promise(r => waiters.push(r)) : Promise.resolve();
     const breakRegion = (el, breakAt) => textNodes(el).forEach(n => add(n, breakAt));
-    // 整個區塊由上到下解碼：同一區塊裡的每段文字依序錯開
+    // 整個區塊由上到下解碼：同一區塊裡的每段文字依序錯開；字越多轉越久 (上限 max)
     function decodeRegion(el, t0, opt = {}) {
-      const step = opt.step ?? 45, perChar = opt.perChar ?? 22, min = opt.min ?? 140, max = opt.max ?? 520;
+      const step = opt.step ?? 90, perChar = opt.perChar ?? 55, min = opt.min ?? 480, max = opt.max ?? 1150;
       let end = 0;
       textNodes(el).forEach((n, k) => {
         const len = n.nodeValue.trim().length;
@@ -221,7 +228,7 @@
           if (r.bottom < 0 || r.top > innerHeight) return;
           Scramble.decodeRegion(el, T + 140 + clamp(r.top / innerHeight, 0, 1) * STAGGER * 2);
         });
-        if (on) { const rl = document.querySelector('.tb-rail'); railParts(rl).forEach((el, i) => Scramble.decodeRegion(el, T + 200 + i * 30, { max: 360 })); }
+        if (on) { const rl = document.querySelector('.tb-rail'); railParts(rl).forEach((el, i) => Scramble.decodeRegion(el, T + 200 + i * 30, { min: 420, max: 900 })); }
         if (on) {
           // 側欄是 applyFn 才建出來的，在這裡命名，瀏覽器會把它當「新出現的元件」
           rail = document.querySelector('.tb-rail');
@@ -242,7 +249,7 @@
     transition.updateCallbackDone?.catch?.(() => {});   // 分頁在背景時瀏覽器會跳過轉場，promise 會 reject，不要冒成全域錯誤
     const fuse = wait(DUR + STAGGER + 1200);
     await Promise.race([transition.finished.catch(() => {}), fuse]);
-    await Promise.race([Scramble.idle(), wait(900)]);
+    await Promise.race([Scramble.idle(), wait(1800)]);
     // 瀏覽器沒畫面時 (視窗被擋住、分頁在背景) 轉場回呼可能一直沒跑；保險絲到了就直接把狀態切過去
     if (root.classList.contains('tablet-mode') !== on) { try { transition.skipTransition?.(); } catch (_) {} applyFn(on); }
     named.forEach(el => { el.style.viewTransitionName = ''; });
@@ -278,7 +285,7 @@
         if (r.bottom < 0 || r.top > innerHeight) return;
         Scramble.decodeRegion(el, T + 120 + clamp(r.top / innerHeight, 0, 1) * STAGGER * 2);
       });
-      if (on) railParts(document.querySelector('.tb-rail')).forEach((el, i) => Scramble.decodeRegion(el, T + 160 + i * 30, { max: 360 }));
+      if (on) railParts(document.querySelector('.tb-rail')).forEach((el, i) => Scramble.decodeRegion(el, T + 160 + i * 30, { min: 420, max: 900 }));
     }
     pieces.forEach((el, i) => {
       const b = before[i];
@@ -304,7 +311,7 @@
       [nav, glow].forEach(el => el && anims.push(anim(el, [NAV_HIDE, NAV_SHOW], { duration: 480, delay: 160 })));
     }
     await wait(DUR + STAGGER + 200);
-    await Promise.race([Scramble.idle(), wait(900)]);
+    await Promise.race([Scramble.idle(), wait(1800)]);
     anims.forEach(a => { try { a?.cancel(); } catch (_) {} });
     pieces.forEach(el => { el.style.transformOrigin = ''; });
     root.classList.remove('tb-tf');
@@ -406,7 +413,7 @@
       b.style.opacity = '';
       enter(b, { opacity: 0, transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(.96)` }, { duration: SET.in, delay: d });
       const ci = cards.indexOf(b);
-      if (ci < 0) decodeEnd(Scramble.decodeRegion(b, T + d + 160, { perChar: 60, max: 420 }));   // 頁面標題
+      if (ci < 0) decodeEnd(Scramble.decodeRegion(b, T + d + 160, { perChar: 110, min: 700, max: 1200 }));   // 頁面標題
       else rows[ci].forEach((el, ii) => {
         const rd = d + SET.rowLag + ii * SET.rowStep;
         inEnd = Math.max(inEnd, rd + SET.row);
@@ -420,7 +427,7 @@
         const d = SET.railLag + i * SET.railPart;
         inEnd = Math.max(inEnd, d + 460);
         enter(el, { opacity: 0, transform: 'translateX(-14px) scale(.97)' }, { duration: 460, delay: d });
-        decodeEnd(Scramble.decodeRegion(el, T + d + 90, { max: 380 }));
+        decodeEnd(Scramble.decodeRegion(el, T + d + 90, { min: 420, max: 900 }));
       });
     }
     if (!on) {
