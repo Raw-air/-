@@ -54,6 +54,13 @@
     return out;
   };
   const wait = (ms) => new Promise(r => setTimeout(r, ms));
+  // 底部導覽列 (.bottom-nav / .bottom-nav-glow) 與 #qm-toggle 本身靠 transform: translateX(-50%) 置中。
+  // 動畫如果寫 transform 會把置中蓋掉，導覽列就會先出現在偏右、再跳 / 滑回中間。
+  // 所以這幾個只用獨立的 translate / scale 屬性做動畫 (會跟原本的 transform 疊加)。
+  const NAV_HIDE = { opacity: 0, translate: '0 120%' };
+  const NAV_SHOW = { opacity: 1, translate: '0 0' };
+  const QM_HIDE = { opacity: 0, scale: '.6' };
+  const QM_SHOW = { opacity: 1, scale: '1' };
   const anim = (el, frames, opt) => { try { return el.animate(frames, Object.assign({ fill: 'both', easing: EASE, duration: DUR }, opt)); } catch (_) { return null; } };
 
   // ── 主路線：View Transitions ──
@@ -131,7 +138,7 @@
       anims.push(anim(railOld, [{ transform: 'none' }, { transform: 'translateX(-100%)' }], { duration: 300, delay: 60 }));
       await wait(300);
     } else if (on) {
-      [nav, glow].forEach(el => el && anims.push(anim(el, [{ transform: 'none', opacity: 1 }, { transform: 'translateY(120%)', opacity: 0 }], { duration: 300 })));
+      [nav, glow].forEach(el => el && anims.push(anim(el, [NAV_SHOW, NAV_HIDE], { duration: 300 })));
       await wait(120);
     }
     applyFn(on);
@@ -157,7 +164,7 @@
         railParts(rail).forEach((el, i) => anims.push(anim(el, [{ transform: 'translateX(-24px)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 420, delay: 120 + i * 26 })));
       }
     } else {
-      [nav, glow].forEach(el => el && anims.push(anim(el, [{ transform: 'translateY(120%)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 480, delay: 160 })));
+      [nav, glow].forEach(el => el && anims.push(anim(el, [NAV_HIDE, NAV_SHOW], { duration: 480, delay: 160 })));
     }
     await wait(DUR + STAGGER + 200);
     anims.forEach(a => { try { a?.cancel(); } catch (_) {} });
@@ -217,8 +224,8 @@
       outAnims.push(leave(b, { opacity: 0, transform: 'translateY(-10px) scale(.97)' }, { duration: SET.out, delay: d }));
     });
     if (on) {
-      [nav, glow].forEach(el => el && outAnims.push(leave(el, { opacity: 0, transform: 'translateY(120%)' }, { duration: 320 })));
-      if (qm && visible(qm)) outAnims.push(leave(qm, { opacity: 0, transform: 'scale(.6)' }, { duration: 240 }));
+      [nav, glow].forEach(el => el && outAnims.push(anim(el, [NAV_SHOW, NAV_HIDE], { duration: 320, easing: OUT_EASE, fill: 'forwards' })));
+      if (qm && visible(qm)) outAnims.push(anim(qm, [QM_SHOW, QM_HIDE], { duration: 240, easing: OUT_EASE, fill: 'forwards' }));
       outEnd = Math.max(outEnd, 300);
     } else if (rail) {
       const parts = railParts(rail);
@@ -272,8 +279,8 @@
       });
     }
     if (!on) {
-      [nav, glow].forEach(el => el && enter(el, { opacity: 0, transform: 'translateY(120%)' }, { duration: 560, delay: 180, easing: 'cubic-bezier(.22, 1, .36, 1)' }));
-      if (qm) enter(qm, { opacity: 0, transform: 'scale(.6)' }, { duration: 420, delay: 380 });
+      [nav, glow].forEach(el => el && anim(el, [NAV_HIDE, NAV_SHOW], { duration: 560, delay: 180, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'backwards' }));
+      if (qm) anim(qm, [QM_HIDE, QM_SHOW], { duration: 420, delay: 380, easing: IN_EASE, fill: 'backwards' });
     }
     // 進場動畫是 fill:backwards，播完自己回到自然狀態；這裡只把暫時的內聯樣式拿掉 (不影響正在播的動畫)
     blocks.forEach(b => { b.style.transition = ''; b.style.transformOrigin = ''; });
