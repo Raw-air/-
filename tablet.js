@@ -82,10 +82,13 @@
   }
 
   function setTabletMode(on, animate) {
+    if (window.tbTransform?.running) { const t = document.getElementById('setting-tablet'); if (t) t.checked = !on; return; }
     if (typeof setPref === 'function') setPref('tablet_mode', on);
     else try { localStorage.setItem('tablet_mode', String(on)); } catch (_) {}
     const reduce = window.sfReduceMotion?.();
-    if (animate && !reduce && document.startViewTransition) document.startViewTransition(() => apply(on));
+    // 變形金剛式的拆解 → 掃描 → 組裝動畫在 tablet-transform.js；沒載到或減少動態就直接切
+    if (animate && !reduce && window.tbTransform) window.tbTransform.run(on, apply);
+    else if (animate && !reduce && document.startViewTransition) document.startViewTransition(() => apply(on));
     else apply(on);
     window.showToast?.(on ? '已開啟平板模式' : '已關閉平板模式', 'success');
   }
