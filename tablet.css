@@ -42,6 +42,8 @@ html.tablet-mode .tb-rail {
 .tb-brand img { width: 48px; height: 48px; border-radius: 14px; box-shadow: 0 6px 18px rgba(139, 92, 246, .35); }
 .tb-brand b { display: block; font-size: 20px; font-weight: 800; letter-spacing: 1px; }
 .tb-brand small { display: block; font-size: 12px; color: var(--dim); letter-spacing: 2px; margin-top: 2px; }
+/* 首頁頂部已經有大 LOGO 跟「碧苑宿舍」，側欄就不重複放，直接從時鐘開始 */
+html.tablet-mode .tb-brand { display: none; }
 
 .tb-clock {
   padding: 16px 18px;
@@ -165,13 +167,11 @@ html.tablet-mode #page-home > .home-hero {
   margin-bottom: 8px;
   border-bottom: 1px solid var(--border);
 }
-/* 側欄最上面已經有 LOGO 跟「碧苑宿舍」，首頁頂部就不再重複，只留日期與更新公告一排 */
-html.tablet-mode #page-home > .home-hero { display: flex; justify-content: space-between; padding: 8px 0 20px; }
-html.tablet-mode #page-home .home-icon,
-html.tablet-mode #page-home .home-title,
-html.tablet-mode #page-home .home-sub { display: none; }
-html.tablet-mode #page-home .home-date { order: -1; margin: 0; font-size: 15px; }
-html.tablet-mode #page-home .changelog-btn { position: static; margin: 0; }
+html.tablet-mode #page-home .home-icon { grid-row: 1 / 3; width: 84px; height: 84px; margin: 0; }
+html.tablet-mode #page-home .home-title { font-size: 44px; line-height: 1.05; margin: 0; align-self: end; }
+html.tablet-mode #page-home .home-sub { margin: 4px 0 0; align-self: start; font-size: 15px; letter-spacing: 6px; }
+html.tablet-mode #page-home .home-date { grid-column: 3; grid-row: 2; margin: 0; justify-self: end; font-size: 15px; }
+html.tablet-mode #page-home .changelog-btn { position: static; grid-column: 3; grid-row: 1; justify-self: end; margin: 0; }
 
 html.tablet-mode #page-home > p.section-label:nth-of-type(1) { grid-column: 1; grid-row: 2; margin: 16px 0 14px; }
 html.tablet-mode #page-home > #squad-grid { grid-column: 1; grid-row: 3 / span 4; }
