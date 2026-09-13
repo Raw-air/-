@@ -3,6 +3,7 @@
 // 側欄從左邊展開 (或收回)、底部導覽列往下收 (或升回來)。
 //   主路線：View Transitions API，每個元件給一個 view-transition-name，瀏覽器幫忙做位移 + 尺寸 + 交叉淡化
 //   備援：沒有 View Transitions 時用 FLIP (量舊 rect → 換版面 → 量新 rect → transform 從舊滑到新)
+// 切換時畫面上的文字會先變成亂碼，再一個字一個字解碼回來 (Scramble)。
 // 只在 tablet.js 的 setTabletMode(on, animate=true) 時被呼叫；省電模式 / 減少動態就直接跳結果。
 (function () {
   const root = document.documentElement;
@@ -63,6 +64,123 @@
   const QM_SHOW = { opacity: 1, scale: '1' };
   const anim = (el, frames, opt) => { try { return el.animate(frames, Object.assign({ fill: 'both', easing: EASE, duration: DUR }, opt)); } catch (_) { return null; } };
 
+  // ══ 亂碼解碼 (切換時文字先變成亂碼，再一個字一個字變回來) ══
+  // 只改「文字節點的 nodeValue」，不插任何 span、不動 DOM 結構，所以不會重排整頁；
+  // 中文換成亂碼中文 (同樣是全形寬度，版面不會跳)，英文換英文、數字換數字。
+  // 每 45ms 才換一次字 (約 22fps)，看起來像電子訊號在跳，也不會每一格都重畫。
+  // 別的程式在解碼途中改了同一段文字 (例如側欄時鐘跳分鐘)，就放掉那段不再管，不會把新文字蓋回舊的。
+  const Scramble = (() => {
+    const POOL_CJK = '锟斤拷烫屯鎷鏈夌殑鍦版柟涓嶈兘浣犲ソ閿欒娆㈣繋璇曡瘯鐨勬槸浜嗕竴鍦ㄦ湁鍜屼汉涓粰闂佺粯瀹炵幇鍏抽敭鏁版嵁绯荤粺';
+    const POOL_UP = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const POOL_LO = 'abcdefghijklmnopqrstuvwxyz';
+    const POOL_DG = '0123456789';
+    const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'CODE', 'PRE']);
+    const TICK = 45;
+    const MAX_NODES = 500;
+    const poolOf = (ch) => /[\u3400-\u9fff\uf900-\ufaff]/.test(ch) ? POOL_CJK
+      : /[A-Z]/.test(ch) ? POOL_UP : /[a-z]/.test(ch) ? POOL_LO : /[0-9]/.test(ch) ? POOL_DG : null;
+    const pick = (s) => s[(Math.random() * s.length) | 0];
+    const now = () => performance.now();
+    const jobs = new Map();
+    let raf = 0, last = 0, waiters = [];
+
+    // 找出某個區塊裡「看得到」的文字節點 (照文件順序)
+    function textNodes(el) {
+      if (!el) return [];
+      const out = [];
+      const okParent = new Map();
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+        acceptNode(n) {
+          if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+          const p = n.parentElement;
+          if (!p || p.closest('svg')) return NodeFilter.FILTER_REJECT;
+          if (!okParent.has(p)) {
+            let ok = !SKIP.has(p.tagName);
+            if (ok) { const cs = getComputedStyle(p); ok = cs.display !== 'none' && cs.visibility !== 'hidden'; }
+            okParent.set(p, ok);
+          }
+          return okParent.get(p) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+        },
+      });
+      while (walker.nextNode() && out.length < MAX_NODES) out.push(walker.currentNode);
+      return out;
+    }
+
+    function add(node, breakAt) {
+      let job = jobs.get(node);
+      if (job) return job;
+      if (jobs.size >= MAX_NODES) return null;
+      const chars = Array.from(node.nodeValue);
+      const pools = chars.map(poolOf);
+      if (!pools.some(Boolean)) return null;               // 全是符號 / 空白，不用演
+      job = {
+        node, orig: node.nodeValue, written: node.nodeValue, chars, pools,
+        cur: chars.slice(),
+        breakAt: chars.map(() => breakAt + Math.random() * 140),
+        resolveAt: chars.map(() => Infinity),
+      };
+      jobs.set(node, job);
+      start();
+      return job;
+    }
+    // 讓一段文字在 t0 開始由左到右解碼，spread 毫秒內解完 (每個字再加一點隨機)
+    function decode(node, t0, spread) {
+      const job = jobs.get(node) || add(node, now());
+      if (!job) return 0;
+      const n = job.chars.length;
+      for (let i = 0; i < n; i++) job.resolveAt[i] = t0 + (n > 1 ? i / (n - 1) : 0) * spread + Math.random() * 90;
+      return t0 + spread + 90;
+    }
+    function restore(job) {
+      if (job.node.nodeValue === job.written && job.written !== job.orig) job.node.nodeValue = job.orig;
+      jobs.delete(job.node);
+    }
+    function start() { if (!raf) { last = 0; raf = requestAnimationFrame(tick); } }
+    function tick(t) {
+      raf = 0;
+      if (t - last >= TICK) {
+        last = t;
+        const tn = now();
+        for (const job of jobs.values()) {
+          if (job.node.nodeValue !== job.written || !job.node.isConnected) { jobs.delete(job.node); continue; }   // 被別人改掉了
+          let out = '', pending = false;
+          for (let i = 0; i < job.chars.length; i++) {
+            const pool = job.pools[i];
+            if (!pool || tn >= job.resolveAt[i]) { out += job.chars[i]; continue; }
+            pending = true;
+            if (tn < job.breakAt[i]) { out += job.chars[i]; continue; }
+            if (job.cur[i] === job.chars[i] || Math.random() < 0.55) job.cur[i] = pick(pool);
+            out += job.cur[i];
+          }
+          if (out !== job.written) { job.node.nodeValue = out; job.written = out; }
+          if (!pending) restore(job);
+        }
+      }
+      if (jobs.size) raf = requestAnimationFrame(tick);
+      else { const w = waiters; waiters = []; w.forEach(r => r()); }
+    }
+    // 全部立刻變回原文 (保險絲：分頁在背景 rAF 不跑時也保證文字正確)
+    function finish() {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      for (const job of [...jobs.values()]) restore(job);
+      const w = waiters; waiters = []; w.forEach(r => r());
+    }
+    const idle = () => jobs.size ? new Promise(r => waiters.push(r)) : Promise.resolve();
+    const breakRegion = (el, breakAt) => textNodes(el).forEach(n => add(n, breakAt));
+    // 整個區塊由上到下解碼：同一區塊裡的每段文字依序錯開
+    function decodeRegion(el, t0, opt = {}) {
+      const step = opt.step ?? 45, perChar = opt.perChar ?? 22, min = opt.min ?? 140, max = opt.max ?? 520;
+      let end = 0;
+      textNodes(el).forEach((n, k) => {
+        const len = n.nodeValue.trim().length;
+        end = Math.max(end, decode(n, t0 + k * step, clamp(len * perChar, min, max)));
+      });
+      return end;
+    }
+    return { textNodes, add, decode, breakRegion, decodeRegion, finish, idle, restoreRegion: (el) => textNodes(el).forEach(n => { const j = jobs.get(n); if (j) restore(j); }), get size() { return jobs.size; } };
+  })();
+  window.tbScramble = Scramble;   // 方便除錯
+
   // ── 主路線：View Transitions ──
   async function runVT(on, applyFn) {
     const { pieces } = collectPieces();
@@ -95,6 +213,15 @@
     try {
       transition = document.startViewTransition(() => {
         applyFn(on);
+        // 新畫面是「活的」，所以在這裡排好解碼，交叉淡入時就會看到亂碼慢慢變回文字
+        const T = performance.now();
+        pieces.forEach(el => {
+          if (!el.isConnected) return;
+          const r = el.getBoundingClientRect();
+          if (r.bottom < 0 || r.top > innerHeight) return;
+          Scramble.decodeRegion(el, T + 140 + clamp(r.top / innerHeight, 0, 1) * STAGGER * 2);
+        });
+        if (on) { const rl = document.querySelector('.tb-rail'); railParts(rl).forEach((el, i) => Scramble.decodeRegion(el, T + 200 + i * 30, { max: 360 })); }
         if (on) {
           // 側欄是 applyFn 才建出來的，在這裡命名，瀏覽器會把它當「新出現的元件」
           rail = document.querySelector('.tb-rail');
@@ -115,6 +242,7 @@
     transition.updateCallbackDone?.catch?.(() => {});   // 分頁在背景時瀏覽器會跳過轉場，promise 會 reject，不要冒成全域錯誤
     const fuse = wait(DUR + STAGGER + 1200);
     await Promise.race([transition.finished.catch(() => {}), fuse]);
+    await Promise.race([Scramble.idle(), wait(900)]);
     // 瀏覽器沒畫面時 (視窗被擋住、分頁在背景) 轉場回呼可能一直沒跑；保險絲到了就直接把狀態切過去
     if (root.classList.contains('tablet-mode') !== on) { try { transition.skipTransition?.(); } catch (_) {} applyFn(on); }
     named.forEach(el => { el.style.viewTransitionName = ''; });
@@ -143,6 +271,15 @@
     }
     applyFn(on);
     void document.body.offsetHeight;
+    {
+      const T = performance.now();
+      pieces.forEach(el => {
+        const r = el.getBoundingClientRect();
+        if (r.bottom < 0 || r.top > innerHeight) return;
+        Scramble.decodeRegion(el, T + 120 + clamp(r.top / innerHeight, 0, 1) * STAGGER * 2);
+      });
+      if (on) railParts(document.querySelector('.tb-rail')).forEach((el, i) => Scramble.decodeRegion(el, T + 160 + i * 30, { max: 360 }));
+    }
     pieces.forEach((el, i) => {
       const b = before[i];
       if (!visible(el)) return;
@@ -167,6 +304,7 @@
       [nav, glow].forEach(el => el && anims.push(anim(el, [NAV_HIDE, NAV_SHOW], { duration: 480, delay: 160 })));
     }
     await wait(DUR + STAGGER + 200);
+    await Promise.race([Scramble.idle(), wait(900)]);
     anims.forEach(a => { try { a?.cancel(); } catch (_) {} });
     pieces.forEach(el => { el.style.transformOrigin = ''; });
     root.classList.remove('tb-tf');
@@ -222,6 +360,7 @@
       outEnd = Math.max(outEnd, d + SET.out);
       b.style.transformOrigin = '50% 50%';
       outAnims.push(leave(b, { opacity: 0, transform: 'translateY(-10px) scale(.97)' }, { duration: SET.out, delay: d }));
+      Scramble.breakRegion(b, performance.now() + d * .5);   // 淡出前先亂掉
     });
     if (on) {
       [nav, glow].forEach(el => el && outAnims.push(anim(el, [NAV_SHOW, NAV_HIDE], { duration: 320, easing: OUT_EASE, fill: 'forwards' })));
@@ -229,6 +368,7 @@
       outEnd = Math.max(outEnd, 300);
     } else if (rail) {
       const parts = railParts(rail);
+      Scramble.breakRegion(rail, performance.now());
       parts.forEach((el, i) => outAnims.push(leave(el, { opacity: 0, transform: 'translateX(-12px)' }, { duration: 200, delay: (parts.length - 1 - i) * 14 })));
       outAnims.push(leave(rail, { transform: 'translateX(-100%)', opacity: 1 }, { duration: 380, delay: 120, easing: 'cubic-bezier(.5, 0, .75, .2)' }));
       outEnd = Math.max(outEnd, 500);
@@ -252,10 +392,12 @@
     // ── ③ 進場：由上到下、左到右一個個方塊 ──
     const order = blocks.map((b, i) => i).sort((p, q) => (after[p].top - after[q].top) || (after[p].left - after[q].left));
     let inEnd = 0;
+    const T = performance.now();
+    const decodeEnd = (end) => { if (end) inEnd = Math.max(inEnd, end - T); };
     order.forEach((i, rank) => {
       const b = blocks[i];
       const a = after[i];
-      if (a.bottom < -20 || a.top > innerHeight + 20) { b.style.opacity = ''; return; }   // 新版面裡也看不到的，直接還原
+      if (a.bottom < -20 || a.top > innerHeight + 20) { b.style.opacity = ''; Scramble.restoreRegion(b); return; }   // 新版面裡也看不到的，直接還原
       const bc = center(before[i]), ac = center(a);
       const dx = clamp((bc.x - ac.x) * SET.drift, -SET.driftMax, SET.driftMax);
       const dy = clamp((bc.y - ac.y) * SET.drift, -SET.driftMax, SET.driftMax);
@@ -264,10 +406,12 @@
       b.style.opacity = '';
       enter(b, { opacity: 0, transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(.96)` }, { duration: SET.in, delay: d });
       const ci = cards.indexOf(b);
-      if (ci >= 0) rows[ci].forEach((el, ii) => {
+      if (ci < 0) decodeEnd(Scramble.decodeRegion(b, T + d + 160, { perChar: 60, max: 420 }));   // 頁面標題
+      else rows[ci].forEach((el, ii) => {
         const rd = d + SET.rowLag + ii * SET.rowStep;
         inEnd = Math.max(inEnd, rd + SET.row);
         enter(el, { opacity: 0, transform: 'translateY(6px)' }, { duration: SET.row, delay: rd });
+        decodeEnd(Scramble.decodeRegion(el, T + rd + 70));   // 這一列淡入到一半就開始解碼
       });
     });
     if (on && rail) {
@@ -276,6 +420,7 @@
         const d = SET.railLag + i * SET.railPart;
         inEnd = Math.max(inEnd, d + 460);
         enter(el, { opacity: 0, transform: 'translateX(-14px) scale(.97)' }, { duration: 460, delay: d });
+        decodeEnd(Scramble.decodeRegion(el, T + d + 90, { max: 380 }));
       });
     }
     if (!on) {
@@ -285,6 +430,8 @@
     // 進場動畫是 fill:backwards，播完自己回到自然狀態；這裡只把暫時的內聯樣式拿掉 (不影響正在播的動畫)
     blocks.forEach(b => { b.style.transition = ''; b.style.transformOrigin = ''; });
     await wait(inEnd + 60);
+    await Promise.race([Scramble.idle(), wait(400)]);
+    Scramble.finish();
     root.classList.remove('tb-tf');
     window.haptic?.('light');
     return true;
@@ -300,9 +447,11 @@
       if (!ok) await runFLIP(on, applyFn);
     } catch (err) {
       console.error(err);
+      Scramble.finish();
       root.classList.remove('tb-tf', 'vt-active');
       if (root.classList.contains('tablet-mode') !== on) applyFn(on);   // 動畫炸了也要保證狀態切過去
     }
+    Scramble.finish();
     running = false;
     return true;
   }
