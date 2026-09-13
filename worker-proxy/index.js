@@ -444,7 +444,7 @@ export default {
 
       if (url.pathname === '/api/leave-records') {
         if (request.method === 'GET') {
-          return json(await handleGetLeaveRecords(env));
+          return json(await handleGetLeaveRecords(env, url.searchParams.get('from'), url.searchParams.get('to')));
         }
         if (request.method === 'POST') {
           const data = await request.json();
@@ -1115,33 +1115,71 @@ async function handleSetupLeaveDb(parentPageId, env) {
       '房號床位': { rich_text: {} },
       '請假範圍': { date: {} },
       '處理人': { rich_text: {} },
+      '來電號碼': { phone_number: {} },
+      '來電者備註': { rich_text: {} },
       '建立時間': { created_time: {} }
     }
   }, env);
   return { success: true, LEAVE_DB_ID: db.id };
 }
 
-async function handleGetLeaveRecords(env) {
+// 舊的電話請假資料庫沒有「來電號碼 / 來電者備註」欄位：第一次寫入時自動補上 (每個 isolate 只檢查一次)
+const LEAVE_EXTRA_COLUMNS = { '來電號碼': { phone_number: {} }, '來電者備註': { rich_text: {} } };
+let _leaveColumnsReady = null;
+function ensureLeaveColumns(dbId, env) {
+  if (!_leaveColumnsReady || _leaveColumnsReady.dbId !== dbId) {
+    const promise = (async () => {
+      const db = await notion(`/databases/${dbId}`, 'GET', null, env);
+      const missing = {};
+      for (const [key, def] of Object.entries(LEAVE_EXTRA_COLUMNS)) {
+        if (!db.properties || !db.properties[key]) missing[key] = def;
+      }
+      if (Object.keys(missing).length) await notion(`/databases/${dbId}`, 'PATCH', { properties: missing }, env);
+      return true;
+    })().catch(err => { _leaveColumnsReady = null; console.warn('補電話請假欄位失敗', err); return false; });
+    _leaveColumnsReady = { dbId, promise };
+  }
+  return _leaveColumnsReady.promise;
+}
+
+const plainText = arr => (Array.isArray(arr) ? arr.map(t => t.plain_text ?? t.text?.content ?? '').join('') : '');
+
+// from / to = 來電日 YYYY-MM-DD (台灣時間)；沒給就回最新的紀錄
+async function handleGetLeaveRecords(env, from, to) {
   const dbId = env.LEAVE_DB_ID;
   if (!dbId) return [];
-  const res = await notion(`/databases/${dbId}/query`, 'POST', {
-    sorts: [{ property: '建立時間', direction: 'descending' }],
-    page_size: 50
-  }, env);
-  
-  if (!res.results) return [];
-  
-  return res.results.map(page => {
-    const props = page.properties;
+  const isDay = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '');
+  const query = { sorts: [{ timestamp: 'created_time', direction: 'descending' }], page_size: 100 };
+  if (isDay(from) && isDay(to)) {
+    const end = new Date(to + 'T00:00:00Z');
+    end.setUTCDate(end.getUTCDate() + 1);
+    query.filter = { and: [
+      { timestamp: 'created_time', created_time: { on_or_after: `${from}T00:00:00+08:00` } },
+      { timestamp: 'created_time', created_time: { before: `${end.toISOString().slice(0, 10)}T00:00:00+08:00` } },
+    ] };
+  }
+
+  const pages = [];
+  for (let i = 0; i < 10; i++) {
+    const res = await notion(`/databases/${dbId}/query`, 'POST', query, env);
+    pages.push(...(res.results || []));
+    if (!res.has_more || !res.next_cursor) break;
+    query.start_cursor = res.next_cursor;
+  }
+
+  return pages.map(page => {
+    const props = page.properties || {};
     return {
       id: page.id,
-      title: props['標題']?.title[0]?.plain_text || '',
-      name: props['姓名']?.rich_text[0]?.plain_text || '',
-      roomBed: props['房號床位']?.rich_text[0]?.plain_text || '',
+      title: plainText(props['標題']?.title),
+      name: plainText(props['姓名']?.rich_text),
+      roomBed: plainText(props['房號床位']?.rich_text),
       dateStart: props['請假範圍']?.date?.start || '',
       dateEnd: props['請假範圍']?.date?.end || '',
-      handler: props['處理人']?.rich_text[0]?.plain_text || '',
-      createdAt: props['建立時間']?.created_time || ''
+      handler: plainText(props['處理人']?.rich_text),
+      callerPhone: props['來電號碼']?.phone_number || '',
+      callerNote: plainText(props['來電者備註']?.rich_text),
+      createdAt: props['建立時間']?.created_time || page.created_time || ''
     };
   });
 }
@@ -1149,19 +1187,28 @@ async function handleGetLeaveRecords(env) {
 async function handleAddLeaveRecord(data, env) {
   const dbId = env.LEAVE_DB_ID;
   const { name, roomBed, dateStart, dateEnd, handler } = data;
+  const callerPhone = String(data.callerPhone || '').trim().slice(0, 40);
+  const callerNote = String(data.callerNote || '').trim().slice(0, 500);
   if (!dbId) throw new Error('缺少 LEAVE_DB_ID 環境變數，請在 Cloudflare 設定');
-  
-  await notion('/pages', 'POST', {
-    parent: { database_id: dbId },
-    properties: {
-      '標題': { title: [{ text: { content: `${name} 的請假申請` } }] },
-      '姓名': { rich_text: [{ text: { content: name || '' } }] },
-      '房號床位': { rich_text: [{ text: { content: roomBed || '' } }] },
-      '請假範圍': { date: { start: dateStart, end: dateEnd } },
-      '處理人': { rich_text: [{ text: { content: handler || '' } }] }
-    }
-  }, env);
-  
+
+  const hasColumns = (callerPhone || callerNote) ? await ensureLeaveColumns(dbId, env) : true;
+  const properties = {
+    '標題': { title: [{ text: { content: `${name} 的請假申請` } }] },
+    '姓名': { rich_text: [{ text: { content: name || '' } }] },
+    '房號床位': { rich_text: [{ text: { content: roomBed || '' } }] },
+    '請假範圍': { date: { start: dateStart, end: dateEnd } },
+    '處理人': { rich_text: [{ text: { content: handler || '' } }] }
+  };
+  if (hasColumns) {
+    if (callerPhone) properties['來電號碼'] = { phone_number: callerPhone };
+    if (callerNote) properties['來電者備註'] = { rich_text: [{ text: { content: callerNote } }] };
+  } else if (callerPhone || callerNote) {
+    // 補欄位失敗 (整合沒有改資料庫的權限)：至少把來電資訊寫進標題，不要弄丟
+    properties['標題'].title[0].text.content += ` (來電 ${[callerPhone, callerNote].filter(Boolean).join(' ')})`;
+  }
+
+  await notion('/pages', 'POST', { parent: { database_id: dbId }, properties }, env);
+
   return { success: true };
 }
 

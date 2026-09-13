@@ -134,7 +134,7 @@ async function verify(engine, viewport, lightMode = false) {
   assert.ok(clean.includes('這學期沒有請過假'));
   assert.ok(clean.includes('沒有未請假紀錄'));
 
-  await page.locator('.ll-back').click();
+  await page.locator('#page-leave-lookup .ll-back').click();
   await page.waitForTimeout(320);
   assert.ok(await page.locator('#page-tools').evaluate(el => el.classList.contains('active')));
 

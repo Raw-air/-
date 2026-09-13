@@ -134,5 +134,25 @@ function makeKV(){const store={};return {store,async get(k,t){const v=store[k];i
     notion.handle=realHandle;
   }
 
+  // 11. 電話請假：舊資料庫沒有來電欄位 → 第一次寫入自動補欄位；GET 回來電號碼/備註，並帶日期篩選
+  {
+    const leaveDb='id-leave-old';
+    notion.dbs[leaveDb]={title:'電話請假紀錄',parent:{page_id:'page-root'},properties:{'標題':{title:{}},'姓名':{rich_text:{}},'房號床位':{rich_text:{}},'請假範圍':{date:{}},'處理人':{rich_text:{}},'建立時間':{created_time:{}}}};
+    env.LEAVE_DB_ID=leaveDb;
+    let r=await call('/api/leave-records','POST',{name:'甲',roomBed:'B101 - A',dateStart:'2026-09-14',dateEnd:'2026-09-15',handler:'櫃台',callerPhone:'0912-345-678',callerNote:'媽媽代打'});
+    assert.equal(r.data.success,true);
+    assert.ok(notion.dbs[leaveDb].properties['來電號碼'].phone_number,'補上來電號碼欄位');assert.ok(notion.dbs[leaveDb].properties['來電者備註']);
+    const lp=Object.values(notion.pages).find(p=>p.db===leaveDb);
+    lp.props['來電號碼']={type:'phone_number',phone_number:lp.props['來電號碼'].phone_number};
+    for(const k of ['姓名','處理人','來電者備註','房號床位'])lp.props[k].rich_text=lp.props[k].rich_text.map(t=>({...t,plain_text:t.text.content}));
+    r=await call('/api/leave-records?from=2026-09-13&to=2026-09-13');
+    assert.equal(r.data.length,1);assert.equal(r.data[0].callerPhone,'0912-345-678');assert.equal(r.data[0].callerNote,'媽媽代打');assert.equal(r.data[0].name,'甲');
+    const q=notion.calls.filter(c=>c.path===`/v1/databases/${leaveDb}/query`).pop();
+    assert.deepEqual(q.body.filter.and.map(f=>Object.values(f.created_time)[0]),['2026-09-13T00:00:00+08:00','2026-09-14T00:00:00+08:00']);
+    r=await call('/api/leave-records','POST',{name:'乙',roomBed:'B101 - B',dateStart:'2026-09-14',dateEnd:'2026-09-14'});
+    assert.equal(r.data.success,true,'沒填來電資訊也能寫');
+    delete env.LEAVE_DB_ID;
+  }
+
   console.log('worker: semester state, auto date columns, error surfacing, range apply/confirm, archive/new semester, long config, 429 retry, config duplicates, confirm merge, poll split PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});

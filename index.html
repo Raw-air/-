@@ -23,16 +23,17 @@
   <meta name="theme-color" content="#151518">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=161">
-  <link rel="stylesheet" href="motion.css?v=161">
-  <link rel="stylesheet" href="folder.css?v=161">
-  <link rel="stylesheet" href="liquid-nav.css?v=161">
-  <link rel="stylesheet" href="quick-menu.css?v=161">
-  <link rel="stylesheet" href="boot-screen.css?v=161">
-  <link rel="stylesheet" href="tablet.css?v=161">
-  <link rel="stylesheet" href="tablet-transform.css?v=161">
-  <link rel="stylesheet" href="nav-adapt.css?v=161">
-  <link rel="stylesheet" href="color-mode.css?v=161">
+  <link rel="stylesheet" href="style.css?v=162">
+  <link rel="stylesheet" href="motion.css?v=162">
+  <link rel="stylesheet" href="folder.css?v=162">
+  <link rel="stylesheet" href="liquid-nav.css?v=162">
+  <link rel="stylesheet" href="quick-menu.css?v=162">
+  <link rel="stylesheet" href="boot-screen.css?v=162">
+  <link rel="stylesheet" href="tablet.css?v=162">
+  <link rel="stylesheet" href="tablet-transform.css?v=162">
+  <link rel="stylesheet" href="nav-adapt.css?v=162">
+  <link rel="stylesheet" href="color-mode.css?v=162">
+  <link rel="stylesheet" href="phone-leave.css?v=162">
   <script>
     /* 統一色系模式：用上次存的改色版樣式直接蓋上，避免開 App 先閃一次彩色 (細節見 color-mode.js) */
     try {
@@ -172,7 +173,7 @@
 
   <!-- RAWAIR OS 開機畫面 (只在第一次打開 App 時出現) -->
   <div id="rawair-boot" role="status" aria-label="系統啟動中"><div id="rb-term"></div></div>
-  <script src="boot-screen.js?v=161"></script>
+  <script src="boot-screen.js?v=162"></script>
   <div id="toast-container" class="toast-container"></div>
 
   <!-- 返回 -->
@@ -290,14 +291,32 @@
 
   <!-- ═══════════ 櫃台請假紀錄頁面 ═══════════ -->
   <div id="page-leave-records" class="page">
-    <div style="display:flex; align-items:center; margin-bottom: 16px;">
-      <button class="back-btn" style="position:static; margin-right: 12px; margin-top: 0;"
-        onclick="navigateTo('summary')">‹ 返回總表</button>
-      <h1 class="page-title" style="margin-bottom:0;"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> 電話請假紀錄</h1>
-    </div>
-    <div id="leave-records-list">
-      <!-- Javascript 會注入紀錄 -->
-    </div>
+    <header class="summary-detail-header">
+      <button type="button" class="summary-detail-back" onclick="navigateTo('tools')" aria-label="返回工具與選項">
+        <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        返回工具
+      </button>
+      <p id="pl-subtitle" class="summary-detail-date"></p>
+      <h1 tabindex="-1">電話請假紀錄</h1>
+      <p class="summary-detail-description">選一天，看那天有誰打電話來請假、用哪支電話、是本人還是家人代打。</p>
+    </header>
+    <main class="summary-detail-content">
+      <div class="pl-datebar">
+        <button type="button" class="pl-step" onclick="phoneLeaveShiftDay(-1)" aria-label="前一天">‹</button>
+        <label class="pl-date-pick">
+          <span id="pl-date-label"></span>
+          <input type="date" id="pl-date" aria-label="選擇來電日期" onchange="phoneLeaveSetDay(this.value)">
+        </label>
+        <button type="button" class="pl-step" onclick="phoneLeaveShiftDay(1)" aria-label="後一天">›</button>
+        <button type="button" class="pl-today" onclick="phoneLeaveSetDay('')">今天</button>
+      </div>
+      <div id="pl-calendar"></div>
+      <div class="ll-search-box pl-filter">
+        <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="pl-filter" aria-label="在這天的紀錄中搜尋" placeholder="在這天找姓名／房號／電話／備註" autocomplete="off" oninput="phoneLeaveRenderList()" />
+      </div>
+      <div id="leave-records-list"></div>
+    </main>
   </div>
 
   <!-- ═══════════ 個人請假查詢 ═══════════ -->
@@ -483,7 +502,7 @@
         <h3 style="margin:0;"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> 櫃台請假填寫</h3>
         <button
           style="background:var(--dim); padding:6px 12px; border:none; border-radius:8px; color:white; font-size:12px; cursor:pointer;"
-          onclick="closeModal('counter-leave-modal'); navigateTo('leave-records'); renderLeaveRecordsList();"><svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>
+          onclick="viewLeaveRecords()"><svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>
           歷史紀錄</button>
       </div>
       <p class="modal-desc">搜尋學生並快速設定點名表請假區間。</p>
@@ -497,6 +516,18 @@
         <select id="cl-target" class="styled-select">
           <option value="">請先搜尋上方欄位...</option>
         </select>
+
+        <label style="margin-top: 12px;"><svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> 來電號碼</label>
+        <input type="tel" id="cl-caller-phone" class="styled-input" placeholder="例如：0912-345-678 (沒顯示號碼可留空)" autocomplete="off" inputmode="tel" maxlength="40">
+
+        <label style="margin-top: 12px;">誰打來的 / 備註</label>
+        <input type="text" id="cl-caller-note" class="styled-input" placeholder="例如：本人、媽媽代打、室友幫忙請" autocomplete="off" maxlength="500">
+        <div class="pl-note-chips" role="group" aria-label="快速填入來電者">
+          <button type="button" onclick="pickCallerNote('本人')">本人</button>
+          <button type="button" onclick="pickCallerNote('家長')">家長</button>
+          <button type="button" onclick="pickCallerNote('室友')">室友</button>
+          <button type="button" onclick="pickCallerNote('同學')">同學</button>
+        </div>
 
         <label style="margin-top: 12px;">處理櫃檯名稱 / 幹部姓名</label>
         <input type="text" id="cl-handler" class="styled-input" placeholder="例如：110A 小明" autocomplete="off">
@@ -641,6 +672,16 @@
       <div class="eb-content">
         <span class="eb-title" style="color:var(--green)">櫃台請假填寫</span>
         <span class="eb-desc">電話通報請假，自動更新總表紀錄</span>
+      </div>
+      <span class="eb-arrow">›</span>
+    </button>
+
+    <!-- 電話請假紀錄 (依來電日期查) -->
+    <button class="empty-bed-action" onclick="openPhoneLeaveRecords()">
+      <span class="eb-icon"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg></span>
+      <div class="eb-content">
+        <span class="eb-title" style="color:var(--blue)">電話請假紀錄</span>
+        <span class="eb-desc">選日期，看那天誰打來、哪支電話、本人還是代打</span>
       </div>
       <span class="eb-arrow">›</span>
     </button>
@@ -1694,20 +1735,21 @@
     <button type="button" class="nav-item" data-page="settings"><span class="nav-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-label">設定</span></button>
   </nav>
 
-  <script src="config.js?v=161"></script>
-  <script src="api.js?v=161"></script>
-  <script src="phonetic-search.js?v=161"></script>
-  <script src="app.js?v=161"></script>
-  <script src="import.js?v=161"></script>
-  <script src="theme.js?v=161"></script>
-  <script src="carousel.js?v=161"></script>
-  <script src="dissolve.js?v=161"></script>
-  <script src="navigation.js?v=161"></script>
-  <script src="nav-adapt.js?v=161"></script>
-  <script src="quick-menu.js?v=161"></script>
-  <script src="tablet.js?v=161"></script>
-  <script src="color-mode.js?v=161"></script>
-  <script src="tablet-transform.js?v=161"></script>
+  <script src="config.js?v=162"></script>
+  <script src="api.js?v=162"></script>
+  <script src="phonetic-search.js?v=162"></script>
+  <script src="app.js?v=162"></script>
+  <script src="import.js?v=162"></script>
+  <script src="theme.js?v=162"></script>
+  <script src="carousel.js?v=162"></script>
+  <script src="dissolve.js?v=162"></script>
+  <script src="navigation.js?v=162"></script>
+  <script src="nav-adapt.js?v=162"></script>
+  <script src="quick-menu.js?v=162"></script>
+  <script src="tablet.js?v=162"></script>
+  <script src="color-mode.js?v=162"></script>
+  <script src="tablet-transform.js?v=162"></script>
+  <script src="phone-leave.js?v=162"></script>
 
   <!-- 幹部工作手冊 Modal -->
   <div id="duty-manual-modal" class="modal-overlay">

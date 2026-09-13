@@ -1480,6 +1480,7 @@ function renderCurrentPage(skipAnimation = false) {
     case 'settings': renderSettings(); break;
     case 'resident-management': initResidentManagement(false); break;
     case 'leave-lookup': renderLeaveLookup(); break;
+    case 'leave-records': if (typeof window.phoneLeaveRender === 'function') window.phoneLeaveRender(); break;
     case 'customize': renderCustomizePage(); break;
   }
 }
@@ -5000,6 +5001,10 @@ window.rejectResidentAddReq = rejectResidentAddReq;
 function openCounterLeaveModal() {
   document.getElementById('cl-search').value = '';
   document.getElementById('cl-handler').value = '';
+  const phoneInput = document.getElementById('cl-caller-phone');
+  const noteInput = document.getElementById('cl-caller-note');
+  if (phoneInput) phoneInput.value = '';
+  if (noteInput) noteInput.value = '';
 
   const today = localTodayISO();
   document.getElementById('cl-start-date').value = today;
@@ -5036,8 +5041,7 @@ function handleCounterLeaveSearch() {
 
 function viewLeaveRecords() {
   closeModal('counter-leave-modal');
-  navigateTo('leave-records');
-  renderLeaveRecordsList();
+  window.openPhoneLeaveRecords(); // phone-leave.js：依來電日期查看的電話請假紀錄頁
 }
 
 // 請假紀錄的建立時間：2026/09/12 22:02，無效日期就留白
@@ -5048,44 +5052,14 @@ function formatLeaveStamp(value) {
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-async function renderLeaveRecordsList() {
-  const container = document.getElementById('leave-records-list');
-  if (!container) return;
-
-  container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">讀取中...</div>';
-
-  try {
-    const res = await fetch(CONFIG.WORKER_URL + '/api/leave-records');
-    if (!res.ok) throw new Error('API 回應錯誤');
-    const records = await res.json();
-
-    if (!records || records.length === 0) {
-      container.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">目前沒有任何電話請假紀錄。<br><br><small style="color:var(--red);">若您確定有新增過，可能是 Cloudflare 中尚未設定 LEAVE_DB_ID，請至開發者區初始化資料庫並將 ID 填入 Cloudflare 環境變數。</small></div>';
-      return;
-    }
-
-    container.innerHTML = records.map(r => `
-      <div style="background:var(--card);border:1px solid var(--border);padding:16px;border-radius:12px;margin-bottom:12px;">
-        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;">
-          <div style="font-size:16px;font-weight:bold;color:var(--text);">${r.title}</div>
-          <div style="font-size:12px;color:var(--dim);white-space:nowrap;flex:0 0 auto;margin-left:10px;">${formatLeaveStamp(r.createdAt)}</div>
-        </div>
-        <div style="font-size:14px;color:var(--dim);margin-bottom:4px;"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg> ${r.roomBed} ${r.name}</div>
-        <div style="font-size:14px;color:var(--dim);margin-bottom:4px;"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg> ${r.dateStart} ~ ${r.dateEnd}</div>
-        <div style="font-size:14px;color:var(--dim);"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> 處理人：${r.handler || '未填寫'}</div>
-      </div>
-    `).join('');
-  } catch (err) {
-    container.innerHTML = `<div style="color:#f87171;text-align:center;padding:20px;">載入失敗：${err.message}</div>`;
-  }
-}
-
 async function submitCounterLeave() {
   if (state.viewSemester) { showToast(`正在查看封存學期 ${state.viewSemester}，不能登記請假`, 'error'); return; }
   const targetId = document.getElementById('cl-target').value;
   const startDateStr = document.getElementById('cl-start-date').value;
   const endDateStr = document.getElementById('cl-end-date').value;
   const handler = document.getElementById('cl-handler').value.trim();
+  const callerPhone = (document.getElementById('cl-caller-phone')?.value || '').trim();
+  const callerNote = (document.getElementById('cl-caller-note')?.value || '').trim();
 
   if (!targetId) {
     playClickSound('dev_error');
@@ -5161,9 +5135,13 @@ async function submitCounterLeave() {
         roomBed: `${student.room} - ${student.bed}`,
         dateStart: startDateStr,
         dateEnd: endDateStr,
-        handler: handler
+        handler: handler,
+        callerPhone,
+        callerNote
       })
     });
+    _llRecordsCache = null; // 下次查個人請假時重抓
+    if (typeof window.phoneLeaveInvalidate === 'function') window.phoneLeaveInvalidate();
 
     // 若 worker 回傳 500 表示可能未設定環境變數
     if (!leaveAddRes.ok) {
@@ -5190,7 +5168,13 @@ window.openCounterLeaveModal = openCounterLeaveModal;
 window.handleCounterLeaveSearch = handleCounterLeaveSearch;
 window.submitCounterLeave = submitCounterLeave;
 window.viewLeaveRecords = viewLeaveRecords;
-window.renderLeaveRecordsList = renderLeaveRecordsList;
+window.pickCallerNote = function pickCallerNote(text) {
+  const input = document.getElementById('cl-caller-note');
+  if (!input) return;
+  const rest = input.value.replace(/^(本人|家長|室友|同學)\s*/, '');
+  input.value = rest ? `${text} ${rest}` : text;
+  input.focus();
+};
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 個人請假查詢：挑一位住宿生，看他這學期每一天的請假狀況
@@ -5394,6 +5378,7 @@ function renderLeaveLookupRecords() {
       <div class="summary-detail-row-main">
         <strong>${sfEsc(r.dateStart || '')} ～ ${sfEsc(r.dateEnd || '')}</strong>
         <span>處理人：${sfEsc(r.handler || '未填寫')}${r.createdAt ? ' ・ 登記於 ' + sfEsc(formatLeaveStamp(r.createdAt)) : ''}</span>
+        ${(r.callerPhone || r.callerNote) ? `<span>來電：${sfEsc([r.callerPhone, r.callerNote].filter(Boolean).join(' ・ '))}</span>` : ''}
       </div>
       <span class="summary-detail-status leave">通報</span>
     </li>`).join('')}</ul>
