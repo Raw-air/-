@@ -1694,9 +1694,7 @@ function toggleDatePicker() {
     btn.classList.add('open');
     document.querySelectorAll('#submit-btn, .fab-empty-bed').forEach(el => el.classList.add('date-picker-hidden'));
     btn.setAttribute('aria-expanded', 'true');
-    const input = document.getElementById('rc-date-input');
-    input.focus();
-    try { input.showPicker?.(); } catch (_) { /* Native input remains usable on Safari. */ }
+    // 不自動彈出原生日曆：使用者點日期欄位時才開。
   }
 }
 
