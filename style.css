@@ -4649,10 +4649,19 @@ body.light-mode .repair-textarea {
 }
 
 /* \u5168\u767d\u6a21\u5f0f\u9069\u914d */
+/* 全白模式：跟旁邊的 .sq-card 同款白色毛玻璃。不用 --neu-out，它的白色反光在首頁背景照片上會變成一圈霧白光暈 */
 body.light-mode .feedback-pill {
-  border-color: rgba(0, 0, 0, 0.1);
-  background: rgba(255, 255, 255, 0.5);
-  box-shadow: var(--neu-out);
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  color: #4a5256;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+body.light-mode .feedback-pill:hover {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(0, 0, 0, 0.14);
+  color: var(--text);
 }
 body.light-mode .feedback-send-btn {
   --neutral-1: #e8e8e8;

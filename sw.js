@@ -1,9 +1,9 @@
 // Atomic shell cache: HTML and JS must always come from the same release.
-const CACHE_NAME = 'biyuan-v118';
-const ASSETS = ['./', './index.html', './style.css?v=155', './phonetic-search.js?v=155', './app.js?v=155', './import.js?v=155',
-  './api.js?v=155', './config.js?v=155', './theme.js?v=155',
-  './carousel.js?v=155', './navigation.js?v=155', './motion.css?v=155', './liquid-nav.css?v=155', './folder.css?v=155', './dissolve.js?v=155',
-  './quick-menu.css?v=155', './quick-menu.js?v=155', './boot-screen.css?v=155', './boot-screen.js?v=155', './tablet.css?v=155', './tablet.js?v=155', './tablet-transform.css?v=155', './tablet-transform.js?v=155', './color-mode.css?v=155', './color-mode.js?v=155'];
+const CACHE_NAME = 'biyuan-v119';
+const ASSETS = ['./', './index.html', './style.css?v=156', './phonetic-search.js?v=156', './app.js?v=156', './import.js?v=156',
+  './api.js?v=156', './config.js?v=156', './theme.js?v=156',
+  './carousel.js?v=156', './navigation.js?v=156', './motion.css?v=156', './liquid-nav.css?v=156', './folder.css?v=156', './dissolve.js?v=156',
+  './quick-menu.css?v=156', './quick-menu.js?v=156', './boot-screen.css?v=156', './boot-screen.js?v=156', './tablet.css?v=156', './tablet.js?v=156', './tablet-transform.css?v=156', './tablet-transform.js?v=156', './color-mode.css?v=156', './color-mode.js?v=156'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
