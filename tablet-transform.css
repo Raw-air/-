@@ -2,11 +2,38 @@
    開 / 關平板模式時，每個元件各自從舊位置滑到新位置，側欄從左邊展開、底部導覽列往下收。
    html.tb-tf 只在動畫進行中存在。 */
 
-/* 動畫期間：關掉會跟位移打架的進場動畫 */
-html.tb-tf .page.active { animation: none !important; }
-html.tb-tf .tb-rail { animation: none !important; }
+/* 動畫期間 (注意：不要在這裡用 class 把 .page.active / .tb-rail 的 CSS 動畫關掉，
+   class 一拿掉那些動畫會重播一次，結尾就會卡一下；JS 改用內聯 animation:none 且不還原) */
 html.tb-tf .tb-rail > * { will-change: transform, opacity; }
 html.tb-tf .bottom-nav { will-change: transform, opacity; }
+
+/* ── 設定頁專屬編排 (tablet-transform.js runSettings) ── */
+/* 漣漪：從你按的那一列擴散出去的兩圈波紋 */
+.tf-ripple { position: fixed; z-index: 8000; pointer-events: none; width: 0; height: 0; }
+.tf-ripple i {
+  position: absolute;
+  left: 0; top: 0;
+  width: 0; height: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--tf-ripple-c, #0a84ff);
+  box-shadow: 0 0 24px 0 color-mix(in srgb, var(--tf-ripple-c, #0a84ff) 45%, transparent), inset 0 0 40px 0 color-mix(in srgb, var(--tf-ripple-c, #0a84ff) 12%, transparent);
+  transform: translate(-50%, -50%);
+  opacity: 0;
+}
+.tf-ripple i:nth-child(2) { border-width: 1px; }
+/* 溶解期間的卡片外殼：邊框微微亮起，表示「等待重建」 */
+.tf-shell { will-change: transform; }
+.settings-card.tf-shell { border-color: color-mix(in srgb, var(--blue) 45%, var(--border)) !important; overflow: hidden; }
+/* 建設時掃過卡片的一道光 */
+.tf-sheen {
+  position: absolute;
+  inset: -20% -30%;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, .13) 50%, transparent 65%);
+  opacity: 0;
+  will-change: transform, opacity;
+}
+body.light-mode .tf-sheen { background: linear-gradient(105deg, transparent 35%, rgba(10, 132, 255, .12) 50%, transparent 65%); }
 
 /* ── View Transitions：所有元件的位移都用同一條緩動，慢慢滑過去 ── */
 ::view-transition-group(*) {

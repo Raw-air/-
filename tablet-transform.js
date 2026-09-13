@@ -166,13 +166,171 @@
     return true;
   }
 
+  // ══ 設定頁專屬編排 (開關就在這一頁，所以這頁要做到最好) ══
+  //   ① 漣漪：從你按的那一列發出一圈波紋，波紋掃到哪，卡片裡的內容就一列列溶解，只留下卡片外殼
+  //   ② 移動：外殼 (空的，沒有文字所以不會拉伸變形) 滑到新版面的位置，側欄從左邊推進來
+  //   ③ 建設：從開關附近開始，每張卡片依序把標題、一列列內容長回來，卡片上掃過一道光；
+  //          側欄的時鐘、導覽鈕、工具鈕一個個長出來
+  const SET = {
+    dissolve: 200, dissolveRow: 18, dissolveSpread: 170,   // ① 溶解每列時間 / 列與列錯開 / 由近到遠最多錯開
+    move: 680, moveSpread: 120,                              // ② 外殼位移時間 / 由近到遠錯開
+    buildStart: 300,                                         // ③ 位移開始後多久開始建設 (重疊才順)
+    build: 460, buildRow: 36, buildCard: 70,                 // ③ 每列長出來時間 / 列錯開 / 卡片錯開
+    railIn: 560, railPart: 44,
+  };
+  const OUT_EASE = 'cubic-bezier(.4, 0, 1, 1)';
+  const IN_EASE = 'cubic-bezier(.16, 1, .3, 1)';
+
+  function ripple(x, y, radius, color) {
+    const wrap = document.createElement('div');
+    wrap.className = 'tf-ripple';
+    wrap.style.cssText = `left:${x}px;top:${y}px;--tf-ripple-c:${color}`;
+    wrap.innerHTML = '<i></i><i></i>';
+    document.body.appendChild(wrap);
+    const size = radius * 2.2;
+    [...wrap.children].forEach((ring, i) => {
+      ring.animate([
+        { width: '0px', height: '0px', opacity: .9 },
+        { width: `${size}px`, height: `${size}px`, opacity: 0 },
+      ], { duration: 820 + i * 120, delay: i * 130, easing: 'cubic-bezier(.2, .6, .3, 1)', fill: 'forwards' });
+    });
+    return wrap;
+  }
+  function sheen(card, delay) {
+    const s = document.createElement('i');
+    s.className = 'tf-sheen';
+    if (getComputedStyle(card).position === 'static') card.style.position = 'relative';
+    card.appendChild(s);
+    const a = s.animate([{ transform: 'translateX(-110%) skewX(-14deg)', opacity: 0 }, { opacity: 1, offset: .3 }, { transform: 'translateX(110%) skewX(-14deg)', opacity: 0 }],
+      { duration: 720, delay, easing: 'cubic-bezier(.3, 0, .2, 1)', fill: 'both' });
+    return { el: s, a };
+  }
+
+  async function runSettings(on, applyFn) {
+    const page = document.getElementById('page-settings');
+    if (!page || !page.classList.contains('active') || !visible(page)) return false;
+    const toggle = document.getElementById('setting-tablet');
+    const anchor = toggle?.closest('.setting-row') || toggle || page;
+    const title = page.querySelector(':scope > .page-title');
+    // 所有卡片都要參與 (包含還在螢幕下方看不到的)，換成兩欄後它們會進到畫面裡，也要跟著滑進來、長出來
+    const cards = [...page.querySelectorAll(':scope > .settings-card')].filter(c => getComputedStyle(c).display !== 'none');
+    if (!cards.length) return false;
+    const shells = [title, ...cards].filter(Boolean);
+    const items = cards.map(c => [...c.children].filter(el => el.nodeType === 1 && getComputedStyle(el).display !== 'none'));
+    const nav = document.querySelector('.bottom-nav');
+    const glow = document.querySelector('.bottom-nav-glow');
+    const qm = document.querySelector('#qm-toggle');
+    let rail = document.querySelector('.tb-rail');
+    const anims = [], temps = [];
+    const center = (r) => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+    const dist = (r, o) => { const c = center(r); return Math.hypot(c.x - o.x, c.y - o.y); };
+    const accent = getComputedStyle(root).getPropertyValue('--blue').trim() || '#0a84ff';
+    root.classList.add('tb-tf');
+    shells.forEach(s => { s.style.transition = 'none'; s.classList.add('tf-shell'); });
+
+    // ── ① 漣漪 + 溶解 ──
+    const o1 = center(anchor.getBoundingClientRect());
+    // 每一列依「離你按的那一列多遠」決定何時溶解：波紋掃到才溶解
+    const itemD1 = items.map(list => list.map(el => dist(el.getBoundingClientRect(), o1)));
+    const maxD1 = Math.max(1, ...itemD1.flat());
+    temps.push(ripple(o1.x, o1.y, Math.max(innerWidth, innerHeight), accent));
+    let aEnd = 0;
+    cards.forEach((c, ci) => {
+      items[ci].forEach((el, ii) => {
+        const d = itemD1[ci][ii] / maxD1 * SET.dissolveSpread;
+        aEnd = Math.max(aEnd, d + SET.dissolve);
+        anims.push(anim(el, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(7px)' }], { duration: SET.dissolve, delay: d, easing: OUT_EASE }));
+      });
+    });
+    if (on) {
+      [nav, glow].forEach(el => el && anims.push(anim(el, [{ transform: 'none', opacity: 1 }, { transform: 'translateY(120%)', opacity: 0 }], { duration: 360, easing: OUT_EASE })));
+      if (qm && visible(qm)) anims.push(anim(qm, [{ transform: 'none', opacity: 1 }, { transform: 'scale(.6)', opacity: 0 }], { duration: 260, easing: OUT_EASE }));
+    } else if (rail) {
+      const parts = railParts(rail);
+      parts.forEach((el, i) => anims.push(anim(el, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateX(-14px) scale(.97)' }], { duration: 220, delay: (parts.length - 1 - i) * 16, easing: OUT_EASE })));
+      anims.push(anim(rail, [{ transform: 'none' }, { transform: 'translateX(-100%)' }], { duration: 440, delay: 140, easing: 'cubic-bezier(.5, 0, .75, .2)' }));
+      aEnd = Math.max(aEnd, 560);
+    }
+    await wait(aEnd - 60);
+
+    // ── ② 換版面 + 外殼位移 ──
+    const before = shells.map(s => s.getBoundingClientRect());
+    const anchorTop = anchor.getBoundingClientRect().top;
+    applyFn(on);
+    rail = document.querySelector('.tb-rail');
+    if (rail) rail.style.animation = 'none';           // 側欄自己的滑入動畫交給這裡做，不然結尾會重播一次
+    const parts = on ? railParts(rail) : [];
+    parts.forEach(el => { el.style.opacity = '0'; });
+    void document.body.offsetHeight;
+    // 你按的那一列盡量停在螢幕同一個高度，畫面才不會跳
+    const se = document.scrollingElement || root;
+    const drift = anchor.getBoundingClientRect().top - anchorTop;
+    if (Math.abs(drift) > 1) se.scrollTop += drift;
+    const after = shells.map(s => s.getBoundingClientRect());
+    const o2 = center(anchor.getBoundingClientRect());
+    const maxD2 = Math.max(1, ...after.map(r => dist(r, o2)));
+    shells.forEach((s, i) => {
+      const b = before[i], a = after[i];
+      const dx = (b.left + b.width / 2) - (a.left + a.width / 2);
+      const dy = (b.top + b.height / 2) - (a.top + a.height / 2);
+      const sx = clamp(b.width / a.width, .2, 5), sy = clamp(b.height / a.height, .2, 5);
+      s.style.transformOrigin = '50% 50%';
+      anims.push(anim(s, [
+        { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` },
+        { transform: 'none' },
+      ], { duration: SET.move, delay: dist(a, o2) / maxD2 * SET.moveSpread, easing: 'cubic-bezier(.25, 1, .3, 1)' }));
+    });
+    if (on && rail) anims.push(anim(rail, [{ transform: 'translateX(-100%)' }, { transform: 'none' }], { duration: SET.railIn, easing: 'cubic-bezier(.25, 1, .3, 1)' }));
+    if (!on) {
+      [nav, glow].forEach(el => el && anims.push(anim(el, [{ transform: 'translateY(120%)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 560, delay: 220, easing: IN_EASE })));
+      if (qm) anims.push(anim(qm, [{ transform: 'scale(.6)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 420, delay: 420, easing: IN_EASE }));
+    }
+    await wait(SET.buildStart);
+
+    // ── ③ 建設：由近到遠，一張卡一張卡、一列一列長回來 ──
+    // 建設順序：同樣以你按的那一列 (新位置) 為圓心往外長；同一張卡裡再由近到遠一列列
+    const off = title ? 1 : 0;
+    const order = cards.map((c, i) => i).sort((p, q) => dist(after[p + off], o2) - dist(after[q + off], o2));
+    let cEnd = 0;
+    order.forEach((ci, rank) => {
+      const base = rank * SET.buildCard;
+      const sh = sheen(cards[ci], base);
+      temps.push(sh.el); anims.push(sh.a);
+      const ds = items[ci].map(el => dist(el.getBoundingClientRect(), o2));
+      const near = Math.min(...ds);
+      items[ci].forEach((el, ii) => {
+        const d = base + (ds[ii] - near) / 90 * SET.buildRow;   // 卡內每差 90px 多等一列的時間
+        cEnd = Math.max(cEnd, d + SET.build);
+        anims.push(anim(el, [{ opacity: 0, transform: 'translateX(-12px)' }, { opacity: 1, transform: 'none' }], { duration: SET.build, delay: d, easing: IN_EASE }));
+      });
+    });
+    parts.forEach((el, i) => {
+      const d = 180 + i * SET.railPart;
+      cEnd = Math.max(cEnd, d + 440);
+      el.style.opacity = '';
+      anims.push(anim(el, [{ opacity: 0, transform: 'translateX(-16px) scale(.96)' }, { opacity: 1, transform: 'none' }], { duration: 440, delay: d, easing: IN_EASE }));
+    });
+    await wait(cEnd + 40);
+
+    // 收尾：把暫時的東西全部拿掉 (動畫的最後一格就是自然狀態，取消不會跳)
+    anims.forEach(a => { try { a?.cancel(); } catch (_) {} });
+    temps.forEach(el => el.remove());
+    shells.forEach(s => { s.style.transition = ''; s.style.transformOrigin = ''; s.classList.remove('tf-shell'); });
+    cards.forEach(c => { if (c.style.position === 'relative') c.style.position = ''; });
+    items.flat().forEach(el => { el.style.opacity = ''; });
+    parts.forEach(el => { el.style.opacity = ''; });
+    root.classList.remove('tb-tf');
+    window.haptic?.('light');
+    return true;
+  }
+
   async function run(on, applyFn) {
     if (running) return false;
     running = true;
     window.haptic?.('light');
     try {
-      let ok = false;
-      if (document.startViewTransition) ok = await runVT(on, applyFn);
+      let ok = await runSettings(on, applyFn);
+      if (!ok && document.startViewTransition) ok = await runVT(on, applyFn);
       if (!ok) await runFLIP(on, applyFn);
     } catch (err) {
       console.error(err);
