@@ -7,33 +7,9 @@
 html.tb-tf .tb-rail > * { will-change: transform, opacity; }
 html.tb-tf .bottom-nav { will-change: transform, opacity; }
 
-/* ── 設定頁專屬編排 (tablet-transform.js runSettings) ── */
-/* 漣漪：從你按的那一列擴散出去的兩圈波紋 */
-.tf-ripple { position: fixed; z-index: 8000; pointer-events: none; width: 0; height: 0; }
-.tf-ripple i {
-  position: absolute;
-  left: 0; top: 0;
-  width: 0; height: 0;
-  border-radius: 50%;
-  border: 1.5px solid var(--tf-ripple-c, #0a84ff);
-  box-shadow: 0 0 24px 0 color-mix(in srgb, var(--tf-ripple-c, #0a84ff) 45%, transparent), inset 0 0 40px 0 color-mix(in srgb, var(--tf-ripple-c, #0a84ff) 12%, transparent);
-  transform: translate(-50%, -50%);
-  opacity: 0;
-}
-.tf-ripple i:nth-child(2) { border-width: 1px; }
-/* 溶解期間的卡片外殼：邊框微微亮起，表示「等待重建」 */
-.tf-shell { will-change: transform; }
-.settings-card.tf-shell { border-color: color-mix(in srgb, var(--blue) 45%, var(--border)) !important; overflow: hidden; }
-/* 建設時掃過卡片的一道光 */
-.tf-sheen {
-  position: absolute;
-  inset: -20% -30%;
-  pointer-events: none;
-  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, .13) 50%, transparent 65%);
-  opacity: 0;
-  will-change: transform, opacity;
-}
-body.light-mode .tf-sheen { background: linear-gradient(105deg, transparent 35%, rgba(10, 132, 255, .12) 50%, transparent 65%); }
+/* ── 設定頁專屬編排 (tablet-transform.js runSettings)：方塊退場 / 進場都是 transform + opacity，
+   不用波紋、掃光這種每一格都要重畫的東西 ── */
+html.tb-tf #page-settings > * { will-change: transform, opacity; }
 
 /* ── View Transitions：所有元件的位移都用同一條緩動，慢慢滑過去 ── */
 ::view-transition-group(*) {
