@@ -10,6 +10,9 @@ html.tb-tf .bottom-nav { will-change: transform, opacity; }
 /* ── 設定頁專屬編排 (tablet-transform.js runSettings)：方塊退場 / 進場都是 transform + opacity，
    不用波紋、掃光這種每一格都要重畫的東西 ── */
 html.tb-tf #page-settings > * { will-change: transform, opacity; }
+/* 彈簧進場時卡片會 3D 翻轉，裡面的列 / 開關也各自翻，不要被卡片的圓角裁掉 */
+html.tb-tf #page-settings > .settings-card { transform-style: flat; }
+html.tb-tf #page-settings .setting-row, html.tb-tf #page-settings .settings-card-header { will-change: transform, opacity; }
 
 /* ── View Transitions：所有元件的位移都用同一條緩動，慢慢滑過去 ── */
 ::view-transition-group(*) {

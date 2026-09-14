@@ -319,23 +319,70 @@
   }
 
   // ══ 設定頁專屬編排 (開關就在這一頁，所以這頁要做到最好) ══
-  //   每張卡片、標題、側欄的每一塊、底部導覽列都當成一個「方塊」：
-  //   ① 退場：方塊由上到下快速縮小淡出 (220ms，錯開 22ms)
+  //   目標：每個元件都「有活力」— 用彈簧物理，不是平平的滑入。
+  //   ① 退場：方塊先微微往下蹲 + 放大 (蓄力)，再往上翻走、縮小淡出；文字同時變亂碼
   //   ② 換版面 (畫面上什麼都沒有，所以換的那一瞬間看不到跳動)；你按的那一列校正回同一個高度
-  //   ③ 進場：每個方塊從「它原本的位置那個方向」滑進新位置 + 放大回 1 + 淡入，由上到下、左到右一個個錯開；
-  //          卡片裡的每一列在方塊到位途中再依序淡入；側欄先推入，裡面的時鐘、按鈕一個個長出來
-  //   進場動畫用 fill:backwards，播完就自動回到自然狀態，結尾不用一次取消幾十個動畫 (那就是之前卡一下的來源)
+  //   ③ 進場：每張卡片從傾斜、縮小的狀態「彈」進新位置 — 會衝過頭一點再彈回來定住；
+  //          卡片裡每一列跟著往上翻起彈出，開關與圖示再「啵」一下；側欄按鈕一個個彈出來
+  //   ④ 全部落定後，一道漣漪從第一張卡往後輕輕「呼吸」一下，像組件剛啟動
+  //   彈簧是把阻尼振盪公式取樣成 keyframes (linear 串起來)，所以每個瀏覽器都一樣，而且只動 transform / opacity。
+  //   進場動畫用 fill:backwards，播完自動回到自然狀態，結尾不用一次取消幾十個動畫 (那是之前卡一下的來源)。
   const SET = {
-    out: 220, outStep: 22,                 // ① 每個方塊退場時間 / 方塊錯開
-    in: 600, inStep: 62, inMax: 420,       // ③ 方塊進場時間 / 錯開 / 最多錯開
-    row: 360, rowStep: 24, rowLag: 110,    // ③ 卡片裡每一列淡入時間 / 錯開 / 比卡片晚多少開始
-    rail: 520, railPart: 40, railLag: 140,
-    drift: .32, driftMax: 160,             // 進場起點 = 往舊位置方向偏移多少 (比例 / 上限 px)
+    out: 300, outStep: 26,                 // ① 每個方塊退場時間 / 方塊錯開
+    card: 980, cardStep: 70, cardMax: 460, // ③ 卡片彈簧時間 / 錯開 / 最多錯開
+    row: 820, rowStep: 34, rowLag: 130,    // ③ 卡片裡每一列 / 錯開 / 比卡片晚多少開始
+    pop: 760, popLag: 220,                 // ③ 開關、圖示「啵」一下
+    rail: 520, railPart: 42, railLag: 120, railSpring: 820,
+    drift: .34, driftMax: 160,             // 進場起點 = 往舊位置方向偏移多少 (比例 / 上限 px)
+    wave: 420, waveStep: 55,               // ④ 落定後的呼吸波
   };
-  const OUT_EASE = 'cubic-bezier(.4, 0, .7, 1)';
+  const OUT_EASE = 'cubic-bezier(.55, 0, .85, .35)';
   const IN_EASE = 'cubic-bezier(.2, .8, .2, 1)';
+
+  // 阻尼彈簧：t 從 0 到 1，回傳 0→(衝過頭)→1。zeta 越小彈越多下，bounces 決定總共晃幾下
+  function springCurve(zeta, bounces) {
+    const w = bounces * Math.PI * 2;                  // 自然頻率 (以整段時間 = 1 為單位)
+    const wd = w * Math.sqrt(1 - zeta * zeta);
+    return (t) => {
+      if (t >= 1) return 1;
+      const e = Math.exp(-zeta * w * t);
+      return 1 - e * (Math.cos(wd * t) + (zeta * w / wd) * Math.sin(wd * t));
+    };
+  }
+  const SPRING_CARD = springCurve(.52, 1.45);
+  const SPRING_ROW = springCurve(.46, 1.7);
+  const SPRING_POP = springCurve(.34, 2.1);
+  const SPRING_SOFT = springCurve(.72, 1.2);
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const f2 = (n) => Math.round(n * 100) / 100;
+  // from = { x, y, z, s, rx, ry, rz }；end 永遠是自然狀態。opacity 不跟著彈 (前 30% 淡入完)
+  function springFrames(from, curve, n = 30, persp = 900) {
+    const frames = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const v = curve(t);
+      const k = 1 - v;                                // 還差多少到終點 (會變負 = 衝過頭)
+      const s = lerp(from.s ?? 1, 1, v);
+      frames.push({
+        offset: t,
+        opacity: f2(Math.min(1, t / .3)),
+        transform: `perspective(${persp}px) translate3d(${f2((from.x || 0) * k)}px, ${f2((from.y || 0) * k)}px, ${f2((from.z || 0) * k)}px) rotateX(${f2((from.rx || 0) * k)}deg) rotateY(${f2((from.ry || 0) * k)}deg) rotateZ(${f2((from.rz || 0) * k)}deg) scale(${f2(s)})`,
+      });
+    }
+    return frames;
+  }
+  const springIn = (el, from, curve, opt) => { try { return el.animate(springFrames(from, curve), Object.assign({ fill: 'backwards', easing: 'linear' }, opt)); } catch (_) { return null; } };
   const enter = (el, from, opt) => { try { return el.animate([from, { opacity: 1, transform: 'none' }], Object.assign({ fill: 'backwards', easing: IN_EASE }, opt)); } catch (_) { return null; } };
   const leave = (el, to, opt) => { try { return el.animate([{ opacity: 1, transform: 'none' }, to], Object.assign({ fill: 'forwards', easing: OUT_EASE }, opt)); } catch (_) { return null; } };
+  // 退場：先蹲一下蓄力，再往上翻走
+  const leaveHop = (el, dir, opt) => { try {
+    return el.animate([
+      { opacity: 1, transform: 'perspective(900px) translate3d(0,0,0) rotateX(0deg) scale(1)' },
+      { opacity: 1, transform: 'perspective(900px) translate3d(0,5px,0) rotateX(-4deg) scale(1.025)', offset: .28 },
+      { opacity: 0, transform: `perspective(900px) translate3d(${dir * 10}px,-30px,-60px) rotateX(22deg) scale(.86)` },
+    ], Object.assign({ fill: 'forwards', easing: OUT_EASE }, opt));
+  } catch (_) { return null; } };
+  const rand = (a, b) => a + Math.random() * (b - a);
 
   async function runSettings(on, applyFn) {
     const page = document.getElementById('page-settings');
@@ -366,19 +413,19 @@
       const d = Math.min(i, 8) * SET.outStep;
       outEnd = Math.max(outEnd, d + SET.out);
       b.style.transformOrigin = '50% 50%';
-      outAnims.push(leave(b, { opacity: 0, transform: 'translateY(-10px) scale(.97)' }, { duration: SET.out, delay: d }));
+      outAnims.push(leaveHop(b, i % 2 ? 1 : -1, { duration: SET.out, delay: d }));
       Scramble.breakRegion(b, performance.now() + d * .5);   // 淡出前先亂掉
     });
     if (on) {
-      [nav, glow].forEach(el => el && outAnims.push(anim(el, [NAV_SHOW, NAV_HIDE], { duration: 320, easing: OUT_EASE, fill: 'forwards' })));
-      if (qm && visible(qm)) outAnims.push(anim(qm, [QM_SHOW, QM_HIDE], { duration: 240, easing: OUT_EASE, fill: 'forwards' }));
-      outEnd = Math.max(outEnd, 300);
+      [nav, glow].forEach(el => el && outAnims.push(anim(el, [NAV_SHOW, { opacity: 1, translate: '0 -10%', offset: .3 }, NAV_HIDE], { duration: 360, easing: OUT_EASE, fill: 'forwards' })));
+      if (qm && visible(qm)) outAnims.push(anim(qm, [QM_SHOW, { opacity: 1, scale: '1.15', offset: .35 }, QM_HIDE], { duration: 280, easing: OUT_EASE, fill: 'forwards' }));
+      outEnd = Math.max(outEnd, 340);
     } else if (rail) {
       const parts = railParts(rail);
       Scramble.breakRegion(rail, performance.now());
-      parts.forEach((el, i) => outAnims.push(leave(el, { opacity: 0, transform: 'translateX(-12px)' }, { duration: 200, delay: (parts.length - 1 - i) * 14 })));
-      outAnims.push(leave(rail, { transform: 'translateX(-100%)', opacity: 1 }, { duration: 380, delay: 120, easing: 'cubic-bezier(.5, 0, .75, .2)' }));
-      outEnd = Math.max(outEnd, 500);
+      parts.forEach((el, i) => outAnims.push(leave(el, { opacity: 0, transform: 'perspective(700px) translateX(-24px) rotateY(-50deg) scale(.9)' }, { duration: 240, delay: (parts.length - 1 - i) * 14 })));
+      outAnims.push(leave(rail, { transform: 'translateX(-100%)', opacity: 1 }, { duration: 380, delay: 150, easing: 'cubic-bezier(.5, 0, .75, .2)' }));
+      outEnd = Math.max(outEnd, 530);
     }
     await wait(outEnd - 40);
 
@@ -396,51 +443,96 @@
     if (Math.abs(drift) > 1) se.scrollTop += drift;
     const after = blocks.map(b => b.getBoundingClientRect());
 
-    // ── ③ 進場：由上到下、左到右一個個方塊 ──
+    // ── ③ 進場：由上到下、左到右，一張張彈進來 ──
     const order = blocks.map((b, i) => i).sort((p, q) => (after[p].top - after[q].top) || (after[p].left - after[q].left));
     let inEnd = 0;
     const T = performance.now();
     const decodeEnd = (end) => { if (end) inEnd = Math.max(inEnd, end - T); };
+    const landed = [];
     order.forEach((i, rank) => {
       const b = blocks[i];
       const a = after[i];
       if (a.bottom < -20 || a.top > innerHeight + 20) { b.style.opacity = ''; Scramble.restoreRegion(b); return; }   // 新版面裡也看不到的，直接還原
       const bc = center(before[i]), ac = center(a);
       const dx = clamp((bc.x - ac.x) * SET.drift, -SET.driftMax, SET.driftMax);
-      const dy = clamp((bc.y - ac.y) * SET.drift, -SET.driftMax, SET.driftMax);
-      const d = Math.min(rank * SET.inStep, SET.inMax);
-      inEnd = Math.max(inEnd, d + SET.in);
+      const dy = clamp((bc.y - ac.y) * SET.drift, -SET.driftMax, SET.driftMax) + 46;
+      const d = Math.min(rank * SET.cardStep, SET.cardMax);
+      inEnd = Math.max(inEnd, d + SET.card);
       b.style.opacity = '';
-      enter(b, { opacity: 0, transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(.96)` }, { duration: SET.in, delay: d });
       const ci = cards.indexOf(b);
-      if (ci < 0) decodeEnd(Scramble.decodeRegion(b, T + d + 160, { perChar: 110, min: 700, max: 1200 }));   // 頁面標題
-      else rows[ci].forEach((el, ii) => {
+      // 卡片：從下方、往後倒、縮小、微微歪一邊的狀態彈上來 (衝過頭一點再定住)
+      springIn(b, { x: dx, y: dy, z: -140, s: .84, rx: -26, ry: clamp(dx / 12, -14, 14), rz: rand(-3, 3) }, SPRING_CARD, { duration: SET.card, delay: d });
+      landed.push({ el: b, at: d + SET.card * .62 });
+      if (ci < 0) {
+        decodeEnd(Scramble.decodeRegion(b, T + d + 160, { perChar: 110, min: 700, max: 1200 }));   // 頁面標題
+        const icon = b.querySelector('img, svg');
+        if (icon) springIn(icon, { s: 0, rz: -140 }, SPRING_POP, { duration: SET.pop, delay: d + SET.popLag });
+        return;
+      }
+      rows[ci].forEach((el, ii) => {
         const rd = d + SET.rowLag + ii * SET.rowStep;
         inEnd = Math.max(inEnd, rd + SET.row);
-        enter(el, { opacity: 0, transform: 'translateY(6px)' }, { duration: SET.row, delay: rd });
-        decodeEnd(Scramble.decodeRegion(el, T + rd + 70));   // 這一列淡入到一半就開始解碼
+        // 每一列：往上翻起彈出 (像翻牌)，左右交錯一點點
+        springIn(el, { x: ii % 2 ? 10 : -10, y: 22, s: .9, rx: -48 }, SPRING_ROW, { duration: SET.row, delay: rd });
+        decodeEnd(Scramble.decodeRegion(el, T + rd + 70));   // 這一列翻起來途中開始解碼
+        // 開關、標題圖示：列到位後再「啵」一下
+        el.querySelectorAll(':scope > .switch, :scope > label.switch, .settings-card-header > svg, .settings-card-header > img').forEach(p => {
+          const pd = rd + SET.popLag;
+          inEnd = Math.max(inEnd, pd + SET.pop);
+          springIn(p, p.matches('.switch') ? { s: .4, x: 14 } : { s: 0, rz: -160 }, SPRING_POP, { duration: SET.pop, delay: pd });
+        });
       });
     });
     if (on && rail) {
       enter(rail, { opacity: 1, transform: 'translateX(-100%)' }, { duration: SET.rail, easing: 'cubic-bezier(.22, 1, .36, 1)' });
       parts.forEach((el, i) => {
         const d = SET.railLag + i * SET.railPart;
-        inEnd = Math.max(inEnd, d + 460);
-        enter(el, { opacity: 0, transform: 'translateX(-14px) scale(.97)' }, { duration: 460, delay: d });
+        inEnd = Math.max(inEnd, d + SET.railSpring);
+        // 側欄按鈕：從左邊像門一樣轉開、彈出來
+        springIn(el, { x: -34, s: .82, ry: -62, rz: -2 }, SPRING_ROW, { duration: SET.railSpring, delay: d });
+        const icon = el.querySelector(':scope > svg');
+        if (icon) springIn(icon, { s: 0, rz: -120 }, SPRING_POP, { duration: SET.pop, delay: d + 160 });
         decodeEnd(Scramble.decodeRegion(el, T + d + 90, { min: 420, max: 900 }));
       });
     }
     if (!on) {
-      [nav, glow].forEach(el => el && anim(el, [NAV_HIDE, NAV_SHOW], { duration: 560, delay: 180, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'backwards' }));
-      if (qm) anim(qm, [QM_HIDE, QM_SHOW], { duration: 420, delay: 380, easing: IN_EASE, fill: 'backwards' });
+      // 底部導覽列從下面彈上來 (衝過頭再落回)
+      const navFrames = springFrames({}, SPRING_SOFT).map((f, i, arr) => {
+        const v = SPRING_SOFT(i / (arr.length - 1));
+        return { offset: f.offset, opacity: f.opacity, translate: `0 ${f2(130 * (1 - v))}%` };
+      });
+      [nav, glow].forEach(el => { try { el && el.animate(navFrames, { duration: 780, delay: 200, easing: 'linear', fill: 'backwards' }); } catch (_) {} });
+      if (qm) { try {
+        const qf = springFrames({}, SPRING_POP).map((f, i, arr) => ({ offset: f.offset, opacity: f.opacity, scale: String(f2(SPRING_POP(i / (arr.length - 1)))) }));
+        qm.animate(qf, { duration: 700, delay: 420, easing: 'linear', fill: 'backwards' });
+      } catch (_) {} }
     }
     // 進場動畫是 fill:backwards，播完自己回到自然狀態；這裡只把暫時的內聯樣式拿掉 (不影響正在播的動畫)
     blocks.forEach(b => { b.style.transition = ''; b.style.transformOrigin = ''; });
+
+    // ── ④ 落定後的呼吸波：卡片依序輕輕鼓一下，像剛通電 ──
+    const waveStart = Math.max(...landed.map(l => l.at), 0) + 260;
+    landed.forEach((l, k) => {
+      const wd = waveStart + k * SET.waveStep;
+      inEnd = Math.max(inEnd, wd + SET.wave);
+      setTimeout(() => {
+        if (!l.el.isConnected) return;
+        try {
+          l.el.animate([
+            { transform: 'scale(1)' },
+            { transform: 'scale(1.022)', offset: .35 },
+            { transform: 'scale(.996)', offset: .7 },
+            { transform: 'scale(1)' },
+          ], { duration: SET.wave, easing: 'ease-in-out' });
+        } catch (_) {}
+        if (k === 0 || k === landed.length - 1) window.haptic?.('light');
+      }, wd);
+    });
+
     await wait(inEnd + 60);
     await Promise.race([Scramble.idle(), wait(400)]);
     Scramble.finish();
     root.classList.remove('tb-tf');
-    window.haptic?.('light');
     return true;
   }
 
