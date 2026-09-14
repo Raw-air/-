@@ -1,9 +1,9 @@
 // Atomic shell cache: HTML and JS must always come from the same release.
-const CACHE_NAME = 'biyuan-v133';
-const ASSETS = ['./', './index.html', './style.css?v=170', './phonetic-search.js?v=170', './app.js?v=170', './import.js?v=170',
-  './api.js?v=170', './config.js?v=170', './theme.js?v=170',
-  './carousel.js?v=170', './navigation.js?v=170', './motion.css?v=170', './liquid-nav.css?v=170', './nav-adapt.css?v=170', './nav-adapt.js?v=170', './folder.css?v=170', './dissolve.js?v=170',
-  './quick-menu.css?v=170', './quick-menu.js?v=170', './boot-screen.css?v=170', './boot-screen.js?v=170', './tablet.css?v=170', './tablet.js?v=170', './tablet-transform.css?v=170', './tablet-transform.js?v=170', './color-mode.css?v=170', './color-mode.js?v=170', './phone-leave.css?v=170', './phone-leave.js?v=170', './role-claim.js?v=170'];
+const CACHE_NAME = 'biyuan-v134';
+const ASSETS = ['./', './index.html', './style.css?v=171', './phonetic-search.js?v=171', './app.js?v=171', './import.js?v=171',
+  './api.js?v=171', './config.js?v=171', './theme.js?v=171',
+  './carousel.js?v=171', './navigation.js?v=171', './motion.css?v=171', './liquid-nav.css?v=171', './nav-adapt.css?v=171', './nav-adapt.js?v=171', './folder.css?v=171', './dissolve.js?v=171',
+  './quick-menu.css?v=171', './quick-menu.js?v=171', './boot-screen.css?v=171', './boot-screen.js?v=171', './tablet.css?v=171', './tablet.js?v=171', './tablet-transform.css?v=171', './tablet-transform.js?v=171', './color-mode.css?v=171', './color-mode.js?v=171', './phone-leave.css?v=171', './phone-leave.js?v=171', './role-claim.js?v=171'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
 });

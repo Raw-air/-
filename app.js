@@ -162,6 +162,9 @@ const state = {
   calMonth: new Date(),
   confirmedSquads: [],
   recentSyncs: {}, // 用於保護剛同步成功的狀態，避免 eventual consistency 導致閃爍
+  remarks: {},        // 備註 (另一個 Notion 資料庫，總表 API 不帶)：{ pageId: 文字 }，背景刷新後要蓋回去
+  remarksLoaded: false,
+  recentProfiles: {}, // 剛存檔的住宿生資料：{ pageId: { values, ts } }，Notion 還讀到舊值時先蓋回去
   // 後端點名表沒有該日期欄位時，本機暫存的點名 { [iso日期]: { [pageId]: 狀態 } }
   pendingByDate: {},
   // 學期狀態 (來自 /api/semester)：current = 本學期、archives = 封存學期、available = 後端有支援
@@ -710,7 +713,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     function rosterSignature() {
       const parts = [state.confirmedSquads.join(','), (state.dateColumns || []).length];
       for (const s of state.students) {
-        parts.push(s.id, s.name, s.isEmpty ? 1 : 0, s.squad, s.room, s.bed, JSON.stringify(s.attendance || {}));
+        parts.push(s.id, s.name, s.isEmpty ? 1 : 0, s.squad, s.room, s.bed, s.class, s.studentId, s.phone, s.address, s.isForeign ? 1 : 0, s.remarks, JSON.stringify(s.attendance || {}));
       }
       return parts.join('|');
     }
@@ -729,11 +732,22 @@ document.addEventListener('DOMContentLoaded', async () => {
       _lastBgRefreshAt = Date.now();
       try {
         const wantConfig = Date.now() - _lastBgConfigAt > 60000;
-        const [roster, config] = await Promise.all([
+        const wantRemarks = Date.now() - _lastRemarksFetchAt > REMARKS_REFRESH_MS;
+        const [roster, config, remarks] = await Promise.all([
           window._api.getRoster(state.viewSemester || ''),
           wantConfig ? window._api.getConfig() : Promise.resolve(null),
+          wantRemarks ? window._api.getRemarks().catch(() => null) : Promise.resolve(null),
         ]);
         state.rosterSemester = roster.semester || null;
+        if (remarks && typeof remarks === 'object') {
+          _lastRemarksFetchAt = Date.now();
+          // 剛存的備註 Notion 可能還沒讀到，保護期內以本機為準
+          for (const [id, recent] of Object.entries(state.recentProfiles)) {
+            if (recent.values.remarks !== undefined) remarks[id] = recent.values.remarks;
+          }
+          state.remarks = remarks;
+          state.remarksLoaded = true;
+        }
         state.students = applyLocalStateToRoster(roster.students || [], roster.dateColumns || []);
         state.dateColumns = roster.dateColumns || [];
         state.currentDate = resolveAttendanceDate(state.currentDate || localTodayISO());
@@ -904,16 +918,15 @@ async function loadData() {
       window._api.getRoster(state.viewSemester || ''),
       window._api.getConfig(),
       window._api.getChangelog().catch(() => []),
-      window._api.getRemarks().catch(() => ({})),
+      window._api.getRemarks().catch(() => null),
       loadSemesterState(),
     ]);
     state.rosterSemester = roster.semester || null;
 
-    // Merge remarks natively into the student list
-    if (roster.students && remarks) {
-      roster.students.forEach(s => {
-        s.remarks = remarks[s.id] || '';
-      });
+    if (remarks && typeof remarks === 'object') {
+      state.remarks = remarks;
+      state.remarksLoaded = true;
+      _lastRemarksFetchAt = Date.now();
     }
 
     state.students = applyLocalStateToRoster(roster.students || [], roster.dateColumns || []);
@@ -2268,6 +2281,26 @@ async function submitSwapBed() {
     Object.assign(studentA, posA);
     Object.assign(studentB, posB);
 
+    // 備註存在另一個資料庫、以床位 id 對應，後端換床不會一起換：人換到哪，備註跟到哪
+    const remarkA = studentA.remarks || '', remarkB = studentB.remarks || '';
+    if (remarkA !== remarkB) {
+      studentA.remarks = remarkB;
+      studentB.remarks = remarkA;
+      state.remarks[studentA.id] = remarkB;
+      state.remarks[studentB.id] = remarkA;
+      Promise.all([
+        window._api.updateRemark(studentA.id, remarkB),
+        window._api.updateRemark(studentB.id, remarkA),
+      ]).catch(err => showToast('床位已交換，但備註沒跟著移過去：' + err.message, 'error'));
+    }
+    // 剛換完 Notion 可能還讀到舊資料，30 秒內以換完的為準，避免床位內容閃回原狀
+    for (const s of [studentA, studentB]) {
+      rememberSavedProfile(s.id, {
+        name: s.name, class: s.class, studentId: s.studentId, phone: s.phone,
+        address: s.address, isForeign: s.isForeign, isEmpty: s.isEmpty, remarks: s.remarks || '',
+      });
+    }
+
     const nameA = studentA.name || '（空床）';
     const nameB = studentB.name || '（空床）';
     const msg = `<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 已完整交換：${fromRoom}${fromBed} ${nameA} ↔ ${toRoom}${toBed} ${nameB}`;
@@ -3615,6 +3648,33 @@ function showPinDialog(squadId, callback, customTitle) {
 // 所有成功送出的點名/請假 (任何日期、任何入口) 都記下來。
 // Notion 寫入後幾秒內查詢可能還是舊值，背景刷新會把剛按的請假洗掉，看起來像「沒按到」。
 const RECENT_SYNC_MS = 60000;
+const RECENT_PROFILE_MS = 30000;   // 存檔後 30 秒內，總表若還讀到舊姓名/空床，以剛存的為準
+const REMARKS_REFRESH_MS = 15000;  // 背景刷新時備註最快 15 秒重抓一次，避免多台同時打 Notion
+let _lastRemarksFetchAt = 0;
+
+// 存檔成功後記下來：背景刷新拿到 Notion 舊資料時不會把畫面洗回去 (空床又冒出名字、備註消失)
+function rememberSavedProfile(pageId, values) {
+  if (!pageId) return;
+  state.recentProfiles[pageId] = { values: { ...values }, ts: Date.now() };
+  if (values.remarks !== undefined) state.remarks[pageId] = values.remarks || '';
+  // 住宿生檔案頁手上的物件可能是背景刷新前的舊物件，點名/總表用的那份也要馬上改，不用等下次刷新
+  const live = state.students.find(s => s.id === pageId);
+  if (live) Object.assign(live, values);
+}
+
+function applyRemarksAndProfiles(students) {
+  const now = Date.now();
+  for (const id of Object.keys(state.recentProfiles)) {
+    if (now - state.recentProfiles[id].ts > RECENT_PROFILE_MS) delete state.recentProfiles[id];
+  }
+  for (const s of students) {
+    const recent = state.recentProfiles[s.id];
+    if (recent) {
+      for (const [key, value] of Object.entries(recent.values)) if (key !== 'remarks') s[key] = value;
+    }
+    s.remarks = state.remarks[s.id] || '';
+  }
+}
 function rememberRecentSyncs(updates) {
   const now = Date.now();
   for (const u of updates || []) {
@@ -3672,6 +3732,7 @@ function applyLocalStateToRoster(rosterStudents, rosterDateColumns) {
 
     return s;
   });
+  applyRemarksAndProfiles(merged);
   applyPendingAttendance(merged, Array.isArray(rosterDateColumns) ? rosterDateColumns : state.dateColumns);
   return merged;
 }
@@ -6211,10 +6272,22 @@ window.saveResidentRow = async function (row, options = {}) {
       markEmpty: values.isEmpty,
     };
     if (values.isEmpty) updatePayload.clearProfile = true;
+    // 備註沒改就不送：備註表沒讀到時送空字串會把雲端備註洗掉
+    const remarkChanged = values.remarks !== (student.remarks || '');
     await Promise.all([
       window._api.updateAttendance([updatePayload]),
-      window._api.updateRemark(student.id, values.remarks),
+      remarkChanged ? window._api.updateRemark(student.id, values.remarks) : null,
     ]);
+    rememberSavedProfile(student.id, {
+      name: values.isEmpty ? '' : values.name,
+      class: values.class,
+      studentId: values.isEmpty ? '' : values.studentId,
+      phone: values.isEmpty ? '' : values.phone,
+      address: values.isEmpty ? '' : values.address,
+      isForeign: values.isForeign,
+      isEmpty: values.isEmpty,
+      ...(remarkChanged ? { remarks: values.remarks } : {}),
+    });
 
     student.name = values.isEmpty ? '' : values.name;
     student.class = values.class;
@@ -6695,15 +6768,26 @@ window.autoSaveStudentFile = async function (elem) {
     };
     if (isEmpty) updatePayload.clearProfile = true;
 
+    // 備註沒改就不送：備註表沒讀到時送空字串會把雲端備註洗掉
+    const remarkChanged = newRemarks !== (studentObj.remarks || '');
     await Promise.all([
       window._api.updateAttendance([updatePayload]),
-      window._api.updateRemark(studentObj.id, newRemarks)
+      remarkChanged ? window._api.updateRemark(studentObj.id, newRemarks) : null
     ]);
+    rememberSavedProfile(studentObj.id, {
+      name: isEmpty ? '' : newName,
+      studentId: isEmpty ? '' : newId,
+      class: isEmpty ? '' : newClass,
+      isForeign: isEmpty ? false : isForeign,
+      isEmpty,
+      ...(remarkChanged ? { remarks: newRemarks } : {}),
+    });
 
     // Update Local Cache Reference
+    // 中隊是床位的位置 (跟房號、床號一樣)，清空住宿生不能動它；以前這裡設成空字串，
+    // 空床就從中隊的點名/總表畫面整格消失，要等背景刷新從 Notion 讀回中隊才又出現
     studentObj.name = isEmpty ? '' : newName;
     studentObj.studentId = isEmpty ? '' : newId;
-    studentObj.squad = isEmpty ? '' : newClass;
     studentObj.class = isEmpty ? '' : newClass;
     studentObj.remarks = newRemarks;
     studentObj.isForeign = isEmpty ? false : isForeign;
