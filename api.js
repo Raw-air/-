@@ -109,11 +109,13 @@ class ApiClient {
   postChangelog(content) { return this._fetch('/api/changelog', 'POST', { content }); }
 
   // ⚡ 即時輪詢（KV 信號層，回應 < 10ms，不走重試邏輯）
-  async poll() {
+  // since：上次拿到的變動序號，後端只回之後的點名變動
+  async poll(since) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 8000);
     try {
-      const res = await fetch(`${this.baseUrl}/api/poll`, {signal: controller.signal});
+      const qs = Number.isFinite(since) ? `?since=${since}` : '';
+      const res = await fetch(`${this.baseUrl}/api/poll${qs}`, {signal: controller.signal, cache: 'no-store'});
       if (!res.ok) return null;
       return await res.json();
     } catch (e) {

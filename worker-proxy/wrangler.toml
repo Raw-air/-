@@ -10,6 +10,15 @@ compatibility_date = "2026-04-09"
 [observability]
 enabled = true
 
+# 即時同步中樞 (見 index.js 的 SyncHub)
+[[durable_objects.bindings]]
+name = "SYNC_HUB"
+class_name = "SyncHub"
+
+[[migrations]]
+tag = "v1-sync-hub"
+new_sqlite_classes = ["SyncHub"]
+
 [[kv_namespaces]]
 binding = "POLL_KV"
 id = "498beb572d984a9a98540993d1af64b3"

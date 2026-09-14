@@ -621,19 +621,56 @@ document.addEventListener('DOMContentLoaded', async () => {
     let _lastAttTs = 0;       // 上次收到的出席變動時間戳
     let _pollPaused = false;
     let _pollBusy = false;
+    let _lastSeq = -1;        // 已套用到的點名變動序號 (-1 = 還沒拿過)
 
     function getPollInterval() {
-      if (currentPage === 'summary') return 3000;   // 總表頁：3 秒
-      if (currentPage === 'rollcall') return 5000;   // 點名頁：5 秒
-      return 10000;                                    // 其他頁：10 秒
+      if (currentPage === 'summary') return 2000;   // 總表頁：2 秒
+      if (currentPage === 'rollcall') return 3000;   // 點名頁：3 秒
+      return 8000;                                     // 其他頁：8 秒
+    }
+
+    // 套用別台裝置的點名變動；自己還沒送出的變更優先。回傳有沒有改到畫面上的資料
+    function applyRemoteChanges(changes) {
+      if (state.viewSemester) return false;
+      const byId = new Map();
+      for (const s of state.students) if (s && s.id) byId.set(s.id, s);
+      const now = Date.now();
+      let changed = false;
+      for (const c of changes) {
+        const s = byId.get(c.id);
+        if (!s || !c.d) continue;
+        if (state.changes.some(p => p.pageId === c.id && p.date === c.d)) continue;
+        const v = c.v || '';
+        // 總表還沒從 Notion 讀到新值前，背景刷新不要把它洗回去
+        state.recentSyncs[c.id + '_' + c.d] = { value: v, ts: now };
+        if (!s.attendance || typeof s.attendance !== 'object') s.attendance = {};
+        if ((s.attendance[c.d] || '') === v) continue;
+        if (v) s.attendance[c.d] = v; else delete s.attendance[c.d];
+        changed = true;
+      }
+      return changed;
     }
 
     async function doPoll() {
       if (_pollPaused || _pollBusy) return;
       _pollBusy = true;
       try {
-        const data = await window._api.poll();
+        const data = await window._api.poll(_lastSeq >= 0 ? _lastSeq : undefined);
         if (!data) return;
+
+        // 0. 新後端會直接給「別台剛改的點名」，馬上套上去，不用等整張總表重抓
+        if (Number.isFinite(data.seq)) {
+          if (_lastSeq < 0 || data.reset) {
+            if (_lastSeq >= 0) scheduleBackgroundRefresh(); // 落後太多，整張重抓
+            _lastSeq = data.seq;
+          } else if (Array.isArray(data.changes)) {
+            if (data.changes.length && applyRemoteChanges(data.changes)) {
+              _lastRenderSig = rosterSignature();
+              renderCurrentPage(true);
+            }
+            _lastSeq = Math.max(_lastSeq, data.seq);
+          }
+        }
 
         // 1. 檢查確認回報狀態是否有更新
         // 新後端會帶 date：別天的回報不要套到今天

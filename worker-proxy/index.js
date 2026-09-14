@@ -259,10 +259,80 @@ async function resolveSemesterDbId(name, env) {
 // ─── KV 即時同步信號層 ─────────────────────────────────────────────────────────
 // 出席變動與點名完成分開存兩個鍵：以前共用 poll_state「讀出來→改→寫回」，
 // 點名 PATCH 同時發生時會把剛寫進去的 confirms 蓋回舊值，總表的「已回報」就一閃一閃。
+// 即時同步中樞 (Durable Object)：KV 有兩個問題 —— 同一個鍵每秒只能寫 1 次 (大家同時點名會寫失敗、信號不見)，
+// 以及不同機房之間最久要 60 秒才看得到新值。中樞是單一實體，寫完所有人馬上讀得到。
+// 另外存「最近 300 筆點名變動」，別台裝置輪詢時直接拿變動套上去，不用再等整張總表 (約 4 秒) 從 Notion 抓回來。
+const SYNC_MAX_CHANGES = 300;
+export class SyncHub {
+  constructor(ctx) {
+    this.ctx = ctx;
+    this.s = null;
+  }
+  async load() {
+    if (!this.s) this.s = (await this.ctx.storage.get('s')) || { seq: 0, att_ts: 0, changes: [], conf: null };
+    return this.s;
+  }
+  async fetch(request) {
+    const s = await this.load();
+    const url = new URL(request.url);
+    if (request.method === 'POST') {
+      const body = await request.json();
+      if (Array.isArray(body.changes)) {
+        for (const c of body.changes) s.changes.push({ q: ++s.seq, id: c.id, d: c.d, v: c.v || '' });
+        if (s.changes.length > SYNC_MAX_CHANGES) s.changes.splice(0, s.changes.length - SYNC_MAX_CHANGES);
+      }
+      if (body.att_ts !== undefined) s.att_ts = Math.max(s.att_ts, body.att_ts);
+      if (body.conf) s.conf = body.conf;
+      await this.ctx.storage.put('s', s);
+      return Response.json({ ok: true, seq: s.seq });
+    }
+    const since = Number(url.searchParams.get('since'));
+    const out = { att_ts: s.att_ts, seq: s.seq, conf: s.conf };
+    if (Number.isFinite(since) && since >= 0 && url.searchParams.has('since')) {
+      const first = s.changes.length ? s.changes[0].q : s.seq + 1;
+      // 落後太多 (中間的變動已經被擠掉) → 叫前端重抓整張總表
+      if (since < first - 1 && since < s.seq) out.reset = true;
+      else out.changes = s.changes.filter(c => c.q > since);
+    }
+    return Response.json(out);
+  }
+}
+function syncHub(env) {
+  if (!env.SYNC_HUB) return null;
+  return env.SYNC_HUB.get(env.SYNC_HUB.idFromName('main'));
+}
+async function pushSync(env, body) {
+  const hub = syncHub(env);
+  if (!hub) return false;
+  try {
+    await hub.fetch('https://sync-hub/push', { method: 'POST', body: JSON.stringify(body) });
+    return true;
+  } catch (e) {
+    console.error('SyncHub push failed:', e);
+    return false;
+  }
+}
+// 把 PATCH 內容轉成「哪張床、哪一天、改成什麼」
+function attendanceChangesOf(updates) {
+  const out = [];
+  for (const u of (updates || []).slice(0, 45)) {
+    if (!u || !u.pageId) continue;
+    if (u.dates && typeof u.dates === 'object') {
+      for (const [d, v] of Object.entries(u.dates)) if (isDateColumnName(d)) out.push({ id: u.pageId, d, v: v || '' });
+    } else if (u.date && isDateColumnName(u.date)) {
+      out.push({ id: u.pageId, d: u.date, v: u.value || '' });
+    }
+  }
+  return out;
+}
+
 async function updatePollSignal(env, updates = {}) {
+  const conf = updates.confirms !== undefined ? { ts: Date.now(), confirms: updates.confirms || '', date: updates.date || '' } : null;
+  const hubOk = await pushSync(env, { att_ts: updates.att_ts, conf });
   if (!env.POLL_KV) return; // KV 未綁定時靜默跳過
   try {
-    if (updates.att_ts !== undefined) {
+    // 有中樞時出席信號不寫 KV (KV 每秒限寫 1 次，還會拖慢回應)
+    if (updates.att_ts !== undefined && !hubOk) {
       await env.POLL_KV.put('poll_att', JSON.stringify({ att_ts: updates.att_ts }));
     }
     if (updates.confirms !== undefined) {
@@ -273,20 +343,40 @@ async function updatePollSignal(env, updates = {}) {
   }
 }
 
-async function readPollState(env) {
-  if (!env.POLL_KV) return { ts: 0, confirms: '', att_ts: 0 };
-  const [att, conf, legacy] = await Promise.all([
+async function readPollState(env, since) {
+  const hub = syncHub(env);
+  const hubRead = hub
+    ? hub.fetch('https://sync-hub/read' + (since !== undefined && since !== null && since !== '' ? '?since=' + encodeURIComponent(since) : ''))
+      .then(r => r.json()).catch(e => { console.error('SyncHub read failed:', e); return null; })
+    : Promise.resolve(null);
+  if (!env.POLL_KV) {
+    const h = await hubRead;
+    const out = { ts: 0, confirms: '', att_ts: 0 };
+    if (h) Object.assign(out, h.conf || {}, { att_ts: h.att_ts, seq: h.seq }, h.changes ? { changes: h.changes } : {}, h.reset ? { reset: true } : {});
+    delete out.conf;
+    return out;
+  }
+  const [att, kvConf, legacy, h] = await Promise.all([
     env.POLL_KV.get('poll_att', 'json'),
     env.POLL_KV.get('poll_confirms', 'json'),
     env.POLL_KV.get('poll_state', 'json'),
+    hubRead,
   ]);
   const old = legacy || {};
-  return {
+  // 點名完成回報：中樞與 KV 取比較新的那個 (剛換版時中樞還是空的)
+  const conf = h && h.conf && (!kvConf || h.conf.ts >= kvConf.ts) ? h.conf : kvConf;
+  const out = {
     ts: conf ? conf.ts : (old.ts || 0),
     confirms: conf ? conf.confirms : (old.confirms || ''),
     date: conf ? (conf.date || '') : '',
-    att_ts: Math.max(att ? att.att_ts || 0 : 0, old.att_ts || 0),
+    att_ts: Math.max(att ? att.att_ts || 0 : 0, old.att_ts || 0, h ? h.att_ts || 0 : 0),
   };
+  if (h) {
+    out.seq = h.seq;
+    if (h.changes) out.changes = h.changes;
+    if (h.reset) out.reset = true;
+  }
+  return out;
 }
 
 // 總表快取 (Cloudflare 邊緣快取，不佔 KV 寫入額度)。
@@ -337,7 +427,7 @@ export default {
 
       // ⚡ 即時輪詢端點 — 僅讀取 KV，不觸碰 Notion，回應時間 < 5ms
       if (path === '/api/poll' && request.method === 'GET') {
-        return json(await readPollState(env));
+        return json(await readPollState(env, url.searchParams.get('since')));
       }
 
       if (path === '/api/init-db' && request.method === 'POST') {
@@ -379,6 +469,10 @@ export default {
 
       if (path === '/api/attendance' && request.method === 'PATCH') {
         const data = await request.json();
+        // 先廣播再寫 Notion：一批 30 筆要寫十幾秒，以前寫完才通知，別台要等很久。
+        // 萬一寫失敗，寫完後的 att_ts 會讓大家重抓總表校正回來。
+        const changes = attendanceChangesOf(data && data.updates);
+        if (changes.length) await pushSync(env, { changes });
         const result = await handleUpdateAttendance(data, env);
         // ⚡ 出席資料變更 → 更新 KV 信號
         await updatePollSignal(env, { att_ts: Date.now() });

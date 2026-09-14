@@ -37,7 +37,7 @@ function makeKV(){const store={};return {store,async get(k,t){const v=store[k];i
 (async()=>{
   const src=fs.readFileSync(path.join(root,'worker-proxy','index.js'),'utf8').replace(/await sleep\((\d+)\)/g,'await sleep(0)');
   const tmp=path.join(os.tmpdir(),'biyuan-worker-test-'+Date.now()+'.mjs');fs.writeFileSync(tmp,src);
-  const worker=(await import('file:///'+tmp.replace(/\\/g,'/'))).default;
+  const mod=await import('file:///'+tmp.replace(/\\/g,'/'));const worker=mod.default;
   fs.unlinkSync(tmp);
 
   const notion=makeNotion();
@@ -152,6 +152,27 @@ function makeKV(){const store={};return {store,async get(k,t){const v=store[k];i
     r=await call('/api/leave-records','POST',{name:'乙',roomBed:'B101 - B',dateStart:'2026-09-14',dateEnd:'2026-09-14'});
     assert.equal(r.data.success,true,'沒填來電資訊也能寫');
     delete env.LEAVE_DB_ID;
+  }
+
+  // 12. 即時同步中樞：點名先廣播變動，別台用 since 只拿新的；落後太多要 reset；確認回報走中樞
+  {
+    const mem={};const hub=new mod.SyncHub({storage:{async get(k){return mem[k]?JSON.parse(mem[k]):undefined;},async put(k,v){mem[k]=JSON.stringify(v);}}});
+    env.SYNC_HUB={idFromName:()=>'main',get:()=>({fetch:(u,init)=>hub.fetch(new Request(u,init))})};
+    const kvPuts=[];const realPut=kv.put;kv.put=async(k,v)=>{kvPuts.push(k);return realPut(k,v);};
+    let r=await call('/api/poll');const base=r.data.seq;assert.equal(typeof base,'number');assert.equal(r.data.changes,undefined);
+    const pid=Object.keys(notion.pages).find(k=>notion.pages[k].db===cur);
+    await call('/api/attendance','PATCH',{updates:[{pageId:pid,date:'2027-09-01',value:'◎'},{pageId:pid,dates:{'2027-09-02':'△'}},{pageId:pid,markEmpty:false}]});
+    r=await call('/api/poll?since='+base);
+    assert.deepEqual(r.data.changes.map(c=>[c.id,c.d,c.v]),[[pid,'2027-09-01','◎'],[pid,'2027-09-02','△']]);
+    assert.equal(r.data.seq,base+2);assert.ok(r.data.att_ts>0);
+    assert.ok(!kvPuts.includes('poll_att'),'有中樞就不寫 KV 出席信號');
+    r=await call('/api/poll?since='+(base+2));assert.deepEqual(r.data.changes,[]);
+    const many=[];for(let i=0;i<45;i++)many.push({pageId:pid,date:'2027-09-01',value:i%2?'✓':'◎'});
+    for(let i=0;i<8;i++)await call('/api/attendance','PATCH',{updates:many});
+    r=await call('/api/poll?since='+base);assert.equal(r.data.reset,true,'落後超過 300 筆要整張重抓');
+    await call('/api/confirm','POST',{date:'2027-09-03',squad:'三單',confirmed:true});
+    r=await call('/api/poll');assert.equal(r.data.date,'2027-09-03');assert.ok(r.data.confirms.includes('三單'));
+    kv.put=realPut;delete env.SYNC_HUB;
   }
 
   console.log('worker: semester state, auto date columns, error surfacing, range apply/confirm, archive/new semester, long config, 429 retry, config duplicates, confirm merge, poll split PASS');
