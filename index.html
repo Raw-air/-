@@ -57,8 +57,7 @@
   </script>
   <link rel="manifest" href="manifest.json?v=171">
   <link rel="apple-touch-icon" href="icon-192.png?v=171">
-  <script defer src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- xlsx-js-style 與 marked 改由 app.js 的 window.ensureXLSX() / window.ensureMarked() 需要時才載入，不再拖住啟動 -->
   <script>
     if ('serviceWorker' in navigator) {
       let _swReg = null;

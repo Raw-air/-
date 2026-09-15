@@ -3,6 +3,64 @@
  * 新增: 硬性房間規則 / 斜線動畫 / 導覽列自訂圖示
  */
 
+// ─── HTML 跳脫 ────────────────────────────────────────────────────────────────
+// 所有來自後端 (Notion) 或使用者輸入的字串要塞進 innerHTML / 模板字串之前都先過這裡，
+// 姓名、備註等欄位若被填入 <img onerror=…> 之類的內容才不會被當成標籤執行。
+function escHtml(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// localStorage 在私密瀏覽或被封鎖時 getItem/setItem 都可能直接丟例外，統一包起來
+function lsGet(key) {
+  try { return localStorage.getItem(key); } catch (_) { return null; }
+}
+function lsSet(key, value) {
+  try { localStorage.setItem(key, value); } catch (_) { }
+}
+
+// ─── CDN 套件延遲載入 (xlsx-js-style / marked) ───────────────────────────────
+// 這兩個套件只有匯出/匯入 Excel 與公告才用得到，不再放在 <head> 用 defer 拖住整個 App 啟動；
+// 需要時才動態插入 <script>。同一時間多次呼叫共用同一個 Promise，失敗後允許重試 (不快取失敗結果)。
+const _cdnScriptLoads = {};
+function loadCdnScriptOnce(url, isReady, failMessage) {
+  if (isReady()) return Promise.resolve();
+  if (_cdnScriptLoads[url]) return _cdnScriptLoads[url];
+  const p = new Promise((resolve, reject) => {
+    let script;
+    const fail = () => { if (script && script.parentNode) script.parentNode.removeChild(script); reject(new Error(failMessage)); };
+    try {
+      script = document.createElement('script');
+      script.src = url;
+      script.async = true;
+      script.onload = () => { if (isReady()) resolve(); else fail(); };
+      script.onerror = fail;
+      document.head.appendChild(script);
+    } catch (_) { fail(); }
+  });
+  _cdnScriptLoads[url] = p;
+  p.then(() => { /* 成功後 isReady() 為 true，之後直接 resolve，不再用到這個 Promise */ }, () => { delete _cdnScriptLoads[url]; });
+  return p;
+}
+window.ensureXLSX = function ensureXLSX() {
+  return loadCdnScriptOnce(
+    'https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js',
+    () => typeof window.XLSX !== 'undefined' && window.XLSX && window.XLSX.utils,
+    'Excel 元件載入失敗，請確認網路後再試'
+  ).then(() => window.XLSX);
+};
+window.ensureMarked = function ensureMarked() {
+  return loadCdnScriptOnce(
+    'https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js',
+    () => typeof window.marked !== 'undefined' && window.marked && typeof window.marked.parse === 'function',
+    '公告元件載入失敗，請確認網路後再試'
+  ).then(() => window.marked);
+};
+
 // ─── 設定持久化層 (localStorage 為主, cookie + IndexedDB 為備援) ──────────────
 // iOS ITP 7 天上限、「離開時清除網站資料」或部分內嵌瀏覽器會清掉 localStorage，
 // 導致使用者的個人化設定（音效/震動/主題/潘仔/省電）每次重開都被重置。
@@ -194,7 +252,7 @@ function initAudioCtx() {
 // iPhone / iPad (含桌面模式的 iPadOS) 沒有 Vibration API，要走另外兩條路
 const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 function hasVibrate() { return typeof navigator.vibrate === 'function' && !IS_IOS; }
-function hapticMuted() { return localStorage.getItem('mute_haptic') === 'true'; }
+function hapticMuted() { return lsGet('mute_haptic') === 'true'; }
 
 // iOS 17.4 ~ 26.4：用程式點擊 <input type="checkbox" switch> 的 label，Safari 會真的敲一下 Taptic Engine
 let _hapticSwitchLabel = null;
@@ -367,7 +425,7 @@ function triggerHapticFeedback(type = 'default') {
 // ─── UI 清脆音效 (Web Audio API) ───────────────────────────────────────────
 function playClickSound(type = 'default') {
   triggerHapticFeedback(type);
-  if (localStorage.getItem('mute_sound') === 'true') return;
+  if (lsGet('mute_sound') === 'true') return;
   try {
     // dev_unlock 用 MP3，提前 0.2s 播放（瀏覽器限制，最快就是 0s delay）
     if (type === 'dev_unlock') {
@@ -550,7 +608,7 @@ document.addEventListener('input', (e) => {
 // DOMContentLoaded 時呼叫一次；若 IndexedDB 備援還原之後補回了新的值，也會再呼叫一次。
 function applyStoredPrefs() {
   // 全白模式
-  const isLight = localStorage.getItem('white_mode') === 'true';
+  const isLight = lsGet('white_mode') === 'true';
   document.body.classList.toggle('light-mode', isLight);
   const whiteToggle = document.getElementById('setting-white-mode');
   if (whiteToggle) whiteToggle.checked = isLight;
@@ -558,24 +616,24 @@ function applyStoredPrefs() {
 
   // 靜音模式
   const muteToggle = document.getElementById('setting-mute');
-  if (muteToggle) muteToggle.checked = localStorage.getItem('mute_sound') === 'true';
+  if (muteToggle) muteToggle.checked = lsGet('mute_sound') === 'true';
 
   // 震動反饋
   const hapticToggle = document.getElementById('setting-haptic');
-  if (hapticToggle) hapticToggle.checked = localStorage.getItem('mute_haptic') !== 'true';
+  if (hapticToggle) hapticToggle.checked = lsGet('mute_haptic') !== 'true';
   const hapticHelp = document.getElementById('haptic-help');
   if (hapticHelp && !hasVibrate()) {
     hapticHelp.textContent = IS_IOS ? 'iPhone 會用 Safari 觸覺開關與低頻波形模擬震動' : '此瀏覽器不支援網頁震動；音效可另外設定';
   }
 
   // 潘仔模式
-  const isPanzi = localStorage.getItem('panzi_mode') === 'true';
+  const isPanzi = lsGet('panzi_mode') === 'true';
   document.body.classList.toggle('panzi-mode', isPanzi);
   const panziToggle = document.getElementById('setting-panzi');
   if (panziToggle) panziToggle.checked = isPanzi;
 
   // 省電模式
-  const isPS = localStorage.getItem('power_save_mode') === 'true';
+  const isPS = lsGet('power_save_mode') === 'true';
   document.body.classList.toggle('power-save-mode', isPS);
   const psToggle = document.getElementById('setting-powerSave');
   if (psToggle) psToggle.checked = isPS;
@@ -1034,7 +1092,7 @@ function checkChangelogDot() {
   if (!dot) return;
   if (state.changelogs && state.changelogs.length > 0) {
     const latestId = state.changelogs[0].id;
-    const lastSeen = localStorage.getItem('last_seen_changelog');
+    const lastSeen = lsGet('last_seen_changelog');
     if (lastSeen !== latestId) {
       dot.style.display = 'block';
     } else {
@@ -1159,21 +1217,21 @@ function openDutyRosterModal() {
       <div style="padding:16px 20px; border-radius:16px; ${cardStyle} transition:all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display:flex; flex-direction:column; gap:10px;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div style="font-weight:900; font-size:16px; color:${isCurrent ? 'var(--orange)' : 'var(--text)'}; font-family:-apple-system, system-ui; letter-spacing:-0.3px;">
-            第 ${row.week} 週 ${badge}
+            第 ${escHtml(row.week)} 週 ${badge}
           </div>
           <div style="font-size:12px; color:var(--dim); font-weight:600; font-variant-numeric: tabular-nums;">
-            ${row.start} ~ ${row.end}
+            ${escHtml(row.start)} ~ ${escHtml(row.end)}
           </div>
         </div>
         
         <div style="display:flex; gap:12px; margin-top:2px; align-items:stretch;">
           <div style="flex:1; background:var(--glass-bg); padding:10px 12px; border-radius:12px; border:1px solid var(--glass-border); display:flex; flex-direction:column; justify-content:center;">
             <div style="font-size:10px; color:var(--orange); font-weight:800; margin-bottom:2px; opacity:0.8;">主值星官</div>
-            <div style="font-size:15px; font-weight:700; color:var(--text);">${row.dutyOfficer}</div>
+            <div style="font-size:15px; font-weight:700; color:var(--text);">${escHtml(row.dutyOfficer)}</div>
           </div>
           <div style="flex:1; background:var(--glass-bg); padding:10px 12px; border-radius:12px; border:1px solid var(--glass-border); display:flex; flex-direction:column; justify-content:center;">
             <div style="font-size:10px; color:var(--purple); font-weight:800; margin-bottom:2px; opacity:0.8;">副值星官</div>
-            <div style="font-size:15px; font-weight:700; color:var(--text);">${row.deputy}</div>
+            <div style="font-size:15px; font-weight:700; color:var(--text);">${escHtml(row.deputy)}</div>
           </div>
         </div>
       </div>`;
@@ -1275,7 +1333,16 @@ function openDutyManualModal() {
 }
 
 // ── 最新公告與日誌 (Changelog) ──
-function openChangelogModal() {
+async function openChangelogModal() {
+  // marked 改成需要時才從 CDN 載入；先把視窗打開顯示讀取中，載不到 (離線) 就退回純文字顯示
+  const modalEl = document.getElementById('changelog-modal');
+  const contentEl = document.getElementById('changelog-content');
+  if (contentEl) contentEl.innerHTML = '<p>正在讀取公告…</p>';
+  if (modalEl) modalEl.classList.add('visible');
+  let md = null;
+  try { md = await window.ensureMarked(); } catch (_) { md = null; }
+  if (!md || typeof md.parse !== 'function') md = null;
+
   // 從獨立資料庫取得的新版公告（附帶時間戳）
   const rawLogs = state.changelogs || [];
   // debug 用：首次開啟時印出結構
@@ -1338,10 +1405,10 @@ function openChangelogModal() {
   const tsStyle = 'font-size:11px;color:rgba(165,180,252,0.55);margin:-2px 0 8px 2px;font-weight:400;letter-spacing:0.5px;display:block;';
 
   let combinedHTML = '';
-  if (typeof marked !== 'undefined') {
+  if (md) {
     for (const entry of allEntries) {
       // 逐篇解析 markdown
-      let html = marked.parse(entry.content || '');
+      let html = md.parse(entry.content || '');
       // 在第一個 h2/h3 標籤之後插入時間戳
       const timeLabel = formatTime(entry.time);
       if (timeLabel) {
@@ -1353,15 +1420,15 @@ function openChangelogModal() {
       combinedHTML += html;
     }
   } else {
-    combinedHTML = `<pre style="white-space:pre-wrap;font-family:inherit;">${allEntries.map(e => e.content).join('\n\n')}</pre>`;
+    // marked 載不到 (離線) 時把公告當純文字顯示，內容一律跳脫
+    combinedHTML = `<pre style="white-space:pre-wrap;font-family:inherit;">${escHtml(allEntries.map(e => e.content || '').join('\n\n'))}</pre>`;
   }
 
   if (!combinedHTML.trim()) combinedHTML = '<p>目前沒有最新公告。</p>';
 
-  const contentEl = document.getElementById('changelog-content');
   contentEl.innerHTML = combinedHTML;
 
-  if (typeof marked !== 'undefined') {
+  if (md) {
     // 建立折疊邏輯：將 h3 (每個版本) 轉換為可以平滑展開/收疊的 accordion
     const headings = contentEl.querySelectorAll('h3');
     headings.forEach((h3, i) => {
@@ -1460,7 +1527,7 @@ function openChangelogModal() {
 
   // 記錄已讀最新公告
   if (state.changelogs && state.changelogs.length > 0) {
-    localStorage.setItem('last_seen_changelog', state.changelogs[0].id);
+    lsSet('last_seen_changelog', state.changelogs[0].id);
     const dot = document.querySelector('.changelog-dot');
     if (dot) dot.style.display = 'none';
   }
@@ -1661,7 +1728,7 @@ function renderHome() {
     const duty = window.getCurrentDutyOfficers();
     const textSpan = document.getElementById('duty-roster-text');
     if (duty && textSpan) {
-      textSpan.innerHTML = `值星(<span id="duty-roster-week">第${duty.week}週</span>): <span id="duty-roster-main">${duty.dutyOfficer}</span> / <span id="duty-roster-sub">${duty.deputy}</span>`;
+      textSpan.innerHTML = `值星(<span id="duty-roster-week">第${escHtml(duty.week)}週</span>): <span id="duty-roster-main">${escHtml(duty.dutyOfficer)}</span> / <span id="duty-roster-sub">${escHtml(duty.deputy)}</span>`;
       dutyWidget.style.display = 'flex';
     } else if (textSpan) {
       textSpan.innerHTML = `當周無人值班或無班表`;
@@ -1748,9 +1815,9 @@ function renderHome() {
       const delay = (baseDelay + (squadCount + i) * 0.03).toFixed(2) + 's';
 
       return `
-        <div class="sq-card ${animClass}" style="--sq-c:${role.color}; animation-delay: ${delay}; -webkit-animation-delay: ${delay}; padding: 18px; display:flex; align-items:center; justify-content:center; gap: 12px; border-radius: 16px;" onclick="enterManagement('${role.id}', '${role.label}')">
+        <div class="sq-card ${animClass}" style="--sq-c:${role.color}; animation-delay: ${delay}; -webkit-animation-delay: ${delay}; padding: 18px; display:flex; align-items:center; justify-content:center; gap: 12px; border-radius: 16px;" data-role="${escHtml(role.id)}" data-label="${escHtml(role.label)}" onclick="enterManagement(this.dataset.role, this.dataset.label)">
           <div style="font-size:24px; filter:drop-shadow(0 2px 8px ${role.color}80);">${role.icon}</div>
-          <div class="sq-name" style="margin:0; font-size:18px; font-weight:800; letter-spacing:1px;">${role.label}</div>
+          <div class="sq-name" style="margin:0; font-size:18px; font-weight:800; letter-spacing:1px;">${escHtml(role.label)}</div>
         </div>
       `;
     }).join('');
@@ -1783,7 +1850,7 @@ function enterManagement(roleId, title) {
   // 自動進入需密碼的驗證程序
   showPinDialog(roleId, () => {
     playClickSound('dev_unlock');
-    showToast(`歡迎進入，${title}！`, 'success');
+    showToast(`歡迎進入，${escHtml(title)}！`, 'success');
     document.getElementById('mgt-title').textContent = title;
 
     // 權限控制：報修審核只有副社長可見
@@ -1832,8 +1899,9 @@ function renderDatePicker() {
     const isActive = d === state.currentDate;
     const isToday = isTodayAttendanceDate(d);
     const isAvailable = state.dateColumns.includes(d);
+    // 欄位名稱來自後端，放進 data-date 再用 dataset 讀，不直接拼進 onclick 字串
     return `<div class="date-item${isActive ? ' active' : ''}${isToday ? ' today-marker' : ''}"
-                 onclick="selectRollCallDate('${d}')">${formatExportDate(dateColumnToISO(d))}${isToday ? ' · 今天' : ''}${!isAvailable ? ' · 尚未點名' : ''}</div>`;
+                 data-date="${escHtml(d)}" onclick="selectRollCallDate(this.dataset.date)">${escHtml(formatExportDate(dateColumnToISO(d)))}${isToday ? ' · 今天' : ''}${!isAvailable ? ' · 尚未點名' : ''}</div>`;
   }).join('');
   // 自動捲到選中的日期
   setTimeout(() => {
@@ -1874,7 +1942,7 @@ function renderRollCall(skipAnimation = false) {
 
   // 更新提交按鈕顯示目前日期
   const submitBtn = document.getElementById('submit-btn');
-  if (submitBtn) submitBtn.innerHTML = `<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 提交 ${state.currentDate} 點名`;
+  if (submitBtn) submitBtn.innerHTML = `<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 提交 ${escHtml(state.currentDate)} 點名`;
 
   // 記住捲動位置
   const listEl = document.getElementById('rc-student-list');
@@ -1886,20 +1954,21 @@ function renderRollCall(skipAnimation = false) {
   let html = '';
   let curRoom = '';
   for (const s of students) {
-    if (s.room !== curRoom) { curRoom = s.room; html += `<div class="room-divider">${s.room}</div>`; }
+    if (s.room !== curRoom) { curRoom = s.room; html += `<div class="room-divider">${escHtml(s.room)}</div>`; }
     const status = s.attendance[state.currentDate] || '✓';
     const si = CONFIG.STATUS[status] || CONFIG.STATUS['✓'];
     const absent = status !== '✓';
     const isPending = state.changes.some(c => c.pageId === s.id && c.date === state.currentDate);
+    // 姓名/班別/學號等來自 Notion，一律跳脫；pageId 改由 data-pid 讀取，不拼進 onclick 字串
     html += `
       <div class="student-row ${s.isEmpty ? 'empty-bed' : ''} ${absent ? 'absent' : ''}"
-           data-pid="${s.id}"
-           onclick="${s.isEmpty ? '' : `toggleStatus('${s.id}')`}">
+           data-pid="${escHtml(s.id)}"
+           onclick="${s.isEmpty ? '' : 'toggleStatus(this.dataset.pid)'}">
         <div class="student-info">
-          <div class="student-bed" style="background:${getSquadColor(state.currentSquad)}">${s.bed}</div>
+          <div class="student-bed" style="background:${getSquadColor(state.currentSquad)}">${escHtml(s.bed)}</div>
           <div>
-            <div class="student-name">${s.isEmpty ? '（空床）' : s.name}${!s.isEmpty && s.isForeign ? ' <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>' : ''}</div>
-            <div class="student-meta">${s.isEmpty ? '' : `${s.class || ''} ${s.studentId || ''}`}</div>
+            <div class="student-name">${s.isEmpty ? '（空床）' : escHtml(s.name)}${!s.isEmpty && s.isForeign ? ' <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>' : ''}</div>
+            <div class="student-meta">${s.isEmpty ? '' : `${escHtml(s.class || '')} ${escHtml(s.studentId || '')}`}</div>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:6px">
@@ -2259,7 +2328,7 @@ function openEmptyBedModal() {
     : state.students.filter(s => !s.hidden);
   const rooms = [...new Set(filtered.map(s => s.room))].sort();
   const sel = document.getElementById('eb-room');
-  sel.innerHTML = rooms.map(r => `<option value="${r}">${r}</option>`).join('');
+  sel.innerHTML = rooms.map(r => `<option value="${escHtml(r)}">${escHtml(r)}</option>`).join('');
   updateBedOptions();
   document.getElementById('empty-bed-modal').classList.add('visible');
 }
@@ -2271,7 +2340,7 @@ function updateBedOptions() {
   const sel = document.getElementById('eb-bed');
   sel.innerHTML = allowedBeds.map(b => {
     const s = state.students.find(x => x.room === room && x.bed === b && !x.hidden);
-    const label = s ? (s.isEmpty ? `${b} 床（已空床）` : `${b} 床 - ${s.name}`) : `${b} 床`;
+    const label = s ? (s.isEmpty ? `${b} 床（已空床）` : `${b} 床 - ${escHtml(s.name)}`) : `${b} 床`;
     return `<option value="${b}">${label}</option>`;
   }).join('');
 }
@@ -2329,7 +2398,7 @@ function openAddResidentModal() {
   }
   const rooms = [...new Set(emptyBeds.map(s => s.room))].sort();
   const sel = document.getElementById('ar-room');
-  sel.innerHTML = rooms.map(r => `<option value="${r}">${r}</option>`).join('');
+  sel.innerHTML = rooms.map(r => `<option value="${escHtml(r)}">${escHtml(r)}</option>`).join('');
 
   // 清空輸入框
   document.getElementById('ar-name').value = '';
@@ -2345,7 +2414,7 @@ function updateAddResidentBeds() {
   const room = document.getElementById('ar-room').value;
   const beds = state.students.filter(s => s.room === room && s.isEmpty && !s.hidden);
   const sel = document.getElementById('ar-bed');
-  sel.innerHTML = beds.map(s => `<option value="${s.bed}">${s.bed} 床</option>`).join('');
+  sel.innerHTML = beds.map(s => `<option value="${escHtml(s.bed)}">${escHtml(s.bed)} 床</option>`).join('');
 }
 
 function checkForeignStudentClass() {
@@ -2407,8 +2476,8 @@ async function submitAddResident() {
 // ═════════════════════════════════════════════════════════════════════════════
 function openSwapBedModal() {
   const rooms = [...new Set(state.students.filter(s => !s.hidden).map(s => s.room))].sort();
-  document.getElementById('sw-from-room').innerHTML = rooms.map(r => `<option value="${r}">${r}</option>`).join('');
-  document.getElementById('sw-to-room').innerHTML = rooms.map(r => `<option value="${r}">${r}</option>`).join('');
+  document.getElementById('sw-from-room').innerHTML = rooms.map(r => `<option value="${escHtml(r)}">${escHtml(r)}</option>`).join('');
+  document.getElementById('sw-to-room').innerHTML = rooms.map(r => `<option value="${escHtml(r)}">${escHtml(r)}</option>`).join('');
   updateSwapFromBeds();
   updateSwapToBeds();
   document.getElementById('swap-bed-modal').classList.add('visible');
@@ -2419,7 +2488,7 @@ function updateSwapFromBeds() {
   const beds = state.students.filter(s => s.room === room && !s.isEmpty);
   const sel = document.getElementById('sw-from-bed');
   sel.innerHTML = beds.map(s =>
-    `<option value="${s.bed}">${s.bed} 床 - ${s.name || '(無名)'}</option>`
+    `<option value="${escHtml(s.bed)}">${escHtml(s.bed)} 床 - ${escHtml(s.name || '(無名)')}</option>`
   ).join('');
   if (!beds.length) sel.innerHTML = '<option disabled>此房間無住宿生</option>';
 }
@@ -2429,8 +2498,8 @@ function updateSwapToBeds() {
   const allBeds = state.students.filter(s => s.room === room);
   const sel = document.getElementById('sw-to-bed');
   sel.innerHTML = allBeds.map(s => {
-    const label = s.isEmpty ? `${s.bed} 床（空床）` : `${s.bed} 床 - ${s.name || '(無名)'}`;
-    return `<option value="${s.bed}">${label}</option>`;
+    const label = s.isEmpty ? `${escHtml(s.bed)} 床（空床）` : `${escHtml(s.bed)} 床 - ${escHtml(s.name || '(無名)')}`;
+    return `<option value="${escHtml(s.bed)}">${label}</option>`;
   }).join('');
   if (!allBeds.length) sel.innerHTML = '<option disabled>此房間無床位</option>';
 }
@@ -3055,7 +3124,7 @@ function renderHistory() {
     const today = iso === localTodayISO();
     let badge = 0;
     if (has) for (const s of state.students) if (!s.isEmpty && s.attendance[col] && s.attendance[col] !== '✓') badge++;
-    html += `<div class="cal-cell ${has ? 'has-data' : ''} ${today ? 'today' : ''}" ${has ? `onclick="showDateDetail('${col}')"` : ''}><div class="cal-day">${d}</div>${has && badge ? `<div class="cal-badge">${badge}</div>` : ''}</div>`;
+    html += `<div class="cal-cell ${has ? 'has-data' : ''} ${today ? 'today' : ''}" ${has ? `data-col="${escHtml(col)}" onclick="showDateDetail(this.dataset.col)"` : ''}><div class="cal-day">${d}</div>${has && badge ? `<div class="cal-badge">${badge}</div>` : ''}</div>`;
   }
   document.getElementById('hist-calendar').innerHTML = html;
   document.getElementById('cal-prev-month').onclick = () => { state.calMonth.setMonth(state.calMonth.getMonth() - 1); renderHistory(); };
@@ -3071,10 +3140,10 @@ function showDateDetail(col) {
     else if (v === '◎') { l++; list.push({ ...s, status: v }); }
     else if (v === '✘') { a++; list.push({ ...s, status: v }); }
   }
-  let html = `<div class="detail-header"><h3>${col}</h3><div class="detail-stats"><span style="color:var(--green)">到 ${p}</span><span style="color:var(--yellow)">假 ${l}</span><span style="color:var(--red)">缺 ${a}</span></div></div>`;
+  let html = `<div class="detail-header"><h3>${escHtml(col)}</h3><div class="detail-stats"><span style="color:var(--green)">到 ${p}</span><span style="color:var(--yellow)">假 ${l}</span><span style="color:var(--red)">缺 ${a}</span></div></div>`;
   if (list.length) {
     html += '<div class="detail-list">';
-    for (const s of list) { const si = CONFIG.STATUS[s.status] || CONFIG.STATUS['◎']; html += `<div class="detail-row"><span>${s.room} ${s.bed} ${s.name}</span><span style="color:${si.color}">${si.icon} ${si.label}</span></div>`; }
+    for (const s of list) { const si = CONFIG.STATUS[s.status] || CONFIG.STATUS['◎']; html += `<div class="detail-row"><span>${escHtml(s.room)} ${escHtml(s.bed)} ${escHtml(s.name)}</span><span style="color:${si.color}">${si.icon} ${si.label}</span></div>`; }
     html += '</div>';
   } else html += '<p style="color:var(--dim);text-align:center;padding:20px">全員到齊 <svg class="ui-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12v0c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10"/><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11v0c-.11.7-.72 1.22-1.43 1.22H17"/><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98v0C9.52 4.9 9 5.52 9 6.23V7"/><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z"/></svg></p>';
   document.getElementById('hist-detail').innerHTML = html;
@@ -3104,7 +3173,7 @@ function renderSettings() {
 
   const geminiInput = document.getElementById('gemini-api-key');
   if (geminiInput) {
-    geminiInput.value = localStorage.getItem('gemini_api_key') || '';
+    geminiInput.value = lsGet('gemini_api_key') || '';
   }
 
   initializeExportDateInputs();
@@ -3713,7 +3782,7 @@ async function collectSystemHealth() {
     hint: boot == null ? '瀏覽器沒給量測' : '從按下開啟到畫面能用的時間'
   });
 
-  const ps = localStorage.getItem('power_save_mode') === 'true';
+  const ps = lsGet('power_save_mode') === 'true';
   add({
     group: '效能', label: '省電順暢模式',
     value: ps ? '已開啟（特效全關）' : '關閉（完整特效）',
@@ -4464,23 +4533,59 @@ function dateColumnToISO(columnName) {
   return dateColumnToISOFor(columnName, activeSemesterName());
 }
 
-// 舊式 "X月Y日" 欄位沒有年份，用學期名稱 (例如 114-2) 推算
+// 某個學期的起迄日 (ISO)：roster 帶回來的學期優先，其次 /api/semester 的本學期，再來是同名的封存學期；都沒有就 null
+function semesterRangeFor(semesterName) {
+  const name = String(semesterName || '');
+  if (!name) return null;
+  const candidates = [];
+  if (state.rosterSemester) candidates.push(state.rosterSemester);
+  if (state.semester && state.semester.current) candidates.push(state.semester.current);
+  if (state.semester && Array.isArray(state.semester.archives)) candidates.push(...state.semester.archives);
+  for (const sem of candidates) {
+    if (!sem || String(sem.name || '') !== name) continue;
+    if (parseISODate(sem.start) && parseISODate(sem.end) && sem.start <= sem.end) return { start: sem.start, end: sem.end };
+  }
+  return null;
+}
+
+// 舊式 "X月Y日" 欄位沒有年份，推算順序：
+// 1. 該學期有起迄日 → 選落在 [start, end] 內的那一年
+// 2. 否則學期名稱像 114-2 且月份合理 (上學期 8~1 月、下學期 2~7 月) → 用學期名稱推
+// 3. 都不行就相對今天推：欄位月份比今天晚超過 6 個月 → 去年；早超過 6 個月 → 明年；其餘今年
+//    (1 月看「12月28日」才不會算成未來，學期名稱過期時「1月10日」也不會算到去年)
 function dateColumnToISOFor(columnName, semesterName) {
   if (parseISODate(columnName)) return columnName;
   const match = String(columnName || '').match(/^(\d{1,2})月(\d{1,2})日$/);
   if (!match) return '';
   const month = Number(match[1]);
   const day = Number(match[2]);
+  const toISO = year => {
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return '';
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  };
+  const range = semesterRangeFor(semesterName);
+  if (range) {
+    const startYear = Number(range.start.slice(0, 4));
+    const endYear = Number(range.end.slice(0, 4));
+    for (let year = startYear; year <= endYear; year++) {
+      const iso = toISO(year);
+      if (iso && iso >= range.start && iso <= range.end) return iso;
+    }
+  }
   const semesterMatch = String(semesterName || '').match(/^(\d+)-([12])$/);
-  let year = new Date().getFullYear();
   if (semesterMatch) {
     const academicYear = Number(semesterMatch[1]) + 1911;
     const term = Number(semesterMatch[2]);
-    year = term === 1 ? academicYear + (month <= 7 ? 1 : 0) : academicYear + 1;
+    const plausible = term === 1 ? (month >= 8 || month === 1) : (month >= 2 && month <= 7);
+    if (plausible) return toISO(term === 1 ? academicYear + (month <= 7 ? 1 : 0) : academicYear + 1);
   }
-  const date = new Date(Date.UTC(year, month - 1, day));
-  if (date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return '';
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const now = new Date();
+  const thisMonth = now.getMonth() + 1;
+  let year = now.getFullYear();
+  if (month > thisMonth + 6) year -= 1;
+  else if (month < thisMonth - 6) year += 1;
+  return toISO(year);
 }
 
 function getExportColumnEntries() {
@@ -4593,8 +4698,8 @@ function populateExportSemesterSelect() {
   if (!sel) return;
   const sem = state.semester;
   const previous = sel.value;
-  const options = [`<option value="">本學期${sem.current.name ? '（' + escSem(sem.current.name) + '）' : ''}</option>`];
-  for (const arc of sem.archives) options.push(`<option value="${escSem(arc.name)}">封存 ${escSem(arc.name)}${arc.start ? '（' + escSem(arc.start) + ' ~ ' + escSem(arc.end) + '）' : ''}</option>`);
+  const options = [`<option value="">本學期${sem.current.name ? '（' + escHtml(sem.current.name) + '）' : ''}</option>`];
+  for (const arc of sem.archives) options.push(`<option value="${escHtml(arc.name)}">封存 ${escHtml(arc.name)}${arc.start ? '（' + escHtml(arc.start) + ' ~ ' + escHtml(arc.end) + '）' : ''}</option>`);
   sel.innerHTML = options.join('');
   if ([...sel.options].some(o => o.value === previous)) sel.value = previous;
   const wrap = sel.closest('.export-semester-field');
@@ -4613,7 +4718,8 @@ function exportColumnsFor(range, dateColumns, semesterName) {
 }
 
 function buildExportRows(students, columns) {
-  return students.map(s => {
+  // 儲藏室、雙人房的 C/D 床不匯出 (封存學期的名單沒經過 applyRoomRules，所以用同一套規則再判斷一次)
+  return students.filter(s => !s.hidden && !isHiddenBed(s)).map(s => {
     const r = [s.name, s.room, s.bed, s.class, s.studentId];
     // 預設每個人每一天都是 ✓ (在宿舍)，沒有紀錄或後端沒有該日欄位也一樣
     for (const d of columns) r.push(s.attendance[d] || '✓');
@@ -4654,10 +4760,12 @@ async function exportExcel() {
   const btn = document.getElementById('export-btn');
   const semester = selectedExportSemester();
   try {
+    // xlsx-js-style 改成需要時才載入；已載入就直接往下走 (不多等一輪)，載不到 (離線) 會丟中文錯誤訊息
+    if (typeof XLSX === 'undefined') await window.ensureXLSX();
     let students = state.students, columns = range.columns, label = activeSemesterName();
     if (semester && semester !== (state.rosterSemester && state.rosterSemester.name)) {
       if (btn) { btn.disabled = true; btn.setAttribute('aria-busy', 'true'); }
-      showToast(`正在讀取封存學期 ${semester}…`, 'info');
+      showToast(`正在讀取封存學期 ${escHtml(semester)}…`, 'info');
       const roster = await window._api.getRoster(semester);
       students = roster.students || [];
       columns = exportColumnsFor(range, roster.dateColumns || [], semester);
@@ -5076,20 +5184,18 @@ window.toggleSquadConfirm = toggleSquadConfirm;
 // ═════════════════════════════════════════════════════════════════════════════
 // 硬性房間規則
 // ═════════════════════════════════════════════════════════════════════════════
+// 這張床依硬性規則該不該隱藏 (匯出封存學期等沒經過 applyRoomRules 的名單也用這個判斷)
+function isHiddenBed(s) {
+  if (!s) return false;
+  // 儲藏室：整間隱藏
+  if (CONFIG.STORAGE_ROOMS.includes(s.room)) return true;
+  // 雙人房：C、D 床隱藏
+  if (CONFIG.DOUBLE_ROOMS.includes(s.room) && (s.bed === 'C' || s.bed === 'D')) return true;
+  return false;
+}
+
 function applyRoomRules() {
-  for (const s of state.students) {
-    // 儲藏室：整間隱藏
-    if (CONFIG.STORAGE_ROOMS.includes(s.room)) {
-      s.hidden = true;
-      continue;
-    }
-    // 雙人房：C、D 床隱藏
-    if (CONFIG.DOUBLE_ROOMS.includes(s.room) && (s.bed === 'C' || s.bed === 'D')) {
-      s.hidden = true;
-      continue;
-    }
-    s.hidden = false;
-  }
+  for (const s of state.students) s.hidden = isHiddenBed(s);
 }
 
 const NAV_PAGES = [
@@ -5217,20 +5323,55 @@ window.saveGlobalPinAuth = saveGlobalPinAuth;
 // ═════════════════════════════════════════════════════════════════════════════
 // 伺服器自訂背景影片 (全域 Notion Config 儲存)
 // ═════════════════════════════════════════════════════════════════════════════
+// 影片網址只接受 http:/https:，其他 (javascript:、data:、含引號亂拼的字串) 一律當成沒有影片
+function sanitizeBgVideoUrl(raw) {
+  const text = String(raw == null ? '' : raw).trim();
+  if (!text) return '';
+  try {
+    const u = new URL(text);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+    return u.href;
+  } catch (_) { return ''; }
+}
+
+// 縮放 / 透明度：先轉成數字並限制範圍，避免設定值被塞進 style 字串
+function clampBgVideoNumber(value, min, max, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+// 一律用 createElement 建 <video>，不用 innerHTML 拼字串
+function createBgVideoElement(url, scale, opacity, styleMode) {
+  const vid = document.createElement('video');
+  vid.src = url;
+  vid.autoplay = true; vid.loop = true; vid.muted = true;
+  vid.setAttribute('autoplay', ''); vid.setAttribute('loop', ''); vid.setAttribute('muted', ''); vid.setAttribute('playsinline', '');
+  if (styleMode === 'preview') {
+    vid.style.transform = `scale(${scale})`;
+    vid.style.opacity = String(opacity);
+  } else {
+    vid.style.setProperty('--target-scale', String(scale));
+    vid.style.setProperty('--target-opacity', String(opacity));
+    vid.style.opacity = '0';
+  }
+  return vid;
+}
+
 function loadGlobalBgVideo() {
   if (applyCustomBackground()) return;
   // 從 Notion 全域設定讀取
-  const rawUrl = state.config['bg_video_url'];
-  const url = (rawUrl || '').trim();
-  const scale = state.config['bg_video_scale'] || 1.0;
-  const opacity = state.config['bg_video_opacity'] || 0.25;
+  const url = sanitizeBgVideoUrl(state.config['bg_video_url']);
+  const scale = clampBgVideoNumber(state.config['bg_video_scale'], 0.1, 5, 1.0);
+  const opacity = clampBgVideoNumber(state.config['bg_video_opacity'], 0, 1, 0.25);
 
   const container = document.getElementById('custom-video-bg');
   const animBg = document.querySelector('.home-anim-bg');
 
-  if (url && url.startsWith('http')) {
-    container.innerHTML = `<video src="${url}" autoplay loop muted playsinline style="--target-scale: ${scale}; --target-opacity: ${opacity}; opacity: 0;"></video>`;
-    const vid = container.querySelector('video');
+  if (url) {
+    container.innerHTML = '';
+    const vid = createBgVideoElement(url, scale, opacity, 'global');
+    container.appendChild(vid);
     vid.addEventListener('loadeddata', () => {
       vid.style.animation = 'fadeInVideo 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards';
     }, { once: true });
@@ -5250,29 +5391,35 @@ function loadGlobalBgVideo() {
 }
 
 function previewBgVideoStyle() {
-  const scale = document.getElementById('bg-video-scale').value;
-  const opacity = document.getElementById('bg-video-opacity').value;
+  const scale = clampBgVideoNumber(document.getElementById('bg-video-scale').value, 0.1, 5, 1.0);
+  const opacity = clampBgVideoNumber(document.getElementById('bg-video-opacity').value, 0, 1, 0.25);
   const video = document.querySelector('#custom-video-bg video');
 
   if (video) {
     video.style.transform = `scale(${scale})`;
-    video.style.opacity = opacity;
+    video.style.opacity = String(opacity);
   } else {
-    // 若尚未載入影片，嘗試立刻用輸入的網址做預覽
-    const url = document.getElementById('bg-video-url').value.trim();
+    // 若尚未載入影片，嘗試立刻用輸入的網址做預覽 (網址不合法就不建 video)
+    const url = sanitizeBgVideoUrl(document.getElementById('bg-video-url').value);
     if (url) {
-      document.getElementById('custom-video-bg').innerHTML = `<video src="${url}" autoplay loop muted playsinline style="transform: scale(${scale}); opacity: ${opacity};"></video>`;
+      const container = document.getElementById('custom-video-bg');
+      container.innerHTML = '';
+      container.appendChild(createBgVideoElement(url, scale, opacity, 'preview'));
     }
   }
 }
 
 async function applyBgVideoUrl() {
-  const url = document.getElementById('bg-video-url').value.trim();
-  const scale = document.getElementById('bg-video-scale').value;
-  const opacity = document.getElementById('bg-video-opacity').value;
+  const rawUrl = document.getElementById('bg-video-url').value.trim();
+  const url = sanitizeBgVideoUrl(rawUrl);
+  const scale = clampBgVideoNumber(document.getElementById('bg-video-scale').value, 0.1, 5, 1.0);
+  const opacity = clampBgVideoNumber(document.getElementById('bg-video-opacity').value, 0, 1, 0.25);
 
-  if (!url) {
+  if (!rawUrl) {
     return showToast('請先輸入影片網址', 'error');
+  }
+  if (!url) {
+    return showToast('影片網址只接受 http:// 或 https:// 開頭的完整網址', 'error');
   }
 
   showLoading(true);
@@ -5280,14 +5427,14 @@ async function applyBgVideoUrl() {
     // 儲存至 Notion 全域 Config
     await window._api.setConfig({
       bg_video_url: url,
-      bg_video_scale: scale,
-      bg_video_opacity: opacity
+      bg_video_scale: String(scale),
+      bg_video_opacity: String(opacity)
     });
 
     // 更新本地狀態
     state.config['bg_video_url'] = url;
-    state.config['bg_video_scale'] = scale;
-    state.config['bg_video_opacity'] = opacity;
+    state.config['bg_video_scale'] = String(scale);
+    state.config['bg_video_opacity'] = String(opacity);
 
     showToast('全域背景影片已更新', 'success');
     loadGlobalBgVideo();
@@ -5462,21 +5609,21 @@ async function renderResidentReviewList() {
       html += `
         <div class="review-card">
           <div class="review-card-info">
-            <div class="review-card-name">${req.name}<span class="review-card-meta">${req.class} • ${req.studentId}</span></div>
-            <div class="review-card-bed"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg> 申請補入: ${req.room} ${req.bed} 床</div>
-            <div class="review-card-time">⏰ 送出時間: ${timeStr}</div>
+            <div class="review-card-name">${escHtml(req.name)}<span class="review-card-meta">${escHtml(req.class)} • ${escHtml(req.studentId)}</span></div>
+            <div class="review-card-bed"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg> 申請補入: ${escHtml(req.room)} ${escHtml(req.bed)} 床</div>
+            <div class="review-card-time">⏰ 送出時間: ${escHtml(timeStr)}</div>
             ${req.isForeign ? '<div class="review-card-badge foreign"><svg class="ui-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg> 外籍生</div>' : ''}
           </div>
           <div class="review-card-actions">
-            <button class="review-approve-btn" onclick="approveResidentAddReq('${req.id}')"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 通過並寫入</button>
-            <button class="review-reject-btn" onclick="rejectResidentAddReq('${req.id}')">✕ 駁回</button>
+            <button class="review-approve-btn" data-id="${escHtml(req.id)}" onclick="approveResidentAddReq(this.dataset.id)"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 通過並寫入</button>
+            <button class="review-reject-btn" data-id="${escHtml(req.id)}" onclick="rejectResidentAddReq(this.dataset.id)">✕ 駁回</button>
           </div>
         </div>
       `;
     });
     container.innerHTML = html;
   } catch (err) {
-    container.innerHTML = `<div style="color:var(--red);text-align:center;padding:20px;">讀取失敗：${err.message}</div>`;
+    container.innerHTML = `<div style="color:var(--red);text-align:center;padding:20px;">讀取失敗：${escHtml(err.message)}</div>`;
   }
 }
 
@@ -5499,7 +5646,7 @@ async function approveResidentAddReq(reqId) {
     // 檢查床位現在是否依然是空床
     const student = state.students.find(s => s.room === req.room && s.bed === req.bed);
     if (!student || !student.isEmpty) {
-      throw new Error(`目標床位 ${req.room} ${req.bed} 目前並非空床狀態！請先確認總表。`);
+      throw new Error(`目標床位 ${escHtml(req.room)} ${escHtml(req.bed)} 目前並非空床狀態！請先確認總表。`);
     }
 
     // 1. 寫入總表
@@ -5609,7 +5756,7 @@ function handleCounterLeaveSearch() {
     select.innerHTML = '<option value="">找不到符合的學生</option>';
   } else {
     select.innerHTML = matches.map(s =>
-      `<option value="${s.id}">${s.room} ${s.bed} - ${s.name}</option>`
+      `<option value="${escHtml(s.id)}">${escHtml(s.room)} ${escHtml(s.bed)} - ${escHtml(s.name)}</option>`
     ).join('');
   }
 }
@@ -5627,8 +5774,12 @@ function formatLeaveStamp(value) {
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// 「寫總表」成功、但「寫請假紀錄」fetch 丟例外 (斷線) 時記住這筆 (學生id+起迄日)，
+// 下次同一組資料再按一次送出就跳過總表那段、只補紀錄，避免重複覆寫/重複新增紀錄。
+let _leaveAttendanceDone = null; // { key }
+
 async function submitCounterLeave() {
-  if (state.viewSemester) { showToast(`正在查看封存學期 ${state.viewSemester}，不能登記請假`, 'error'); return; }
+  if (state.viewSemester) { showToast(`正在查看封存學期 ${escHtml(state.viewSemester)}，不能登記請假`, 'error'); return; }
   const targetId = document.getElementById('cl-target').value;
   const startDateStr = document.getElementById('cl-start-date').value;
   const endDateStr = document.getElementById('cl-end-date').value;
@@ -5657,51 +5808,64 @@ async function submitCounterLeave() {
   const student = state.students.find(s => s.id === targetId);
   if (!student) return;
 
+  const key = `${targetId}|${startDateStr}|${endDateStr}`;
+  const skipAttendance = !!(_leaveAttendanceDone && _leaveAttendanceDone.key === key);
+
   const btn = document.querySelector('#counter-leave-modal .modal-btn:last-child');
   if (btn) { btn.disabled = true; btn.textContent = '處理中...'; }
   showLoading(true);
 
-  try {
-    // 1. 以完整年月日配對點名欄位，同時相容舊式的 "X月Y日"。
-    const updates = [];
-    const matchedCols = getExportColumnEntries()
-      .filter(entry => entry.iso >= startDateStr && entry.iso <= endDateStr)
-      .map(entry => entry.column);
-    // 後端沒有欄位的日期：只能先存在這台裝置 (總表會顯示，等欄位建立後自動補送)
-    let localOnlyDays = 0;
-    {
-      const cursor = parseISODate(startDateStr);
-      const endDate = parseISODate(endDateStr);
-      const known = new Set(getExportColumnEntries().map(entry => entry.iso));
-      while (cursor && endDate && cursor <= endDate && localOnlyDays < 400) {
-        const iso = cursor.toISOString().slice(0, 10);
-        if (!known.has(iso)) {
-          student.attendance[iso] = '◎';
-          recordPendingAttendance(student.id, iso, '◎');
-          localOnlyDays++;
+  // 1. 寫總表 (若上一次已經寫成功、只是紀錄沒存到，這次同一組資料就跳過，只補紀錄)
+  if (!skipAttendance) {
+    try {
+      // 以完整年月日配對點名欄位，同時相容舊式的 "X月Y日"。
+      const updates = [];
+      const matchedCols = getExportColumnEntries()
+        .filter(entry => entry.iso >= startDateStr && entry.iso <= endDateStr)
+        .map(entry => entry.column);
+      // 後端沒有欄位的日期：只能先存在這台裝置 (總表會顯示，等欄位建立後自動補送)
+      let localOnlyDays = 0;
+      {
+        const cursor = parseISODate(startDateStr);
+        const endDate = parseISODate(endDateStr);
+        const known = new Set(getExportColumnEntries().map(entry => entry.iso));
+        while (cursor && endDate && cursor <= endDate && localOnlyDays < 400) {
+          const iso = cursor.toISOString().slice(0, 10);
+          if (!known.has(iso)) {
+            student.attendance[iso] = '◎';
+            recordPendingAttendance(student.id, iso, '◎');
+            localOnlyDays++;
+          }
+          cursor.setUTCDate(cursor.getUTCDate() + 1);
         }
-        cursor.setUTCDate(cursor.getUTCDate() + 1);
       }
-    }
-    if (matchedCols.length > 0) {
-      const pageUpdate = { pageId: student.id, dates: {} };
-      for (const c of matchedCols) {
-        pageUpdate.dates[c] = '◎'; // 強制覆寫為請假
-        student.attendance[c] = '◎'; // 本地更新
-      }
-      updates.push(pageUpdate);
+      if (matchedCols.length > 0) {
+        const pageUpdate = { pageId: student.id, dates: {} };
+        for (const c of matchedCols) {
+          pageUpdate.dates[c] = '◎'; // 強制覆寫為請假
+          student.attendance[c] = '◎'; // 本地更新
+        }
+        updates.push(pageUpdate);
 
-      // 送出至總表 (分批每45筆)
-      for (let i = 0; i < updates.length; i += 20) {
-        await window._api.updateAttendance(updates.slice(i, i + 20));
+        // 送出至總表 (分批每20筆)
+        for (let i = 0; i < updates.length; i += 20) {
+          await window._api.updateAttendance(updates.slice(i, i + 20));
+        }
+      } else if (localOnlyDays > 0) {
+        showToast(`後端點名表還沒有這 ${localOnlyDays} 天的欄位，請假先暫存在這台裝置的總表`, 'info');
+      } else {
+        showToast('警告：選擇的請假範圍未涵蓋目前點名表的任何一天！將只記錄歷史，不修改總表。', 'info');
       }
-    } else if (localOnlyDays > 0) {
-      showToast(`後端點名表還沒有這 ${localOnlyDays} 天的欄位，請假先暫存在這台裝置的總表`, 'info');
-    } else {
-      showToast('警告：選擇的請假範圍未涵蓋目前點名表的任何一天！將只記錄歷史，不修改總表。', 'info');
+    } catch (err) {
+      showToast('總表更新失敗：' + err.message, 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '送出請假'; }
+      showLoading(false);
+      return;
     }
+  }
 
-    // 2. 紀錄至電話請假紀錄 DB
+  // 2. 紀錄至電話請假紀錄 DB (跟總表分開各自 try/catch，斷線時不會逼使用者重寫一次總表)
+  try {
     const leaveAddRes = await fetch(CONFIG.WORKER_URL + '/api/leave-records', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -5715,16 +5879,18 @@ async function submitCounterLeave() {
         callerNote
       })
     });
-    _llRecordsCache = null; // 下次查個人請假時重抓
-    if (typeof window.phoneLeaveInvalidate === 'function') window.phoneLeaveInvalidate();
 
-    // 若 worker 回傳 500 表示可能未設定環境變數
+    // 若 worker 回傳 500 表示可能未設定環境變數 (設定問題，重按也不會好，不設補紀錄旗標)
     if (!leaveAddRes.ok) {
       console.warn('電話紀錄寫入失敗，可能未配置 LEAVE_DB_ID。');
       showToast('總表已更新◎，但歷史紀錄寫入失敗 (請確認 Cloudflare 已設定 LEAVE_DB_ID)', 'info');
+      _leaveAttendanceDone = null;
     } else {
       playClickSound('all_present');
       showToast(`已經為 ${student.name} 完成起迄請假設定並寫入紀錄！`, 'success');
+      _leaveAttendanceDone = null;
+      _llRecordsCache = null; // 下次查個人請假時重抓
+      if (typeof window.phoneLeaveInvalidate === 'function') window.phoneLeaveInvalidate();
     }
 
     if (currentPage === 'summary') renderSummary();
@@ -5732,7 +5898,9 @@ async function submitCounterLeave() {
 
     closeModal('counter-leave-modal');
   } catch (err) {
-    showToast('更新失敗：' + err.message, 'error');
+    // 紀錄 fetch 本身斷線/丟例外：總表已經寫成功了，只是紀錄沒存到；記住旗標，讓使用者再按一次送出時只補紀錄
+    _leaveAttendanceDone = { key };
+    showToast('總表已更新，但請假紀錄沒存成功，請再按一次送出 (只會補紀錄)', 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '送出請假'; }
     showLoading(false);
@@ -5763,7 +5931,8 @@ const LEAVE_LOOKUP_STATUS = {
 let leaveLookupStudentId = null;
 let leaveLookupQuery = '';
 let _llSearchTimer = 0;
-let _llRecordsCache = null;   // 電話請假紀錄整份快取 (同一次進頁面只抓一次)
+let _llRecordsCache = null;   // 目前這位同學的電話請假紀錄 (依姓名 + 學期起迄向後端查)
+let _llRecordsKey = '';       // 快取對應的「姓名|起|迄」，換人或換學期就重抓
 let _llRecordsError = '';
 let _llRecordsLoading = false;
 
@@ -5896,34 +6065,55 @@ function leaveLookupGroup(title, ranges, emptyText) {
   </section>`;
 }
 
+// 目前學期的起迄日 (roster 帶回來的學期優先，其次 /api/semester 的本學期)；沒有就 null
+function activeSemesterRange() {
+  return semesterRangeFor(activeSemesterName());
+}
+
+function leaveLookupRecordsKey(student) {
+  const range = activeSemesterRange();
+  return `${String(student.name || '').trim()}|${range ? range.start : ''}|${range ? range.end : ''}`;
+}
+
 async function ensureLeaveLookupRecords() {
-  if (_llRecordsCache || _llRecordsLoading) { renderLeaveLookupRecords(); return; }
+  const student = leaveLookupStudentId ? state.students.find(s => s.id === leaveLookupStudentId) : null;
+  if (!student) return;
+  const key = leaveLookupRecordsKey(student);
+  if (_llRecordsKey === key && (_llRecordsCache || _llRecordsLoading)) { renderLeaveLookupRecords(); return; }
+  _llRecordsKey = key;
+  _llRecordsCache = null;
   _llRecordsLoading = true;
   _llRecordsError = '';
   renderLeaveLookupRecords();
   try {
-    const res = await fetch(CONFIG.WORKER_URL + '/api/leave-records');
+    // 只查這位同學 (?name=)，並限定在目前學期的起迄日內 (沒有學期資訊就不帶 from/to)。
+    // 後端不支援 name 篩選時會多回一些資料，前端照樣用姓名過濾。
+    const params = new URLSearchParams();
+    params.set('name', String(student.name || '').trim());
+    const range = activeSemesterRange();
+    if (range) { params.set('from', range.start); params.set('to', range.end); }
+    const res = await fetch(CONFIG.WORKER_URL + '/api/leave-records?' + params.toString());
     if (!res.ok) throw new Error('API 回應錯誤');
     const data = await res.json();
+    if (_llRecordsKey !== key) return; // 等待期間已換人，這份結果作廢
     _llRecordsCache = Array.isArray(data) ? data : [];
   } catch (err) {
+    if (_llRecordsKey !== key) return;
     _llRecordsError = err.message || '載入失敗';
   } finally {
-    _llRecordsLoading = false;
-    renderLeaveLookupRecords();
+    if (_llRecordsKey === key) {
+      _llRecordsLoading = false;
+      renderLeaveLookupRecords();
+    }
   }
 }
 
 function leaveLookupRecordsFor(student) {
   if (!_llRecordsCache) return [];
   const name = String(student.name || '').trim();
-  const room = String(student.room || '').trim();
-  return _llRecordsCache.filter(r => {
-    if (String(r.name || '').trim() !== name) return false;
-    const roomBed = String(r.roomBed || '');
-    if (room && roomBed && !roomBed.includes(room)) return false; // 同名不同房就排除
-    return true;
-  }).sort((a, b) => String(b.dateStart || '').localeCompare(String(a.dateStart || '')));
+  // 以「姓名相同」為準；換過床的舊紀錄 (roomBed 不同) 也要列出來，所以不再拿房號當必要條件
+  return _llRecordsCache.filter(r => String(r.name || '').trim() === name)
+    .sort((a, b) => String(b.dateStart || '').localeCompare(String(a.dateStart || '')));
 }
 
 function renderLeaveLookupRecords() {
@@ -6168,23 +6358,24 @@ async function renderRepairReviewList() {
     let html = '';
     records.forEach(rec => {
       const timeStr = rec.createdAt ? new Date(rec.createdAt).toLocaleString() : '未知';
+      // 照片網址與紀錄 id 都來自後端：跳脫後放進屬性，onclick 一律用 dataset 讀
       const photosHtml = (rec.photos || []).map(src =>
-        `<img src="${src}" alt="報修照片" onclick="openImagePreview('${src}')">`
+        `<img src="${escHtml(src)}" alt="報修照片" data-src="${escHtml(src)}" onclick="openImagePreview(this.dataset.src)">`
       ).join('');
 
       html += `
         <div class="repair-record-card">
-          <div class="repair-record-reporter"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 1 0-9-9c0 1.48.36 2.89 1 4.12l-1.5 4.5 4.5-1.5c1.23.64 2.64 1 4.12 1z"/><path d="M12 12v.01"/><path d="M16 12v.01"/><path d="M8 12v.01"/></svg> 報修人：${rec.reporter || rec.name || rec.title || rec.Name || rec.author || '（未知填寫人）'}</div>
-          <div class="repair-record-reason">${rec.reason || '（無描述）'}</div>
+          <div class="repair-record-reporter"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 1 0-9-9c0 1.48.36 2.89 1 4.12l-1.5 4.5 4.5-1.5c1.23.64 2.64 1 4.12 1z"/><path d="M12 12v.01"/><path d="M16 12v.01"/><path d="M8 12v.01"/></svg> 報修人：${escHtml(rec.reporter || rec.name || rec.title || rec.Name || rec.author || '（未知填寫人）')}</div>
+          <div class="repair-record-reason">${escHtml(rec.reason || '（無描述）')}</div>
           ${photosHtml ? `<div class="repair-record-photos">${photosHtml}</div>` : ''}
-          <div class="repair-record-time">⏰ ${timeStr}</div>
-          <button class="repair-done-btn" onclick="markRepairDone('${rec.id}')"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 已回報處理</button>
+          <div class="repair-record-time">⏰ ${escHtml(timeStr)}</div>
+          <button class="repair-done-btn" data-id="${escHtml(rec.id)}" onclick="markRepairDone(this.dataset.id)"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 已回報處理</button>
         </div>
       `;
     });
     container.innerHTML = html;
   } catch (err) {
-    container.innerHTML = `<div style="color:var(--red);text-align:center;padding:20px;">讀取失敗：${err.message}</div>`;
+    container.innerHTML = `<div style="color:var(--red);text-align:center;padding:20px;">讀取失敗：${escHtml(err.message)}</div>`;
   }
 }
 
@@ -6360,23 +6551,24 @@ async function renderFeedbackReviewList() {
     let html = '';
     records.forEach(rec => {
       const timeStr = rec.createdAt ? new Date(rec.createdAt).toLocaleString() : '未知';
+      // 截圖網址與紀錄 id 都來自後端：跳脫後放進屬性，onclick 一律用 dataset 讀
       const photosHtml = (rec.photos || []).map(src =>
-        `<img src="${src}" alt="回饋截圖" style="width:80px;height:80px;object-fit:cover;border-radius:8px;cursor:pointer;" onclick="openImagePreview('${src}')">`
+        `<img src="${escHtml(src)}" alt="回饋截圖" style="width:80px;height:80px;object-fit:cover;border-radius:8px;cursor:pointer;" data-src="${escHtml(src)}" onclick="openImagePreview(this.dataset.src)">`
       ).join('');
 
       html += `
         <div class="repair-record-card">
-          <div class="repair-record-reporter"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="m16 11 2-2"/><path d="m18 9 2-2"/><path d="m18 9 2 2"/><path d="m18 9-2-2"/></svg> ${rec.name || '匿名'}</div>
-          <div class="repair-record-reason">${rec.content || '（無內容）'}</div>
+          <div class="repair-record-reporter"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="m16 11 2-2"/><path d="m18 9 2-2"/><path d="m18 9 2 2"/><path d="m18 9-2-2"/></svg> ${escHtml(rec.name || '匿名')}</div>
+          <div class="repair-record-reason">${escHtml(rec.content || '（無內容）')}</div>
           ${photosHtml ? `<div class="repair-record-photos">${photosHtml}</div>` : ''}
-          <div class="repair-record-time">⏰ ${timeStr}</div>
-          <button class="repair-done-btn" onclick="markFeedbackRead('${rec.id}')"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 已讀並歸檔</button>
+          <div class="repair-record-time">⏰ ${escHtml(timeStr)}</div>
+          <button class="repair-done-btn" data-id="${escHtml(rec.id)}" onclick="markFeedbackRead(this.dataset.id)"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 已讀並歸檔</button>
         </div>
       `;
     });
     container.innerHTML = html;
   } catch (err) {
-    container.innerHTML = `<div style="color:var(--red);text-align:center;padding:20px;">讀取失敗：${err.message}</div>`;
+    container.innerHTML = `<div style="color:var(--red);text-align:center;padding:20px;">讀取失敗：${escHtml(err.message)}</div>`;
   }
 }
 
@@ -6777,7 +6969,6 @@ window.saveResidentRow = async function (row, options = {}) {
     row.querySelector('.rm-input-phone').value = student.phone;
     row.querySelector('.rm-input-address').value = student.address;
     row.classList.remove('is-dirty');
-    localStorage.setItem('biyuan_temp_students_update', JSON.stringify(state.students));
 
     if (button) {
       button.textContent = '已儲存';
@@ -6792,7 +6983,7 @@ window.saveResidentRow = async function (row, options = {}) {
       }, 1200);
     }
     filterResidentManagement();
-    if (!options.quiet) showToast(`${student.room || ''} ${student.bed || ''} 資料已儲存`, 'success');
+    if (!options.quiet) showToast(`${escHtml(student.room || '')} ${escHtml(student.bed || '')} 資料已儲存`, 'success');
     return true;
   } catch (err) {
     if (button) {
@@ -6881,7 +7072,7 @@ function sfStudentAt(vIndex) {
 }
 
 function sfEsc(v) {
-  return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  return escHtml(v);
 }
 
 // 一本資料夾的摘要：名字、班別、標籤、學號 (顯示在前板玻璃上；草稿優先)
@@ -7288,8 +7479,6 @@ window.autoSaveStudentFile = async function (elem) {
       if (obj?.id === studentObj.id) sfUpdateSummary(c, studentObj, sfReadCard(c, studentObj)?.draft);
     });
 
-    localStorage.setItem('biyuan_temp_students_update', JSON.stringify(state.students));
-
     if (btn) {
       btn.innerHTML = '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 已儲存';
       btn.style.background = '#10b981';
@@ -7347,7 +7536,7 @@ window.closeImagePreview = function () {
 };
 
 window.saveGeminiKey = function (val) {
-  localStorage.setItem('gemini_api_key', (val || '').trim());
+  lsSet('gemini_api_key', (val || '').trim());
   showToast('API Key 已儲存本機', 'success');
 };
 
