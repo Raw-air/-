@@ -87,12 +87,18 @@ function getTodayColumnName() {
   return `${now.getMonth() + 1}月${now.getDate()}日`;
 }
 
-/** 解析日期欄位名稱為 Date 物件（使用今年）*/
+/** 解析日期欄位名稱為 Date 物件（年份相對今天推：比今天晚超過 6 個月算去年、早超過 6 個月算明年，其餘今年）*/
 function parseDateColumnToDate(name) {
   const m = name.match(/(\d+)月(\d+)日/);
   if (!m) return null;
-  const d = new Date();
-  d.setMonth(parseInt(m[1]) - 1, parseInt(m[2]));
+  const month = parseInt(m[1]);
+  const day = parseInt(m[2]);
+  const now = new Date();
+  const thisMonth = now.getMonth() + 1;
+  let year = now.getFullYear();
+  if (month > thisMonth + 6) year -= 1;
+  else if (month < thisMonth - 6) year += 1;
+  const d = new Date(year, month - 1, day);
   d.setHours(0, 0, 0, 0);
   return d;
 }
