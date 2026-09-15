@@ -41,7 +41,7 @@
   const ribPrev = new Float32Array((SEG + 1) * 2);
   const ribVerts = new Float32Array((SEG + 1) * 2 * 6);   // 三角帶：每個頂點 x, y, 絲帶 u, v, 貼圖 tx, ty
 
-  let canvas = null, gl = null, ctx2d = null, dpr = 1, W = 0, H = 0;
+  let canvas = null, gl = null, glLost = false, ctx2d = null, dpr = 1, W = 0, H = 0;
   let progDot = null, progLens = null, progRib = null, vboDot = null, vboQuad = null, vboRib = null, fbo = null, fboTex = null, cardTex = null, loc = {};
   let quality = 1;                        // 這台裝置學到的品質 (0.5 ~ 1)：粉塵密度與光線行進步數
   let running = null;
@@ -311,6 +311,88 @@
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     return t;
   }
+  // shader / VBO / FBO / 貼圖：init() 第一次建立會呼叫，context 遺失後 'webglcontextrestored' 重新建立也呼叫這裡
+  function setupGL() {
+    progDot = link(DOT_VS, DOT_FS);
+    progLens = link(QUAD_VS, LENS_FS);
+    progRib = link(RIB_VS, RIB_FS);
+    if (!progDot || !progLens || !progRib) { gl = null; return false; }
+    vboDot = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vboDot);
+    gl.bufferData(gl.ARRAY_BUFFER, buf.byteLength, gl.DYNAMIC_DRAW);
+    vboQuad = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vboQuad);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+    vboRib = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vboRib);
+    gl.bufferData(gl.ARRAY_BUFFER, ribVerts.byteLength, gl.DYNAMIC_DRAW);
+    // 離屏貼圖：絲帶與粉塵先畫到這裡，透鏡 pass 再把它彎曲；肖像貼圖每次刪除重傳
+    fboTex = makeTex();
+    cardTex = makeTex();
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(16));
+    fbo = gl.createFramebuffer();
+    const U = (p, n) => gl.getUniformLocation(p, n);
+    loc = {
+      dPos: gl.getAttribLocation(progDot, 'a_pos'), dSize: gl.getAttribLocation(progDot, 'a_size'),
+      dCol: gl.getAttribLocation(progDot, 'a_col'), dRes: U(progDot, 'u_res'), dDpr: U(progDot, 'u_dpr'),
+      rPos: gl.getAttribLocation(progRib, 'a_pos'), rAx: gl.getAttribLocation(progRib, 'a_ax'), rUv: gl.getAttribLocation(progRib, 'a_uv'),
+      rRes: U(progRib, 'u_res'), rTex: U(progRib, 'u_tex'), rHole: U(progRib, 'u_hole'), rR: U(progRib, 'u_R'),
+      rFront: U(progRib, 'u_front'), rFeather: U(progRib, 'u_feather'), rFlare: U(progRib, 'u_flare'), rAlpha: U(progRib, 'u_alpha'), rTime: U(progRib, 'u_time'),
+      quad: gl.getAttribLocation(progLens, 'a_quad'),
+      tex: U(progLens, 'u_tex'), res: U(progLens, 'u_res'), dpr: U(progLens, 'u_dpr'),
+      hole: U(progLens, 'u_hole'), R: U(progLens, 'u_R'), holeA: U(progLens, 'u_holeA'),
+      time: U(progLens, 'u_time'), dim: U(progLens, 'u_dim'), starA: U(progLens, 'u_starA'),
+      spot: U(progLens, 'u_spot'), front: U(progLens, 'u_front'), feather: U(progLens, 'u_feather'),
+      shake: U(progLens, 'u_shake'), ripple: U(progLens, 'u_ripple'), flash: U(progLens, 'u_flash'),
+      feed: U(progLens, 'u_feed'), steps: U(progLens, 'u_steps'), rmax: U(progLens, 'u_rmax')
+    };
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);   // 預乘 alpha：粉塵疊起來會變密但不會爆白
+    return true;
+  }
+  // FBO 貼圖配到目前畫布大小：resize() 與 context 恢復後重建都要用
+  function reallocFBO() {
+    if (!gl || !fboTex) return;
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.bindTexture(gl.TEXTURE_2D, fboTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fboTex, 0);
+    stats.lens = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+  // WebGL context 遺失 (GPU 重置、背景分頁太久被系統收回…)：preventDefault() 才有機會恢復；
+  // 失去的瞬間先清掉 shader/貼圖引用 (物件已失效)，播放中的動畫下一幀 tick() 會自動換成 Canvas 2D 備援，不用等恢復。
+  // 恢復時如果還是同一張畫布 (沒有中途換去 2D 備援) 才重新建立資源；已經永久換過的話這個 context 不用救了
+  function attachContextHandlers(c) {
+    c.addEventListener('webglcontextlost', e => {
+      e.preventDefault();
+      glLost = true;
+      progDot = progLens = progRib = vboDot = vboQuad = vboRib = fbo = fboTex = cardTex = null;
+      loc = {};
+    }, false);
+    c.addEventListener('webglcontextrestored', () => {
+      if (canvas !== c || !gl) return;
+      glLost = false;
+      if (!setupGL()) return;
+      reallocFBO();
+      if (portraitCanvas) uploadCard(portraitCanvas);
+      warmUp();
+    }, false);
+  }
+  // 播放中途發現 gl 失效：同一張 canvas 拿過 WebGL 就拿不到 2D，換一張畫布接手 (資料夾與粒子不開天窗)
+  function swapToCanvas2D() {
+    try { gl && gl.getExtension('WEBGL_lose_context')?.loseContext(); } catch (_) {}
+    gl = null; glLost = false;
+    progDot = progLens = progRib = vboDot = vboQuad = vboRib = fbo = fboTex = cardTex = null; loc = {};
+    const old = canvas;
+    canvas = document.createElement('canvas');
+    canvas.className = old.className;
+    canvas.setAttribute('aria-hidden', 'true');
+    canvas.width = old.width; canvas.height = old.height;
+    canvas.style.width = old.style.width; canvas.style.height = old.style.height;
+    old.replaceWith(canvas);
+    ctx2d = canvas.getContext('2d');
+  }
 
   function init() {
     if (canvas) return;
@@ -343,45 +425,10 @@
       } catch (_) {}
     }
     if (gl) {
-      progDot = link(DOT_VS, DOT_FS);
-      progLens = link(QUAD_VS, LENS_FS);
-      progRib = link(RIB_VS, RIB_FS);
-      if (!progDot || !progLens || !progRib) gl = null;
+      attachContextHandlers(canvas);   // 先接上 context lost/restored，再建立資源
+      setupGL();                       // 失敗 (shader 編譯不過) 會把 gl 設回 null，下面補上 Canvas 2D 備援
     }
-    if (gl) {
-      vboDot = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, vboDot);
-      gl.bufferData(gl.ARRAY_BUFFER, buf.byteLength, gl.DYNAMIC_DRAW);
-      vboQuad = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, vboQuad);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
-      vboRib = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, vboRib);
-      gl.bufferData(gl.ARRAY_BUFFER, ribVerts.byteLength, gl.DYNAMIC_DRAW);
-      // 離屏貼圖：絲帶與粉塵先畫到這裡，透鏡 pass 再把它彎曲；肖像貼圖每次刪除重傳
-      fboTex = makeTex();
-      cardTex = makeTex();
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(16));
-      fbo = gl.createFramebuffer();
-      const U = (p, n) => gl.getUniformLocation(p, n);
-      loc = {
-        dPos: gl.getAttribLocation(progDot, 'a_pos'), dSize: gl.getAttribLocation(progDot, 'a_size'),
-        dCol: gl.getAttribLocation(progDot, 'a_col'), dRes: U(progDot, 'u_res'), dDpr: U(progDot, 'u_dpr'),
-        rPos: gl.getAttribLocation(progRib, 'a_pos'), rAx: gl.getAttribLocation(progRib, 'a_ax'), rUv: gl.getAttribLocation(progRib, 'a_uv'),
-        rRes: U(progRib, 'u_res'), rTex: U(progRib, 'u_tex'), rHole: U(progRib, 'u_hole'), rR: U(progRib, 'u_R'),
-        rFront: U(progRib, 'u_front'), rFeather: U(progRib, 'u_feather'), rFlare: U(progRib, 'u_flare'), rAlpha: U(progRib, 'u_alpha'), rTime: U(progRib, 'u_time'),
-        quad: gl.getAttribLocation(progLens, 'a_quad'),
-        tex: U(progLens, 'u_tex'), res: U(progLens, 'u_res'), dpr: U(progLens, 'u_dpr'),
-        hole: U(progLens, 'u_hole'), R: U(progLens, 'u_R'), holeA: U(progLens, 'u_holeA'),
-        time: U(progLens, 'u_time'), dim: U(progLens, 'u_dim'), starA: U(progLens, 'u_starA'),
-        spot: U(progLens, 'u_spot'), front: U(progLens, 'u_front'), feather: U(progLens, 'u_feather'),
-        shake: U(progLens, 'u_shake'), ripple: U(progLens, 'u_ripple'), flash: U(progLens, 'u_flash'),
-        feed: U(progLens, 'u_feed'), steps: U(progLens, 'u_steps'), rmax: U(progLens, 'u_rmax')
-      };
-      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);   // 預乘 alpha：粉塵疊起來會變密但不會爆白
-    } else {
-      ctx2d = canvas.getContext('2d');
-    }
+    if (!gl) ctx2d = canvas.getContext('2d');
     resize();
     warmUp();
     window.addEventListener('resize', resize);
@@ -421,17 +468,23 @@
     if (canvas.width === nw && canvas.height === nh) return;   // iOS 捲動時網址列伸縮也會發 resize
     canvas.width = nw; canvas.height = nh;
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
-    if (gl) {
-      gl.viewport(0, 0, nw, nh);
-      gl.bindTexture(gl.TEXTURE_2D, fboTex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, nw, nh, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fboTex, 0);
-      stats.lens = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    }
+    reallocFBO();
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true }); else init();
+  // 延遲建立：頁面載入不建立 WebGL context / shader / 離屏貼圖 (省開機時約 13MB 與一次暖機繪製)。
+  // 真正要播放刪除動畫時 run()/bench() 會自己呼叫 init()；這裡只在使用者第一次切進會用到的頁面 (學生檔案)
+  // 時，揀一個空檔提前建好 (不卡住那次切頁換場)，沒有 requestIdleCallback 就退回 setTimeout。
+  let idleInitPending = false;
+  function idleInit() {
+    if (canvas || idleInitPending) return;
+    if (window.sfReduceMotion && window.sfReduceMotion()) return;
+    idleInitPending = true;
+    const go = () => { idleInitPending = false; init(); };
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(go, { timeout: 300 });
+    else setTimeout(go, 50);
+  }
+  window.addEventListener('app:navigate', () => {
+    if (typeof currentPage !== 'undefined' && currentPage === 'student-files') idleInit();
+  });
 
   function drawDots(n) {
     if (!n) return;
@@ -1225,9 +1278,11 @@
         rib: hidden && ribAlpha > 0 ? ribCount : 0, ribFront: uFront, ribFeather: .06, ribFlare, ribAlpha };
 
       // ── 畫 ──
-      if (gl) {
+      if (gl && !glLost && !gl.isContextLost()) {
         drawScene(w, u);
-      } else if (ctx2d) {
+      } else {
+        if (gl) swapToCanvas2D();   // 播放中發現 gl 失效：換張畫布走 Canvas 2D 備援，不能開天窗 (資料夾隱藏、粒子不出現)
+        if (!ctx2d) { finish(false); return; }   // 極端情況連 2D 都拿不到：安全收掉，不要卡死
         const c = ctx2d;
         c.setTransform(dpr, 0, 0, dpr, 0, 0);
         c.clearRect(0, 0, W, H);
