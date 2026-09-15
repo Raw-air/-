@@ -168,7 +168,7 @@ function makeKV(){const store={};return {store,async get(k,t){const v=store[k];i
     assert.ok(!kvPuts.includes('poll_att'),'有中樞就不寫 KV 出席信號');
     r=await call('/api/poll?since='+(base+2));assert.deepEqual(r.data.changes,[]);
     const many=[];for(let i=0;i<45;i++)many.push({pageId:pid,date:'2027-09-01',value:i%2?'✓':'◎'});
-    for(let i=0;i<8;i++)await call('/api/attendance','PATCH',{updates:many});
+    for(let i=0;i<13;i++)await call('/api/attendance','PATCH',{updates:many}); // 後端單次只收 25 筆 (多的回錯誤)，要 13 批才超過 300 筆
     r=await call('/api/poll?since='+base);assert.equal(r.data.reset,true,'落後超過 300 筆要整張重抓');
     await call('/api/confirm','POST',{date:'2027-09-03',squad:'三單',confirmed:true});
     r=await call('/api/poll');assert.equal(r.data.date,'2027-09-03');assert.ok(r.data.confirms.includes('三單'));

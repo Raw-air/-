@@ -172,9 +172,30 @@ function isDateColumnName(name) {
   return ISO_RE.test(name) || LEGACY_RE.test(name);
 }
 
-/** 在資料庫補上缺少的日期欄位 (select ✓◎✘△)；回傳新增的欄位名 */
+// 每月天數 (2 月放行 29 日：舊式欄名沒有年份，閏年的 2月29日 是真的存在)
+const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+/** 日期欄位名稱是否為真實存在的日期：ISO 要是真的年月日 (年份 2000-2100)，舊式 X月Y日 該月要真有那一天 (2月30日 不算) */
+function isValidDateColumnName(name) {
+  if (!isDateColumnName(name)) return false;
+  const iso = ISO_RE.exec(name);
+  if (iso) {
+    const y = +iso[1];
+    return y >= 2000 && y <= 2100 && !!parseISO(name);
+  }
+  const m = LEGACY_RE.exec(name);
+  const month = +m[1], day = +m[2];
+  return month >= 1 && month <= 12 && day >= 1 && day <= DAYS_IN_MONTH[month - 1];
+}
+
+/** 出席狀態值是否合法：只收 ✓◎✘△ 或空 (空 = 清掉)；其他字串寫進 Notion 會多出奇怪的選項 */
+function isValidAttendanceValue(value) {
+  if (value === undefined || value === null || value === '') return true;
+  return typeof value === 'string' && ATTENDANCE_OPTIONS.some(o => o.name === value);
+}
+
+/** 在資料庫補上缺少的日期欄位 (select ✓◎✘△)；回傳新增的欄位名。不合法的日期名 (2月30日 之類) 不建欄位 */
 async function ensureDateColumns(dbId, names, env, dbInfo) {
-  const wanted = [...new Set((names || []).filter(isDateColumnName))];
+  const wanted = [...new Set((names || []).filter(isValidDateColumnName))];
   if (!wanted.length) return [];
   if (!dbInfo) { dbInfo = await notion(`/databases/${dbId}`, 'GET', null, env); await sleep(340); }
   const missing = wanted.filter(n => !dbInfo.properties[n]);
@@ -312,10 +333,12 @@ async function pushSync(env, body) {
     return false;
   }
 }
+// 單次 /api/attendance 最多處理幾筆：每筆一個 Notion 請求，太多會撞到 Cloudflare 子請求上限，前端每批送 20 筆
+const MAX_ATTENDANCE_BATCH = 25;
 // 把 PATCH 內容轉成「哪張床、哪一天、改成什麼」
 function attendanceChangesOf(updates) {
   const out = [];
-  for (const u of (updates || []).slice(0, 45)) {
+  for (const u of (updates || []).slice(0, MAX_ATTENDANCE_BATCH)) {
     if (!u || !u.pageId) continue;
     if (u.dates && typeof u.dates === 'object') {
       for (const [d, v] of Object.entries(u.dates)) if (isDateColumnName(d)) out.push({ id: u.pageId, d, v: v || '' });
@@ -345,36 +368,29 @@ async function updatePollSignal(env, updates = {}) {
 
 async function readPollState(env, since) {
   const hub = syncHub(env);
-  const hubRead = hub
-    ? hub.fetch('https://sync-hub/read' + (since !== undefined && since !== null && since !== '' ? '?since=' + encodeURIComponent(since) : ''))
+  const h = hub
+    ? await hub.fetch('https://sync-hub/read' + (since !== undefined && since !== null && since !== '' ? '?since=' + encodeURIComponent(since) : ''))
       .then(r => r.json()).catch(e => { console.error('SyncHub read failed:', e); return null; })
-    : Promise.resolve(null);
-  if (!env.POLL_KV) {
-    const h = await hubRead;
-    const out = { ts: 0, confirms: '', att_ts: 0 };
-    if (h) Object.assign(out, h.conf || {}, { att_ts: h.att_ts, seq: h.seq }, h.changes ? { changes: h.changes } : {}, h.reset ? { reset: true } : {});
+    : null;
+  const out = { ts: 0, confirms: '', date: '', att_ts: 0 };
+  // 有中樞就完全不碰 KV：幾十台裝置每 3 秒輪詢，KV 每天的讀取額度很快就用完
+  if (h) {
+    Object.assign(out, h.conf || {}, { att_ts: h.att_ts || 0, seq: h.seq }, h.changes ? { changes: h.changes } : {}, h.reset ? { reset: true } : {});
     delete out.conf;
     return out;
   }
-  const [att, kvConf, legacy, h] = await Promise.all([
-    env.POLL_KV.get('poll_att', 'json'),
-    env.POLL_KV.get('poll_confirms', 'json'),
-    env.POLL_KV.get('poll_state', 'json'),
-    hubRead,
-  ]);
-  const old = legacy || {};
-  // 點名完成回報：中樞與 KV 取比較新的那個 (剛換版時中樞還是空的)
-  const conf = h && h.conf && (!kvConf || h.conf.ts >= kvConf.ts) ? h.conf : kvConf;
-  const out = {
-    ts: conf ? conf.ts : (old.ts || 0),
-    confirms: conf ? conf.confirms : (old.confirms || ''),
-    date: conf ? (conf.date || '') : '',
-    att_ts: Math.max(att ? att.att_ts || 0 : 0, old.att_ts || 0, h ? h.att_ts || 0 : 0),
-  };
-  if (h) {
-    out.seq = h.seq;
-    if (h.changes) out.changes = h.changes;
-    if (h.reset) out.reset = true;
+  if (!env.POLL_KV) return out;
+  // 中樞不在 (沒綁定或讀失敗) 才退回 KV，只讀 poll_att / poll_confirms，舊版遺留的 poll_state 不再讀。
+  // KV 讀失敗 (額度用完會丟例外) 不能讓 /api/poll、/api/roster 整個 500：當作沒有信號，前端頂多多抓一次總表
+  try {
+    const [att, kvConf] = await Promise.all([
+      env.POLL_KV.get('poll_att', 'json'),
+      env.POLL_KV.get('poll_confirms', 'json'),
+    ]);
+    if (kvConf) { out.ts = kvConf.ts || 0; out.confirms = kvConf.confirms || ''; out.date = kvConf.date || ''; }
+    out.att_ts = att ? att.att_ts || 0 : 0;
+  } catch (e) {
+    console.error('KV read failed:', e);
   }
   return out;
 }
@@ -389,7 +405,10 @@ function rosterCacheKey(dbId, attTs) {
 async function getRosterCached(env, dbId) {
   const cache = typeof caches !== 'undefined' && caches.default ? caches.default : null;
   if (!cache || !env.POLL_KV) return handleGetRoster(env, dbId);
-  const { att_ts } = await readPollState(env);
+  // 拿不到出席信號 (中樞與 KV 都讀不到) 就不走快取：快取鍵靠 att_ts 作廢，沒有它會把舊資料給出去
+  let att_ts = 0;
+  try { att_ts = (await readPollState(env)).att_ts || 0; } catch (e) { console.error('poll state read failed', e); }
+  if (!att_ts) return handleGetRoster(env, dbId);
   const key = rosterCacheKey(dbId, att_ts);
   try {
     const hit = await cache.match(key);
@@ -469,11 +488,18 @@ export default {
 
       if (path === '/api/attendance' && request.method === 'PATCH') {
         const data = await request.json();
-        // 先廣播再寫 Notion：一批 30 筆要寫十幾秒，以前寫完才通知，別台要等很久。
-        // 萬一寫失敗，寫完後的 att_ts 會讓大家重抓總表校正回來。
-        const changes = attendanceChangesOf(data && data.updates);
+        // 寫進 Notion 成功的那些筆才廣播：以前先廣播再寫，Notion 寫失敗時別台手機會一直顯示不存在的點名。
+        // 前端一批最多 20 筆，寫完才通知的延遲可以接受。
+        let okUpdates, result;
+        try {
+          ({ okUpdates, ...result } = await handleUpdateAttendance(data, env));
+        } catch (err) {
+          // 整批丟例外 (建欄位失敗之類)：什麼都沒廣播，但仍更新 att_ts 讓大家重抓總表校正
+          await updatePollSignal(env, { att_ts: Date.now() });
+          throw err;
+        }
+        const changes = attendanceChangesOf(okUpdates);
         if (changes.length) await pushSync(env, { changes });
-        const result = await handleUpdateAttendance(data, env);
         // ⚡ 出席資料變更 → 更新 KV 信號
         await updatePollSignal(env, { att_ts: Date.now() });
         return json(result);
@@ -481,8 +507,13 @@ export default {
 
       if (path === '/api/swap-beds' && request.method === 'POST') {
         const data = await request.json();
-        const result = await handleSwapBeds(data, env);
-        await updatePollSignal(env, { att_ts: Date.now() });
+        // 成功或失敗 (可能已經寫了其中一床) 都要通知大家重抓總表
+        let result;
+        try {
+          result = await handleSwapBeds(data, env);
+        } finally {
+          await updatePollSignal(env, { att_ts: Date.now() });
+        }
         return json(result);
       }
 
@@ -804,32 +835,45 @@ async function handleUpdateAttendance(data, env) {
 
   // 先確認這批更新用到的日期欄位都存在；沒有就自動建立，資料才不會無聲消失
   const dbId = await getMasterDbId(env);
+  // 單次最多處理 MAX_ATTENDANCE_BATCH 筆；超過的不能靜默丟掉，要回報成錯誤讓前端分批重送
+  const batch = updates.slice(0, MAX_ATTENDANCE_BATCH);
+  const overflow = updates.slice(MAX_ATTENDANCE_BATCH);
   const dateNames = [];
-  for (const u of updates.slice(0, 45)) {
-    if (u.dates) dateNames.push(...Object.keys(u.dates));
+  for (const u of batch) {
+    if (!u || typeof u !== 'object') continue;
+    if (u.dates && typeof u.dates === 'object') dateNames.push(...Object.keys(u.dates));
     if (u.date) dateNames.push(u.date);
   }
   let addedColumns = [];
-  if (dateNames.some(isDateColumnName)) addedColumns = await ensureDateColumns(dbId, dateNames, env);
-  const touchesContact = updates.slice(0, 45).some(u => u.clearProfile ||
-    (u.updateProfile && (u.updateProfile.phone !== undefined || u.updateProfile.address !== undefined)));
+  if (dateNames.some(isValidDateColumnName)) addedColumns = await ensureDateColumns(dbId, dateNames, env);
+  const touchesContact = batch.some(u => u && (u.clearProfile ||
+    (u.updateProfile && (u.updateProfile.phone !== undefined || u.updateProfile.address !== undefined))));
   if (touchesContact) await ensureContactColumns(dbId, env);
 
   let updated = 0;
   const errors = [];
+  const okUpdates = []; // 真的寫進 Notion 的那些筆，路由只廣播這些
 
-  for (const u of updates.slice(0, 45)) {
+  // 日期欄名與狀態值先驗證：不合法的不寫、不建欄位，記到 errors
+  const datePatch = (date, value) => {
+    if (!isValidDateColumnName(date)) throw new Error(`日期欄位名稱不合法：${date}`);
+    if (!isValidAttendanceValue(value)) throw new Error(`狀態值不合法：${value}`);
+    return value ? { select: { name: value } } : { select: null };
+  };
+
+  for (const u of batch) {
     try {
+      if (!u || typeof u !== 'object' || !u.pageId) throw new Error('缺少 pageId');
       const properties = {};
       // 支援單筆更新一個日期，也支援多個日期
-      if (u.dates) {
+      if (u.dates && typeof u.dates === 'object') {
         // { pageId, dates: { "4月10日": "◎", "4月11日": "✓" } }
         for (const [date, value] of Object.entries(u.dates)) {
-          properties[date] = value ? { select: { name: value } } : { select: null };
+          properties[date] = datePatch(date, value);
         }
       } else if (u.date) {
         // { pageId, date, value }
-        properties[u.date] = u.value ? { select: { name: u.value } } : { select: null };
+        properties[u.date] = datePatch(u.date, u.value);
       }
 
       // 支援標記空床 checkbox
@@ -859,13 +903,15 @@ async function handleUpdateAttendance(data, env) {
 
       await notion(`/pages/${u.pageId}`, 'PATCH', { properties }, env);
       updated++;
+      okUpdates.push(u);
       await sleep(340);
     } catch (err) {
-      errors.push({ pageId: u.pageId, error: err.message });
+      errors.push({ pageId: u && u.pageId, error: err.message });
     }
   }
+  for (const u of overflow) errors.push({ pageId: u && u.pageId, error: '超過單次上限，請分批' });
 
-  const result = { success: errors.length === 0, updated, errors, addedColumns };
+  const result = { success: errors.length === 0, updated, errors, addedColumns, okUpdates };
   // 舊版只把失敗塞進 errors 仍回 200，前端會誤以為已存檔；現在帶 error 讓前端保留變更重試
   if (errors.length) result.error = `${errors.length} 筆更新失敗：${errors[0].error}`;
   return result;
@@ -1007,6 +1053,11 @@ async function handleSwapBeds(data, env) {
     notion(`/pages/${pageIdB}`, 'GET', null, env),
   ]);
 
+  // 防呆：兩床必須在同一張總表 (不同學期的資料庫欄位不一樣，交換會把資料寫壞)
+  const dbA = pageA.parent && pageA.parent.database_id;
+  const dbB = pageB.parent && pageB.parent.database_id;
+  if (!dbA || !dbB || dbA !== dbB) throw new Error('兩個床位不在同一張總表，不能交換');
+
   const propsA = pageA.properties;
   const propsB = pageB.properties;
 
@@ -1026,10 +1077,22 @@ async function handleSwapBeds(data, env) {
     if (cloned) patchForB[key] = cloned;
   }
 
-  // 3. 寫回 Notion
+  // 3. 寫回 Notion：A 先寫；B 寫失敗就把 A 用先前讀到的資料寫回 (補償回滾)，
+  //    不然同一個人會佔兩床、另一個人的姓名/學號/整學期出席全沒了
   await notion(`/pages/${pageIdA}`, 'PATCH', { properties: patchForA }, env);
   await sleep(350);
-  await notion(`/pages/${pageIdB}`, 'PATCH', { properties: patchForB }, env);
+  try {
+    await notion(`/pages/${pageIdB}`, 'PATCH', { properties: patchForB }, env);
+  } catch (errB) {
+    // patchForB 就是 A 原本的資料 (排除位置欄位)，寫回 A 即還原
+    try {
+      await sleep(350);
+      await notion(`/pages/${pageIdA}`, 'PATCH', { properties: patchForB }, env);
+    } catch (errRollback) {
+      throw new Error(`換床失敗，且床位 A 還原也失敗：A (${pageIdA}) 可能已變成 B 的資料、B (${pageIdB}) 未變，請到 Notion 檢查。原因：${errB.message}；還原錯誤：${errRollback.message}`);
+    }
+    throw new Error(`換床失敗，床位 A 已還原、資料未變：${errB.message}`);
+  }
 
   return { success: true, message: '床位資料已完整交換' };
 }
@@ -1068,7 +1131,7 @@ function clonePropValue(prop) {
 // ════════════════════════════════════════════════════════════════════════════════
 // API: 系統設定
 // ════════════════════════════════════════════════════════════════════════════════
-async function handleGetConfig(env) {
+async function handleGetConfig(env, raw) {
   const dbId = env.CONFIG_DB_ID;
   if (!dbId) throw new Error('CONFIG_DB_ID 環境變數未設定');
 
@@ -1083,6 +1146,34 @@ async function handleGetConfig(env) {
     // 以前每次刷新可能拿到不同列 → 「已回報」一閃一閃。現在固定取最後編輯的那列。
     const t = Date.parse(page.last_edited_time || '') || 0;
     if (!(key in config) || t >= editedAt[key]) { config[key] = value; editedAt[key] = t; }
+  }
+  if (!raw) aggregateConfirms(config);
+  return config;
+}
+
+/**
+ * 點名完成回報每隊自己一列：confirm_<date>_<squad> = 'true'/''。
+ * 讀出來後聚合成前端在用的 confirm_<date> = '一單,二雙' (順序照 SQUAD_OPTIONS)，前端完全不用改。
+ * 舊式整串單列 confirm_<date> 當初始值併入：有每隊列的隊以每隊列為準，沒有的才看舊列。
+ */
+function confirmSquadKey(date, squad) {
+  return `confirm_${date}_${squad}`;
+}
+function aggregateConfirms(config) {
+  const perSquad = {}; // date → { squad: true/false }
+  for (const [key, value] of Object.entries(config)) {
+    const m = /^confirm_(.+)_([^_]+)$/.exec(key);
+    if (!m) continue;
+    (perSquad[m[1]] = perSquad[m[1]] || {})[m[2]] = value === 'true';
+  }
+  const order = SQUAD_OPTIONS.map(o => o.name);
+  for (const [date, squads] of Object.entries(perSquad)) {
+    const legacyKey = 'confirm_' + date;
+    const set = new Set(String(config[legacyKey] || '').split(',').filter(Boolean));
+    for (const [squad, on] of Object.entries(squads)) { if (on) set.add(squad); else set.delete(squad); }
+    // 已知中隊照固定順序，不認識的名稱排後面 (不丟掉)
+    const list = order.filter(s => set.has(s)).concat([...set].filter(s => !order.includes(s)));
+    config[legacyKey] = list.join(',');
   }
   return config;
 }
@@ -1126,25 +1217,29 @@ async function handleSetConfig(data, env) {
 
 /**
  * 點名完成回報 { date, squad, confirmed }。
- * 以前前端用「自己手上的名單」整串寫回，兩個中隊差不多時間按，後寫的會把先寫的蓋掉。
- * 現在伺服器讀最新值只加/減自己這一隊，寫完再讀一次確認，被別人蓋掉就重做 (最多 3 次)。
+ * 以前整串「讀出來→改→寫回」，兩個中隊差不多時間按，後寫的會把先寫的蓋掉 (靠重試 3 次碰運氣)。
+ * 現在每隊只寫自己那一列 confirm_<date>_<squad>，誰都蓋不到誰；寫完再讀一次聚合結果送信號。
+ * date 由前端傳入 (ISO 或舊式欄名都照收不改)。
  */
 async function handleConfirmSquad(data, env) {
   const { date, squad } = data || {};
   const confirmed = !!(data && data.confirmed);
   if (!date || !squad) throw new Error('缺少 date 或 squad');
-  const key = 'confirm_' + date;
-  let list = [];
-  for (let round = 0; round < 3; round++) {
-    const cfg = await handleGetConfig(env);
-    list = String(cfg[key] || '').split(',').filter(Boolean);
-    if (round > 0 && list.includes(squad) === confirmed) break;
-    list = list.filter(s => s !== squad);
-    if (confirmed) list.push(squad);
-    await handleSetConfig({ [key]: list.join(',') }, env);
-    await updatePollSignal(env, { confirms: list.join(','), date });
-    await sleep(400);
+  if (typeof squad !== 'string' || squad.includes('_') || squad.includes(',')) throw new Error('squad 格式不正確');
+  const legacyKey = 'confirm_' + date;
+  const writes = { [confirmSquadKey(date, squad)]: confirmed ? 'true' : '' };
+  // 舊式整串單列若還在，順便鏡射一份聚合結果進去 (人在 Notion 看比較清楚)；
+  // 正本是每隊那一列 (讀取時永遠優先)，鏡射就算同時寫到舊值也不會讓任何一隊的回報不見
+  const before = await handleGetConfig(env, true);
+  if (before[legacyKey] !== undefined) {
+    before[confirmSquadKey(date, squad)] = writes[confirmSquadKey(date, squad)];
+    writes[legacyKey] = aggregateConfirms(before)[legacyKey] || '';
   }
+  await handleSetConfig(writes, env);
+  // 寫完再讀一次，送出去的信號才是所有隊的最新狀態
+  const after = await handleGetConfig(env);
+  const list = String(after[legacyKey] || '').split(',').filter(Boolean);
+  await updatePollSignal(env, { confirms: list.join(','), date });
   return { success: true, confirms: list };
 }
 
