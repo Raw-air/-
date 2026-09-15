@@ -44,6 +44,9 @@ function makeKV(){const store={},puts=[];return {store,puts,
   r=await call('/api/ai-parse',{headers:{Origin:'http://localhost:5173','CF-Connecting-IP':'1.1.1.2'}});assert.equal(r.status,200);assert.equal(r.h.get('Access-Control-Allow-Origin'),'http://localhost:5173');
   r=await call('/api/ai-parse',{headers:{Origin:'http://127.0.0.1:8080','CF-Connecting-IP':'1.1.1.3'}});assert.equal(r.status,200);
   r=await call('/api/ai-parse',{headers:{Origin:'https://localhost:5173','CF-Connecting-IP':'1.1.1.3'}});assert.equal(r.status,403,'https 的 localhost 不在白名單');
+  // 沙箱頁面 / file:// 會送字面上的 "null"，也不在白名單；壞掉的 Referer 要回 403 而不是 500
+  r=await call('/api/ai-parse',{headers:{Origin:'null','CF-Connecting-IP':'1.1.1.3'}});assert.equal(r.status,403,'Origin: null 不在白名單');
+  r=await call('/api/ai-parse',{headers:{Referer:'not-a-url','CF-Connecting-IP':'1.1.1.3'}});assert.equal(r.status,403,'解析不了的 Referer 回 403');
   // 只有 Referer (沒 Origin) 也認得出來源
   r=await call('/api/ai-parse',{headers:{Referer:'https://raw-air.github.io/-/index.html','CF-Connecting-IP':'1.1.1.4'}});assert.equal(r.status,200);assert.equal(r.h.get('Access-Control-Allow-Origin'),'https://raw-air.github.io');
   // env.ALLOWED_ORIGINS 可以再補來源
@@ -81,6 +84,8 @@ function makeKV(){const store={},puts=[];return {store,puts,
   const big='x'.repeat(20*1024*1024+1);
   r=await call('/api/ai-parse',{headers:{...ipHeaders,'Content-Length':String(big.length)},body:big});assert.equal(r.status,413);assert.match(r.data.error.message,/太大/);
   r=await call('/api/ai-parse',{headers:ipHeaders,body:big});assert.equal(r.status,413);
+  // Content-Length 造假成很小，讀完 body 還是要擋
+  r=await call('/api/ai-parse',{headers:{...ipHeaders,'Content-Length':'10'},body:big});assert.equal(r.status,413,'Content-Length 造假也擋得住');
   assert.equal(gemini.length,0);
   // 幾 MB 的照片 (base64) 要能過
   const photo=JSON.stringify({contents:[{parts:[{text:'p'},{inlineData:{mimeType:'image/jpeg',data:'A'.repeat(5*1024*1024)}}]}]});
