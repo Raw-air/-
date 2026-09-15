@@ -62,9 +62,17 @@
   const BED_DIGIT_TO_LETTER = { '1': 'A', '2': 'B', '3': 'C', '4': 'D' };
   const BED_LETTER_TO_DIGIT = { 'A': '1', 'B': '2', 'C': '3', 'D': '4' };
 
+  // 比對用的正規化：全形轉半形 (NFKC)、去頭尾空白 (含全形空白)、可選擇統一大寫。
+  // 只用來「比對」，不會改寫要寫回總表的值，避免姓名裡的罕見字被 NFKC 動到。
+  function normKey(v, keepCase) {
+    if (v === null || v === undefined) return '';
+    let s = String(v).normalize('NFKC').replace(/^[\s　]+|[\s　]+$/g, '').replace(/[\s　]+/g, ' ');
+    return keepCase ? s : s.toUpperCase();
+  }
+
   function normalizeBed(raw, rosterUsesLetters) {
     if (raw === null || raw === undefined) return '';
-    let v = String(raw).trim().toUpperCase();
+    let v = String(raw).normalize('NFKC').trim().toUpperCase();
     // 只取最後一個有意義字元（例如 "B112-A" -> "A"、"1床" -> "1"）
     const m = v.match(/([A-D]|[1-4])\s*(?:床)?$/);
     if (m) v = m[1];
@@ -80,12 +88,29 @@
 
   function normalizeRoom(raw) {
     if (raw === null || raw === undefined) return '';
-    return String(raw).trim().toUpperCase().replace(/\s+/g, '');
+    return String(raw).normalize('NFKC').trim().toUpperCase().replace(/[\s　]+/g, '');
   }
 
   function cellStr(v) {
     if (v === null || v === undefined) return '';
     return String(v).trim();
+  }
+
+  // 電話：Excel 數字格式會吃掉開頭 0 (911000001)、太長還會變科學記號 (9.11E+8)，讀進來先還原
+  function normalizePhone(raw) {
+    let v = cellStr(raw).normalize('NFKC');
+    if (!v) return '';
+    if (/^\d+(?:\.\d+)?E\+?\d+$/i.test(v)) {
+      const n = Number(v);
+      if (Number.isFinite(n)) v = String(Math.round(n));
+    }
+    if (/^9\d{8}$/.test(v)) v = '0' + v;
+    return v;
+  }
+
+  // 電話比對用：去空白、連字號、括號，全形數字轉半形，免得每次匯入都算成異動
+  function phoneKey(v) {
+    return String(v == null ? '' : v).normalize('NFKC').replace(/[\s　\-‐‑–—()（）]/g, '');
   }
 
   // 沒有姓名就不是有效住宿生；學號或班別的殘留值不能讓空床變成有人。
@@ -95,13 +120,13 @@
 
   // ────────────────────────── 檔案解析 ──────────────────────────
 
-  function ensureXLSX() {
-    return typeof window !== 'undefined' && window.XLSX;
+  function hasXLSX() {
+    return typeof window !== 'undefined' && !!window.XLSX;
   }
 
   function readFileAsWorkbook(file) {
     return new Promise((resolve, reject) => {
-      if (!ensureXLSX()) { reject(new Error('XLSX_NOT_LOADED')); return; }
+      if (!hasXLSX()) { reject(new Error('Excel 元件尚未載入，請確認網路後重試')); return; }
       const reader = new FileReader();
       reader.onerror = () => reject(new Error('讀取檔案失敗'));
       reader.onload = (e) => {
@@ -128,7 +153,32 @@
   function sheetToRows(workbook, sheetName) {
     const ws = workbook.Sheets[sheetName];
     const rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+    fillMergedCells(ws, rows);
     return rows;
+  }
+
+  // 合併儲存格 (例如同房四床只在第一列填房號) 只有左上格有值，其餘讀出來是空的；
+  // 把左上格的值往整個範圍填，後面比對才不會整房都對不到。失敗就當沒有合併，不影響讀檔。
+  function fillMergedCells(ws, rows) {
+    try {
+      const merges = ws && ws['!merges'];
+      if (!Array.isArray(merges) || !merges.length || !ws['!ref']) return;
+      const range = window.XLSX.utils.decode_range(ws['!ref']);
+      merges.forEach(m => {
+        if (!m || !m.s || !m.e) return;
+        const srcRow = rows[m.s.r - range.s.r];
+        const val = srcRow ? srcRow[m.s.c - range.s.c] : '';
+        if (cellStr(val) === '') return;
+        for (let r = m.s.r; r <= m.e.r; r++) {
+          const row = rows[r - range.s.r];
+          if (!row) continue;
+          for (let c = m.s.c; c <= m.e.c; c++) {
+            const ci = c - range.s.c;
+            if (cellStr(row[ci]) === '') row[ci] = val;
+          }
+        }
+      });
+    } catch (_) { /* 合併範圍解析失敗就照原樣 */ }
   }
 
   function findHeaderRow(rows) {
@@ -161,7 +211,21 @@
   function buildPreview(dataRows, mapping, options) {
     const useLetters = rosterBedStyle();
     const items = [];
-    const stats = { total: 0, matched: 0, willChange: 0, unchanged: 0, unmatchedRows: 0, blankRows: 0 };
+    const warnings = [];
+    const stats = { total: 0, matched: 0, willChange: 0, unchanged: 0, unmatchedRows: 0, blankRows: 0, duplicates: 0, inherited: 0 };
+    // 沒對應姓名欄就分不出「空床」和「沒填」，這時絕不能清空任何床位
+    const canClear = !!options.blankAsEmpty && mapping.name >= 0;
+
+    // 總表床位先建索引：房號/床位都用正規化後的鍵 (全形、大小寫、空白都不影響比對)
+    const bedIndex = new Map();
+    (state.students || []).forEach(s => {
+      if (s.hidden) return;
+      const key = normalizeRoom(s.room) + '|' + normKey(s.bed);
+      if (!bedIndex.has(key)) bedIndex.set(key, s);
+    });
+
+    const seenBeds = new Map();   // room|bed → 第一次出現的資料列序號 (偵測重複列)
+    let prevRoom = '';            // 房號欄空白就沿用上一列 (合併儲存格常見)
 
     dataRows.forEach((row, idx) => {
       if (!row || row.every(c => cellStr(c) === '')) return; // 完全空列略過(非資料床位)
@@ -172,22 +236,37 @@
 
       const rawRoom = mapping.room >= 0 ? row[mapping.room] : '';
       const rawBed = mapping.bed >= 0 ? row[mapping.bed] : '';
-      const room = normalizeRoom(rawRoom);
+      let room = normalizeRoom(rawRoom);
+      let roomInherited = false;
+      if (!room && mapping.room >= 0 && prevRoom) { room = prevRoom; roomInherited = true; stats.inherited++; }
+      if (room) prevRoom = room;
       const bed = normalizeBed(rawBed, useLetters);
 
       const name = mapping.name >= 0 ? cellStr(row[mapping.name]) : '';
       const studentId = mapping.studentId >= 0 ? cellStr(row[mapping.studentId]) : '';
       const klass = mapping.class >= 0 ? cellStr(row[mapping.class]) : '';
-      const phone = mapping.phone >= 0 ? cellStr(row[mapping.phone]) : '';
+      const phone = mapping.phone >= 0 ? normalizePhone(row[mapping.phone]) : '';
       const address = mapping.address >= 0 ? cellStr(row[mapping.address]) : '';
 
-      const target = (state.students || []).find(s => !s.hidden && s.room === room && s.bed === bed);
+      const bedKey = room + '|' + normKey(bed);
+      const target = bedIndex.get(bedKey) || null;
 
       const item = {
         rowIndex: idx, room, bed, name, studentId, class: klass, phone, address,
-        blank, matched: !!target, target: target || null,
+        blank, matched: !!target, target, roomInherited,
         action: 'skip', changed: false,
       };
+
+      // 同一床在 Excel 出現兩次：只取第一列，後面的標「重複列」不處理，免得默默蓋掉前一列
+      if (room && bed && seenBeds.has(bedKey)) {
+        item.action = 'duplicate';
+        item.duplicateOf = seenBeds.get(bedKey);
+        stats.duplicates++;
+        warnings.push(`資料第 ${idx + 1} 列 ${room} ${bed} 與第 ${item.duplicateOf + 1} 列重複，只採用第一列`);
+        items.push(item);
+        return;
+      }
+      if (room && bed) seenBeds.set(bedKey, idx);
 
       if (!target) {
         stats.unmatchedRows++;
@@ -195,7 +274,7 @@
       } else {
         stats.matched++;
         if (blank) {
-          if (options.blankAsEmpty) {
+          if (canClear) {
             const willClear = !target.isEmpty;
             item.action = willClear ? 'clear' : 'unchanged';
             item.changed = willClear;
@@ -210,12 +289,13 @@
             const current = (target.remarks || '').trim();
             if (snippet && !current.includes(snippet)) remarksAppend = current ? current + ' / ' + snippet : snippet;
           }
-          const nameChanged = (target.name || '') !== name;
-          const idChanged = (target.studentId || '') !== studentId;
-          const classChanged = (target.class || '') !== klass;
+          // 比對一律用正規化後的值 (全形/半形、頭尾空白、學號大小寫不算異動)；寫回仍用 Excel 原值
+          const nameChanged = normKey(target.name, true) !== normKey(name, true);
+          const idChanged = normKey(target.studentId) !== normKey(studentId);
+          const classChanged = normKey(target.class, true) !== normKey(klass, true);
           // 電話/住址現在是總表的正式欄位；Excel 有值且和現有不同就算有變動
-          const phoneChanged = !!phone && (target.phone || '') !== phone;
-          const addressChanged = !!address && (target.address || '') !== address;
+          const phoneChanged = !!phone && phoneKey(target.phone) !== phoneKey(phone);
+          const addressChanged = !!address && normKey(target.address, true) !== normKey(address, true);
           const changed = nameChanged || idChanged || classChanged || phoneChanged || addressChanged;
           item.changed = changed;
           item.remarksAppend = remarksAppend;
@@ -233,82 +313,125 @@
       items.push(item);
     });
 
-    return { items, stats };
+    return { items, stats, warnings };
   }
 
   // ────────────────────────── 匯入執行 ──────────────────────────
+
+  // 後端寫成功後，把同樣的值套到本機 state，畫面才不用等重抓總表
+  function applyItemLocally(it) {
+    if (it.action === 'clear') {
+      it.target.name = ''; it.target.studentId = ''; it.target.class = ''; it.target.squad = '';
+      it.target.phone = ''; it.target.address = '';
+      it.target.isForeign = false; it.target.isEmpty = true;
+    } else {
+      it.target.name = it.name; it.target.studentId = it.studentId;
+      it.target.class = it.class; it.target.squad = it.class;
+      if (it.phone) it.target.phone = it.phone;
+      if (it.address) it.target.address = it.address;
+      it.target.isEmpty = false;
+    }
+  }
+
+  function logEntry(it, ok, error) {
+    const entry = { pageId: it.target.id, room: it.room, bed: it.bed, name: it.name || '(清空)', ok };
+    if (error) entry.error = error;
+    return entry;
+  }
 
   async function runImport(items, onProgress) {
     const toApply = items.filter(it => it.action === 'update' || it.action === 'clear');
     const total = toApply.length;
     const log = [];
-    let done = 0, ok = 0, fail = 0;
+    const failedItems = [];   // 這次沒寫成功的項目，給「重試失敗項目」用
+    let done = 0, ok = 0, fail = 0, remarkFail = 0;
     IMP.cancelled = false;
     IMP.running = true;
 
     // Notion/Worker 在大量資料一次寫入時容易超過一般 15 秒請求時限。
     // 小批次降低單次負載；此更新是完整欄位指派（冪等），暫時性中斷可安全重試。
-    const BATCH = 8;
-    for (let i = 0; i < toApply.length; i += BATCH) {
-      if (IMP.cancelled) break;
-      const batch = toApply.slice(i, i + BATCH);
-      const payloads = batch.map(it => {
-        if (it.action === 'clear') {
-          return { pageId: it.target.id, updateProfile: { name: '', class: '', studentId: '', phone: '', address: '', isForeign: false }, markEmpty: true, clearProfile: true };
-        }
-        const profile = { name: it.name, class: it.class, studentId: it.studentId, isForeign: !!it.target.isForeign };
-        // Excel 沒帶到的欄位就不要送，才不會把總表既有的電話/住址洗掉
-        if (it.phone) profile.phone = it.phone;
-        if (it.address) profile.address = it.address;
-        return { pageId: it.target.id, updateProfile: profile, markEmpty: false };
-      });
-
-      try {
-        await window._api.updateAttendance(payloads, {
-          timeoutMs: 45000,
-          retries: 2,
-          retryDelayMs: 1200,
-        });
-        batch.forEach(it => {
+    const BATCH = 20;
+    try {
+      for (let i = 0; i < toApply.length; i += BATCH) {
+        if (IMP.cancelled) break;
+        const batch = toApply.slice(i, i + BATCH);
+        const payloads = batch.map(it => {
           if (it.action === 'clear') {
-            it.target.name = ''; it.target.studentId = ''; it.target.class = ''; it.target.squad = '';
-            it.target.phone = ''; it.target.address = '';
-            it.target.isForeign = false; it.target.isEmpty = true;
-          } else {
-            it.target.name = it.name; it.target.studentId = it.studentId;
-            it.target.class = it.class; it.target.squad = it.class;
-            if (it.phone) it.target.phone = it.phone;
-            if (it.address) it.target.address = it.address;
-            it.target.isEmpty = false;
+            return { pageId: it.target.id, updateProfile: { name: '', class: '', studentId: '', phone: '', address: '', isForeign: false }, markEmpty: true, clearProfile: true };
           }
-          ok++; done++;
-          log.push({ room: it.room, bed: it.bed, name: it.name || '(清空)', ok: true });
+          const profile = { name: it.name, class: it.class, studentId: it.studentId, isForeign: !!it.target.isForeign };
+          // Excel 沒帶到的欄位就不要送，才不會把總表既有的電話/住址洗掉
+          if (it.phone) profile.phone = it.phone;
+          if (it.address) profile.address = it.address;
+          return { pageId: it.target.id, updateProfile: profile, markEmpty: false };
         });
 
-        // 備註（電話/地址）需另外呼叫，逐筆但不阻斷整批
+        let succeeded = batch;
+        let failure = null;   // { errList, message }：這批有東西沒寫成功
+        try {
+          const res = await window._api.updateAttendance(payloads, {
+            timeoutMs: 45000,
+            retries: 2,
+            retryDelayMs: 1200,
+          });
+          // 後端失敗仍可能回 200 (success:false + errors)，api.js 不一定會丟錯，要自己看
+          if (res && res.success === false && Array.isArray(res.errors) && res.errors.length) {
+            failure = { errList: res.errors, message: res.error || '寫入失敗' };
+          }
+        } catch (err) {
+          // 後端會逐筆寫，只回報寫失敗的 pageId (err.data.errors)；沒有 err.data (純網路錯、逾時) 才整批當失敗
+          const errList = err && err.data && Array.isArray(err.data.errors) ? err.data.errors : null;
+          failure = { errList, message: (err && err.message) || '寫入失敗' };
+        }
+        if (failure) {
+          // 只把後端點名失敗的那幾筆標 ✗，其他照樣算成功；認不出 pageId 就整批 ✗
+          const errList = failure.errList;
+          const partial = !!errList && errList.length > 0 && errList.every(e => e && e.pageId);
+          const failedIds = new Set(partial ? errList.map(e => e.pageId) : batch.map(it => it.target.id));
+          const errMsg = {};
+          if (partial) errList.forEach(e => { errMsg[e.pageId] = e.error || failure.message; });
+          succeeded = batch.filter(it => !failedIds.has(it.target.id));
+          batch.forEach(it => {
+            if (!failedIds.has(it.target.id)) return;
+            fail++; done++;
+            failedItems.push(it);
+            log.push(logEntry(it, false, errMsg[it.target.id] || failure.message));
+          });
+        }
+
+        succeeded.forEach(it => {
+          applyItemLocally(it);
+          ok++; done++;
+          log.push(logEntry(it, true));
+        });
+
+        // 備註（電話/地址）需另外呼叫，逐筆但不阻斷整批；失敗要記下來，結果頁才看得到
         if (window._api.updateRemark) {
-          await Promise.all(batch.map(it => {
+          await Promise.all(succeeded.map(it => {
             if (it.action === 'update' && it.remarksAppend) {
-              return window._api.updateRemark(it.target.id, it.remarksAppend).catch(() => { });
+              return window._api.updateRemark(it.target.id, it.remarksAppend).catch(() => {
+                remarkFail++;
+                const entry = log.find(l => l.pageId === it.target.id && l.ok);
+                if (entry) entry.remarkFailed = true;
+              });
             }
             return Promise.resolve();
           }));
         }
-      } catch (err) {
-        batch.forEach(it => {
-          fail++; done++;
-          log.push({ room: it.room, bed: it.bed, name: it.name || '(清空)', ok: false, error: err.message });
-        });
+
+        if (typeof onProgress === 'function') {
+          try { onProgress({ done, total, ok, fail, remarkFail, log: log.slice() }); } catch (_) { }
+        }
+        if (typeof renderCurrentPage === 'function') {
+          try { renderCurrentPage(true); } catch (_) { }
+        }
       }
-
-      localStorage.setItem('biyuan_temp_students_update', JSON.stringify(state.students));
-      if (typeof onProgress === 'function') onProgress({ done, total, ok, fail, log: log.slice() });
-
-      if (typeof renderCurrentPage === 'function') renderCurrentPage(true);
+    } finally {
+      IMP.running = false;
     }
 
-    IMP.running = false;
-    return { done, total, ok, fail, log, cancelled: IMP.cancelled };
+    IMP._failedItems = failedItems.concat(toApply.slice(done)); // 取消時沒跑到的也留給重試
+    return { done, total, ok, fail, remarkFail, log, cancelled: IMP.cancelled };
   }
 
   // ────────────────────────── 測試用外掛入口 ──────────────────────────
@@ -428,9 +551,10 @@
 
   function previewHtml() {
     const { items, stats } = IMP.preview;
+    const warnings = IMP.preview.warnings || [];
     const rows = items.slice(0, 12).map(it => `
       <tr class="imp-row-${it.action}">
-        <td>${escapeHtml(it.room)} ${escapeHtml(it.bed)}</td>
+        <td>${escapeHtml(it.room)} ${escapeHtml(it.bed)}${it.roomInherited ? ' <span class="imp-tag">沿用上一列</span>' : ''}</td>
         <td>${escapeHtml(it.name)}</td>
         <td>${escapeHtml(it.studentId)}</td>
         <td>${escapeHtml(it.class)}</td>
@@ -446,6 +570,7 @@
         ${statTile('無需異動', stats.unchanged)}
         ${statTile('無法比對', stats.unmatchedRows, stats.unmatchedRows ? 'danger' : '')}
         ${statTile('空白列', stats.blankRows)}
+        ${stats.duplicates ? statTile('重複列', stats.duplicates, 'warn') : ''}
       </div>
       <div class="imp-table-wrap">
         <table class="imp-table">
@@ -454,6 +579,8 @@
         </table>
       </div>
       ${items.length > 12 ? `<div class="imp-more-hint">... 另外 ${items.length - 12} 筆未顯示</div>` : ''}
+      ${warnings.length ? `<div id="imp-preview-warn" class="imp-error">${warnings.slice(0, 20).map(w => escapeHtml(w)).join('<br>')}${warnings.length > 20 ? `<br>... 另外 ${warnings.length - 20} 筆` : ''}</div>` : ''}
+      <div id="imp-preview-error" class="imp-error" ${IMP._previewError ? '' : 'hidden'}>${escapeHtml(IMP._previewError || '')}</div>
       <div class="imp-opts">
         <label class="imp-opt-row"><input type="checkbox" id="imp-opt-blank" ${IMP.options.blankAsEmpty ? 'checked' : ''} onchange="window._impToggleOpt('blankAsEmpty',this.checked)"> 空白列視為空床並清空該床</label>
         <label class="imp-opt-row"><input type="checkbox" id="imp-opt-contact" ${IMP.options.noteContact ? 'checked' : ''} onchange="window._impToggleOpt('noteContact',this.checked)"> 電話/地址另外複製一份到備註</label>
@@ -472,6 +599,7 @@
       unchanged: '<span class="imp-tag">不變</span>',
       'skip-blank': '<span class="imp-tag">略過空白</span>',
       unmatched: '<span class="imp-tag imp-tag-danger">無法比對</span>',
+      duplicate: '<span class="imp-tag imp-tag-warn">重複列</span>',
       skip: '<span class="imp-tag">略過</span>',
     }[a] || a;
   }
@@ -490,7 +618,8 @@
   }
 
   function summaryHtml() {
-    const r = IMP._result || { done: 0, total: 0, ok: 0, fail: 0, cancelled: false };
+    const r = IMP._result || { done: 0, total: 0, ok: 0, fail: 0, remarkFail: 0, cancelled: false };
+    const retryCount = (IMP._failedItems || []).length;
     return `
       <h3>${r.cancelled ? '匯入已取消' : '匯入完成'}</h3>
       <div class="imp-stats-grid">
@@ -498,8 +627,10 @@
         ${statTile('失敗', r.fail, r.fail ? 'danger' : '')}
         ${statTile('總筆數', r.total)}
       </div>
-      <div class="imp-log-list">${(r.log || []).map(l => `<div class="imp-log-item ${l.ok ? 'ok' : 'fail'}">${l.ok ? '✓' : '✗'} ${escapeHtml(l.room)} ${escapeHtml(l.bed)} ${escapeHtml(l.name)}${l.error ? ' — ' + escapeHtml(l.error) : ''}</div>`).join('')}</div>
+      ${r.remarkFail ? `<div id="imp-remark-fail" class="imp-error">備註 ${r.remarkFail} 筆未更新（床位資料已寫入，只有電話/地址沒複製到備註）</div>` : ''}
+      <div class="imp-log-list">${(r.log || []).map(l => `<div class="imp-log-item ${l.ok ? 'ok' : 'fail'}">${l.ok ? '✓' : '✗'} ${escapeHtml(l.room)} ${escapeHtml(l.bed)} ${escapeHtml(l.name)}${l.error ? ' — ' + escapeHtml(l.error) : ''}${l.remarkFailed ? ' — 備註未更新' : ''}</div>`).join('')}</div>
       <div class="modal-actions">
+        ${retryCount ? `<button id="imp-retry-failed" class="modal-btn cancel" onclick="window._impRetryFailed()">重試失敗項目 (${retryCount})</button>` : ''}
         <button class="modal-btn confirm" onclick="window._impClose()">完成</button>
       </div>`;
   }
@@ -508,6 +639,7 @@
 
   window.openImportWizard = function () {
     IMP.workbook = null; IMP.rows = []; IMP.preview = null; IMP._result = null;
+    IMP._failedItems = []; IMP._previewError = '';
     renderModal('drop');
   };
 
@@ -527,15 +659,10 @@
 
   async function handleFile(file) {
     const errEl = () => document.getElementById('imp-drop-error');
-    if (!ensureXLSX()) {
-      const el = errEl();
-      if (el) {
-        el.hidden = false;
-        el.innerHTML = 'Excel 解析套件尚未載入完成，請稍候再試。 <button class="imp-retry-btn" onclick="window._impRetryLib()">重試</button>';
-      }
-      return;
-    }
     try {
+      // XLSX 改成按需載入 (app.js 提供 window.ensureXLSX)；載不到就直接告訴使用者，不要卡住
+      if (window.ensureXLSX) await window.ensureXLSX();
+      if (typeof XLSX === 'undefined') throw new Error('Excel 元件尚未載入，請確認網路後重試');
       const wb = await readFileAsWorkbook(file);
       IMP.workbook = wb;
       const sheets = nonEmptySheets(wb);
@@ -551,12 +678,6 @@
       if (el) { el.hidden = false; el.textContent = '讀取失敗：' + err.message; }
     }
   }
-
-  window._impRetryLib = function () {
-    const el = document.getElementById('imp-drop-error');
-    if (ensureXLSX()) { if (el) el.hidden = true; }
-    else if (el) el.textContent = '仍未偵測到 XLSX 套件，請確認網路連線後重新整理頁面。';
-  };
 
   window._impBackToDrop = function () { renderModal('drop'); };
   window._impBackToMapping = function () { renderModal('mapping'); };
@@ -584,39 +705,112 @@
       if (errEl) { errEl.hidden = false; errEl.textContent = '請至少對應「房號」與「床位」欄位。'; }
       return;
     }
+    IMP._previewError = '';
+    // 沒對應姓名欄就不能用清空功能 (分不出空床和沒填)，回到預覽時先把選項關掉
+    if (IMP.options.blankAsEmpty && IMP.mapping.name < 0) {
+      IMP.options.blankAsEmpty = false;
+      IMP._previewError = '請先對應姓名欄位，才能使用清空功能';
+    }
     IMP.preview = buildPreview(IMP.rows, IMP.mapping, IMP.options);
     renderModal('preview');
   };
 
   window._impToggleOpt = function (key, val) {
-    IMP.options[key] = val;
+    IMP._previewError = '';
+    if (key === 'blankAsEmpty' && val && IMP.mapping.name < 0) {
+      // 直接擋下：沒有姓名欄，每一列都會被當成空白列，等於把所有床位清空
+      IMP.options.blankAsEmpty = false;
+      IMP._previewError = '請先對應姓名欄位，才能使用清空功能';
+    } else {
+      IMP.options[key] = val;
+    }
     IMP.preview = buildPreview(IMP.rows, IMP.mapping, IMP.options);
     renderModal('preview');
   };
 
-  window._impStartImport = async function () {
-    renderModal('importing');
-    const result = await runImport(IMP.preview.items, (progress) => {
-      const fill = document.getElementById('imp-progress-fill');
-      const text = document.getElementById('imp-progress-text');
-      const logList = document.getElementById('imp-log-list');
-      if (fill) fill.style.width = (progress.total ? (progress.done / progress.total * 100) : 100) + '%';
-      if (text) text.textContent = `${progress.done} / ${progress.total}（成功 ${progress.ok}／失敗 ${progress.fail}）`;
-      if (logList) {
-        logList.innerHTML = progress.log.slice(-30).map(l =>
-          `<div class="imp-log-item ${l.ok ? 'ok' : 'fail'}">${l.ok ? '✓' : '✗'} ${escapeHtml(l.room)} ${escapeHtml(l.bed)} ${escapeHtml(l.name)}${l.error ? ' — ' + escapeHtml(l.error) : ''}</div>`
-        ).join('');
-      }
-    });
+  function importProgress(progress) {
+    const fill = document.getElementById('imp-progress-fill');
+    const text = document.getElementById('imp-progress-text');
+    const logList = document.getElementById('imp-log-list');
+    if (fill) fill.style.width = (progress.total ? (progress.done / progress.total * 100) : 100) + '%';
+    if (text) text.textContent = `${progress.done} / ${progress.total}（成功 ${progress.ok}／失敗 ${progress.fail}）`;
+    if (logList) {
+      logList.innerHTML = progress.log.slice(-30).map(l =>
+        `<div class="imp-log-item ${l.ok ? 'ok' : 'fail'}">${l.ok ? '✓' : '✗'} ${escapeHtml(l.room)} ${escapeHtml(l.bed)} ${escapeHtml(l.name)}${l.error ? ' — ' + escapeHtml(l.error) : ''}</div>`
+      ).join('');
+    }
+  }
+
+  function finishImport(result) {
     IMP._result = result;
     if (typeof showToast === 'function') {
-      showToast(result.cancelled ? '匯入已取消' : `匯入完成，成功 ${result.ok} 筆${result.fail ? '，失敗 ' + result.fail + ' 筆' : ''}`, result.fail ? 'error' : 'success');
+      const extra = (result.fail ? '，失敗 ' + result.fail + ' 筆' : '') + (result.remarkFail ? '，備註 ' + result.remarkFail + ' 筆未更新' : '');
+      showToast(result.cancelled ? '匯入已取消' : `匯入完成，成功 ${result.ok} 筆${extra}`, (result.fail || result.remarkFail) ? 'error' : 'success');
     }
     renderModal('summary');
+  }
+
+  // 要清空的床位太多 (超過總床位三成或 20 張) 時再問一次，避免對錯欄位把整棟清光
+  async function confirmMassClear(items) {
+    const clearCount = items.filter(it => it.action === 'clear').length;
+    const totalBeds = (state.students || []).filter(s => !s.hidden).length;
+    if (!clearCount || !(clearCount > 20 || clearCount > totalBeds * 0.3)) return true;
+    const message = `這次匯入會清空 ${clearCount} 張床位（總床位 ${totalBeds} 張），這些床的姓名、學號、班別、電話、住址都會被清掉。確定要繼續嗎？`;
+    if (typeof showConfirmDialog === 'function') {
+      return showConfirmDialog({ title: '確認清空床位', message, confirmText: '確定清空', cancelText: '取消', danger: true });
+    }
+    return window.confirm(message);
+  }
+
+  window._impStartImport = async function () {
+    if (IMP.running) return;
+    if (IMP.options.blankAsEmpty && IMP.mapping.name < 0) {
+      IMP.options.blankAsEmpty = false;
+      IMP._previewError = '請先對應姓名欄位，才能使用清空功能';
+      IMP.preview = buildPreview(IMP.rows, IMP.mapping, IMP.options);
+      renderModal('preview');
+      return;
+    }
+    if (!(await confirmMassClear(IMP.preview.items))) return;
+    renderModal('importing');
+    try {
+      finishImport(await runImport(IMP.preview.items, importProgress));
+    } catch (err) {
+      // 不該發生的錯也要收尾，不能讓畫面停在「匯入中…」
+      if (typeof showToast === 'function') showToast('匯入中斷：' + (err && err.message || err), 'error');
+      finishImport({ done: 0, total: 0, ok: 0, fail: 0, remarkFail: 0, log: [], cancelled: true });
+    }
+  };
+
+  // 只重送上一輪失敗 (或取消時沒跑到) 的項目，成功的不會再寫一次
+  window._impRetryFailed = async function () {
+    const retry = IMP._failedItems || [];
+    const prev = IMP._result;
+    if (IMP.running || !retry.length || !prev) return;
+    renderModal('importing');
+    try {
+      const r = await runImport(retry, importProgress);
+      const retried = new Set(r.log.map(l => l.pageId));
+      // 成功的紀錄留著，失敗的換成這一輪的結果；這輪沒跑到 (又取消) 的沿用上一輪的失敗紀錄
+      const log = prev.log.filter(l => l.ok).concat(r.log, prev.log.filter(l => !l.ok && !retried.has(l.pageId)));
+      const ok = log.filter(l => l.ok).length;
+      const fail = log.length - ok;
+      finishImport({
+        done: ok + fail, total: prev.total, ok, fail,
+        remarkFail: (prev.remarkFail || 0) + (r.remarkFail || 0),
+        log, cancelled: r.cancelled,
+      });
+    } catch (err) {
+      if (typeof showToast === 'function') showToast('重試中斷：' + (err && err.message || err), 'error');
+      finishImport(prev);
+    }
   };
 
   window._impCancelImport = function () {
     IMP.cancelled = true;
   };
+
+  // 只供測試 (tests/import.cjs) 檢查精靈內部狀態與純函式，正式流程不會用到
+  window.__impTest = { IMP, buildPreview, runImport, sheetToRows, normalizePhone, phoneKey, normKey, normalizeRoom, normalizeBed };
 
 })();
