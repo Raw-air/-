@@ -161,6 +161,10 @@ const state = {
   loading: true,
   calMonth: new Date(),
   confirmedSquads: [],
+  confirmedDate: null,     // confirmedSquads 是哪一天 (ISO) 的回報；跨日後舊的一律視為沒回報
+  rollcallEnteredDate: null, // 進入點名頁 (或啟動) 時的「今天」(ISO)，輪詢時用來偵測跨日
+  dateManuallyPicked: false, // 使用者有沒有手動選日期；有的話跨日不自動切回今天
+  loadToken: 0,            // 每次 loadData / 切換學期都遞增，晚到的舊回應一律丟棄
   recentSyncs: {}, // 用於保護剛同步成功的狀態，避免 eventual consistency 導致閃爍
   remarks: {},        // 備註 (另一個 Notion 資料庫，總表 API 不帶)：{ pageId: 文字 }，背景刷新後要蓋回去
   remarksLoaded: false,
@@ -597,6 +601,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     applyStoredPrefs();
     loadPendingAttendance();
+    loadUnsyncedChanges();
     semesterInputsTouched();
     // 查看封存學期時，所有寫入總表的動作一律擋下 (點名、電話請假、匯入精靈、檔案管理)
     if (window._api && typeof window._api.updateAttendance === 'function') {
@@ -604,18 +609,27 @@ document.addEventListener('DOMContentLoaded', async () => {
       window._api.updateAttendance = (updates, options) => {
         if (state.viewSemester) return Promise.reject(new Error(`正在查看封存學期 ${state.viewSemester}，不能修改`));
         return rawUpdate(updates, options).then(result => {
-          rememberRecentSyncs(updates);
+          // 部分失敗 (success:false + errors) 時，失敗的那幾筆不算已同步，不能蓋 recentSyncs
+          if (result && result.success === false && Array.isArray(result.errors) && result.errors.length) {
+            const failedIds = new Set(result.errors.map(e => e && e.pageId).filter(Boolean));
+            rememberRecentSyncs((updates || []).filter(u => !u || !failedIds.has(u.pageId)));
+          } else {
+            rememberRecentSyncs(updates);
+          }
           return result;
         });
       };
     }
 
     state.currentDate = getTodayAttendanceDate();
+    state.rollcallEnteredDate = localTodayISO();
     setupNav();
     setupPinDialog();
     applyNavIcons();
     navigateTo('home');
     await loadData();
+    // 上次沒送出去的點名 (從 localStorage 載回來的) 開機就先補送一次，不用等 60 秒
+    if (state.changes.length) backupPendingChanges();
 
     // <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg> 即時同步系統 — KV 信號層輪詢
     // 取代舊的 15 秒 Notion 輪詢，改為 3 秒 KV 輪詢（回應 < 10ms）
@@ -625,11 +639,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     let _pollPaused = false;
     let _pollBusy = false;
     let _lastSeq = -1;        // 已套用到的點名變動序號 (-1 = 還沒拿過)
+    // 使用者 5 分鐘沒碰畫面就把輪詢放慢到 30 秒；一有互動立刻恢復並馬上 poll 一次
+    const POLL_IDLE_MS = 5 * 60 * 1000;
+    let _lastInteractionAt = Date.now();
+    let _pollIdle = false;
 
     function getPollInterval() {
+      if (_pollIdle) return 30000;                     // 閒置中：30 秒
       if (currentPage === 'summary') return 2000;   // 總表頁：2 秒
       if (currentPage === 'rollcall') return 3000;   // 點名頁：3 秒
       return 8000;                                     // 其他頁：8 秒
+    }
+
+    // APP 開著跨過半夜 12 點：沒手動選日期就切到今天，昨天的「已回報」也不再算數
+    function checkDayRollover() {
+      if (state.viewSemester) return;
+      const todayISO = localTodayISO();
+      if (!state.rollcallEnteredDate || state.rollcallEnteredDate === todayISO) return;
+      state.rollcallEnteredDate = todayISO;
+      if (state.dateManuallyPicked) return;
+      state.currentDate = getTodayAttendanceDate();
+      state.confirmedSquads = [];
+      state.confirmedDate = todayISO;
+      renderCurrentPage(true);
+      showToast('已跨日，切換到今天的點名', 'info');
     }
 
     // 套用別台裝置的點名變動；自己還沒送出的變更優先。回傳有沒有改到畫面上的資料
@@ -655,6 +688,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     async function doPoll() {
+      checkDayRollover();
+      // 閒置 5 分鐘就把間隔放慢；狀態改變時重設計時器
+      const idle = Date.now() - _lastInteractionAt > POLL_IDLE_MS;
+      if (idle !== _pollIdle) { _pollIdle = idle; startPoll(); }
       if (_pollPaused || _pollBusy) return;
       _pollBusy = true;
       try {
@@ -676,13 +713,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         // 1. 檢查確認回報狀態是否有更新
-        // 新後端會帶 date：別天的回報不要套到今天
-        if (data.ts > _lastPollTs && (!data.date || data.date === getTodayAttendanceDate())) {
+        // 新後端會帶 date：別天的回報不要套到今天 (date 可能是 ISO 或舊式「9月12日」，統一換成 ISO 比)
+        if (data.ts > _lastPollTs && (!data.date || dateColumnToISO(data.date) === localTodayISO())) {
           _lastPollTs = data.ts;
           const newConfirms = data.confirms ? data.confirms.split(',').filter(Boolean) : [];
-          if (newConfirms.join(',') !== state.confirmedSquads.join(',')) {
+          if (newConfirms.join(',') !== state.confirmedSquads.join(',') || state.confirmedDate !== localTodayISO()) {
             state.confirmedSquads = newConfirms;
-            const today = getTodayAttendanceDate();
+            state.confirmedDate = localTodayISO();
+            const today = localTodayISO();
             state.config['confirm_' + today] = data.confirms || '';
             // 僅重新渲染，不需要 loadData
             if (currentPage === 'summary') renderSummary();
@@ -733,11 +771,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
         const wantConfig = Date.now() - _lastBgConfigAt > 60000;
         const wantRemarks = Date.now() - _lastRemarksFetchAt > REMARKS_REFRESH_MS;
+        // 記下出發時的載入代號與學期：中途若 loadData / 切換學期，這次回來的舊資料就整包丟掉
+        const token = state.loadToken;
+        const semesterAtStart = state.viewSemester;
         const [roster, config, remarks] = await Promise.all([
           window._api.getRoster(state.viewSemester || ''),
           wantConfig ? window._api.getConfig() : Promise.resolve(null),
           wantRemarks ? window._api.getRemarks().catch(() => null) : Promise.resolve(null),
         ]);
+        if (token !== state.loadToken || semesterAtStart !== state.viewSemester) return;
         state.rosterSemester = roster.semester || null;
         if (remarks && typeof remarks === 'object') {
           _lastRemarksFetchAt = Date.now();
@@ -755,10 +797,13 @@ document.addEventListener('DOMContentLoaded', async () => {
           _lastBgConfigAt = Date.now();
           // 點名完成狀態以即時信號為準，不拿 (可能較舊的) 設定表覆蓋，否則「已回報」會一閃一閃
           const today = getTodayAttendanceDate();
-          const keepConfirm = state.config['confirm_' + today];
+          const todayISO = localTodayISO(); // 回報鍵現在一律用 ISO 日期寫入
+          const keepConfirm = state.config['confirm_' + todayISO];
+          const keepConfirmLegacy = state.config['confirm_' + today];
           const keepSnapshot = state.config['snapshot_' + today];
           state.config = config || {};
-          if (keepConfirm !== undefined) state.config['confirm_' + today] = keepConfirm;
+          if (keepConfirm !== undefined) state.config['confirm_' + todayISO] = keepConfirm;
+          if (keepConfirmLegacy !== undefined) state.config['confirm_' + today] = keepConfirmLegacy;
           if (keepSnapshot !== undefined) state.config['snapshot_' + today] = keepSnapshot;
         }
         applyRoomRules();
@@ -801,6 +846,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         startPoll(); // 因為 currentPage 改變了，間隔也要跟著調整
       };
     }
+
+    // 使用者一有互動就記下時間；若先前已進入閒置慢速輪詢，立刻恢復原本間隔並馬上 poll 一次
+    const _onInteract = () => {
+      _lastInteractionAt = Date.now();
+      if (_pollIdle) { _pollIdle = false; startPoll(); doPoll(); }
+    };
+    for (const evt of ['pointerdown', 'keydown', 'touchstart']) {
+      document.addEventListener(evt, _onInteract, { passive: true, capture: true });
+    }
+    // 網路恢復時把還沒送出去的點名補送
+    window.addEventListener('online', () => { if (state.changes.length) backupPendingChanges(); });
 
     startPoll();
     doPoll(); // 啟動後立即執行一次
@@ -912,6 +968,9 @@ function updateAllImagesToTheme() {
 }
 
 async function loadData() {
+  // 每次載入都拿一個新代號；中途若又 loadData 或切換學期，這次晚到的回應整包丟掉 (不套用、不渲染)
+  const token = ++state.loadToken;
+  const semesterAtStart = state.viewSemester;
   try {
     showLoading(true);
     const [roster, config, changelogs, remarks] = await Promise.all([
@@ -921,6 +980,8 @@ async function loadData() {
       window._api.getRemarks().catch(() => null),
       loadSemesterState(),
     ]);
+    // 較新的 loadData 還在跑 (或已跑完並關掉載入畫面)，這次的結果不能再套上去
+    if (token !== state.loadToken || semesterAtStart !== state.viewSemester) return;
     state.rosterSemester = roster.semester || null;
 
     if (remarks && typeof remarks === 'object') {
@@ -950,10 +1011,12 @@ async function loadData() {
     // 套用全域背景影片設定
     loadGlobalBgVideo();
 
+    // 回報鍵：ISO 日期優先，舊式「X月Y日」為備援；並記下這份回報是哪一天的
     const today = getTodayAttendanceDate();
-    const confVal = state.config['confirm_' + today] || state.config['confirm_' + getTodayColumnName()];
+    const confVal = state.config['confirm_' + localTodayISO()] || state.config['confirm_' + today] || state.config['confirm_' + getTodayColumnName()];
     if (confVal) state.confirmedSquads = confVal.split(',').filter(Boolean);
     else state.confirmedSquads = [];
+    state.confirmedDate = localTodayISO();
 
     showLoading(false);
     renderCurrentPage(true);
@@ -1697,18 +1760,21 @@ function renderHome() {
 }
 
 function enterSquad(squadId) {
+  // 注意：不清空 state.changes。變更以 pageId+日期為鍵、跨中隊，網路差時沒送出去的點名換中隊也要留著等重送
   const pin = state.config[`pin_${squadId}`];
   if (pin && pin !== '0000') {
     showPinDialog(squadId, () => {
       state.currentSquad = squadId;
       state.currentDate = getTodayAttendanceDate();
-      state.changes = [];
+      state.rollcallEnteredDate = localTodayISO();
+      state.dateManuallyPicked = false;
       navigateTo('rollcall');
     });
   } else {
     state.currentSquad = squadId;
     state.currentDate = getTodayAttendanceDate();
-    state.changes = [];
+    state.rollcallEnteredDate = localTodayISO();
+    state.dateManuallyPicked = false;
     navigateTo('rollcall');
   }
 }
@@ -1780,6 +1846,7 @@ function selectRollCallDate(date) {
   const iso = dateColumnToISO(date);
   if (!iso) { showToast('請選擇有效的年月日', 'error'); return; }
   state.currentDate = resolveAttendanceDate(iso);
+  state.dateManuallyPicked = true; // 手動選了日期，跨日時不自動切回今天
   if (!state.dateColumns.includes(state.currentDate)) showToast('後端點名表還沒有這一天的欄位；這裡的變更會暫存在這台裝置，等欄位建立後自動補送。', 'info');
   closeDatePicker();
   renderRollCall(true); // 切換日期時也跳過動畫防止殘影
@@ -1872,6 +1939,7 @@ function toggleStatus(pageId) {
   const change = { pageId, date: state.currentDate, value: next };
   if (idx >= 0) state.changes[idx] = change;
   else state.changes.push(change);
+  saveUnsyncedChanges();
 
   // 後端沒有這一天的欄位：先存在本機，背景刷新不會把它洗掉，欄位建立後自動補送
   if (!serverHasDateColumn(state.currentDate)) {
@@ -1914,6 +1982,8 @@ function toggleStatus(pageId) {
       // 同步成功：移除 changes 中已成功的那筆
       const i = state.changes.findIndex(c => c.pageId === pageId && c.date === change.date && c.value === next);
       if (i >= 0) state.changes.splice(i, 1);
+      saveUnsyncedChanges();
+      _syncFailToastShown = false;
 
       // 將成功狀態放入「最近同步」保護中，保護 15 秒不被後台刷新覆蓋
       const syncKey = pageId + '_' + change.date;
@@ -1921,11 +1991,113 @@ function toggleStatus(pageId) {
 
       showSyncDot(pageId, 'ok');
     } catch (err) {
-      // 失敗保留在 changes 留待手動提交
+      // 失敗保留在 changes (已存 localStorage) 留待手動提交 / 自動備份重送
       showSyncDot(pageId, 'err');
       console.warn('auto-sync failed:', err.message);
+      notifySyncFailure();
     }
   }, 800);
+}
+
+// ─── 未同步變更：存 localStorage、畫面小標示、失敗只提示一次 ───────────────
+const UNSYNCED_KEY = 'biyuan_unsynced_changes';
+const ATT_BATCH_SIZE = 20; // 每批送幾筆點名 (後端單次上限 25，留餘裕)
+let _syncFailToastShown = false;
+
+// state.changes 每次變動都寫進 localStorage，網路差時換中隊、重開 APP 都不會不見
+function saveUnsyncedChanges() {
+  try { localStorage.setItem(UNSYNCED_KEY, JSON.stringify(state.changes)); } catch (_) {}
+  updateUnsyncedBadge();
+}
+
+// 啟動時載回；格式不對 (不是陣列、缺 pageId/date) 就整包丟掉
+function loadUnsyncedChanges() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(UNSYNCED_KEY) || '[]');
+    state.changes = Array.isArray(raw)
+      ? raw.filter(c => c && typeof c === 'object' && typeof c.pageId === 'string' && c.pageId && typeof c.date === 'string' && c.date)
+           .map(c => ({ pageId: c.pageId, date: c.date, value: typeof c.value === 'string' ? c.value : '' }))
+      : [];
+  } catch (_) { state.changes = []; }
+  updateUnsyncedBadge();
+}
+
+// 同一波失敗只跳一次 toast；任何一次同步成功後才會再提示
+function notifySyncFailure() {
+  if (_syncFailToastShown) return;
+  _syncFailToastShown = true;
+  showToast(`有 ${state.changes.length} 筆點名還沒同步，網路恢復後會自動重送`, 'error');
+}
+
+// 「未同步 N 筆」小標示：任何頁面都看得到，N=0 隱藏，點一下就重送。
+// 剛點的變更 debounce 800ms 內多半就同步完了，所以延遲 2.5 秒才顯示，免得每點一下都閃一次
+const UNSYNCED_BADGE_DELAY_MS = 2500;
+let _unsyncedBadgeTimer = null;
+function updateUnsyncedBadge() {
+  const n = (state.changes || []).length;
+  let el = document.getElementById('unsynced-badge');
+  if (!n) {
+    clearTimeout(_unsyncedBadgeTimer); _unsyncedBadgeTimer = null;
+    if (el) el.hidden = true;
+    return;
+  }
+  if (!el) {
+    if (!document.body) return;
+    el = document.createElement('button');
+    el.id = 'unsynced-badge';
+    el.type = 'button';
+    el.hidden = true;
+    // 置中貼頂 (toast 之下)：左上有返回鍵、右上有更新公告 / 日期膠囊，不擋任何既有按鈕
+    el.style.cssText = 'position:fixed;top:calc(6px + var(--safe-t, 0px));left:50%;transform:translateX(-50%);z-index:9989;padding:5px 10px;border-radius:999px;font-size:12px;font-weight:600;line-height:1;background:rgba(239,68,68,.9);color:#fff;border:1px solid rgba(255,255,255,.35);box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer';
+    el.onclick = () => resendUnsyncedChanges();
+    document.body.appendChild(el);
+  }
+  el.textContent = `未同步 ${n} 筆`;
+  el.title = '點一下重新送出';
+  if (el.hidden && !_unsyncedBadgeTimer) {
+    _unsyncedBadgeTimer = setTimeout(() => {
+      _unsyncedBadgeTimer = null;
+      const b = document.getElementById('unsynced-badge');
+      if (b && state.changes.length) { b.textContent = `未同步 ${state.changes.length} 筆`; b.hidden = false; }
+    }, UNSYNCED_BADGE_DELAY_MS);
+  }
+}
+
+async function resendUnsyncedChanges() {
+  if (!state.changes.length) return;
+  if (_backupBusy) { showToast('正在同步中，請稍候', 'info'); return; }
+  showToast(`重新送出 ${state.changes.length} 筆點名…`, 'info');
+  await backupPendingChanges();
+  if (!state.changes.length) showToast('未同步的點名已全部送出', 'success');
+}
+
+// 分批送出點名變更 (每批 ATT_BATCH_SIZE 筆)。回傳 { failed: 失敗的那些筆, error: 最後一個錯誤 }。
+// 後端回 { success:false, errors:[{pageId,error}] } (或 api.js 因 data.error 而 throw、錯誤物件帶 err.data)
+// 時，只把 errors 列出的那些筆算失敗，其餘視為成功並記進 recentSyncs。
+async function sendAttendanceChanges(items) {
+  const failed = [];
+  let lastError = null;
+  for (let i = 0; i < items.length; i += ATT_BATCH_SIZE) {
+    const sent = items.slice(i, i + ATT_BATCH_SIZE);
+    let errList = null; // null = 整批失敗；陣列 = 只有列出的失敗
+    try {
+      const res = await window._api.updateAttendance(sent.map(({ pageId, date, value }) => ({ pageId, date, value })));
+      if (res && res.success === false && Array.isArray(res.errors) && res.errors.length) errList = res.errors;
+      else continue; // 整批成功 (recentSyncs 由 updateAttendance 包裝層記錄)
+    } catch (err) {
+      lastError = err;
+      const data = err && err.data;
+      if (data && Array.isArray(data.errors) && data.errors.length) errList = data.errors;
+    }
+    if (!errList) { failed.push(...sent); continue; }
+    const failedIds = new Set(errList.map(e => e && e.pageId).filter(Boolean));
+    for (const c of sent) {
+      if (failedIds.has(c.pageId)) failed.push(c);
+      else state.recentSyncs[c.pageId + '_' + c.date] = { value: c.value, ts: Date.now() };
+    }
+    if (!lastError) lastError = new Error(errList[0] && errList[0].error ? errList[0].error : `${errList.length} 筆更新失敗`);
+  }
+  return { failed, error: lastError };
 }
 
 // 在學生行顯示同步狀態小點
@@ -1963,13 +2135,18 @@ function updateRollCallStats(skipAnimation = false) {
   const confirmBtn = document.getElementById('rc-confirm-btn');
   if (isTodayAttendanceDate(state.currentDate)) {
     confirmBtn.style.display = 'flex';
-    const isConfirmed = state.confirmedSquads.includes(state.currentSquad);
+    const isConfirmed = confirmedSquadsToday().includes(state.currentSquad);
     confirmBtn.className = 'rc-confirm-action' + (isConfirmed ? ' done' : '');
     document.getElementById('rc-confirm-icon').innerHTML = isConfirmed ? '<svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : '<svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>';
     document.getElementById('rc-confirm-text').textContent = isConfirmed ? '確認本中隊已完成點名' : '確認本中隊完成點名';
   } else {
     confirmBtn.style.display = 'none';
   }
+}
+
+// 「已回報」清單綁日期：APP 開著跨過半夜，昨天的回報不能再顯示成今天已回報
+function confirmedSquadsToday() {
+  return state.confirmedDate === localTodayISO() ? state.confirmedSquads : [];
 }
 
 async function toggleSquadConfirm() {
@@ -1979,7 +2156,9 @@ async function toggleSquadConfirm() {
   // 防呆：如果正在同步，忽略重複點擊
   if (btn.disabled) return;
 
-  const isCurrentlyConfirmed = state.confirmedSquads.includes(sq);
+  // 跨日後昨天的回報不算數：以「今天的」回報清單為準
+  const confirmedNow = confirmedSquadsToday();
+  const isCurrentlyConfirmed = confirmedNow.includes(sq);
 
   // 顯示載入中狀態 (卡住按鈕不讓使用者亂點)
   btn.disabled = true;
@@ -1988,12 +2167,13 @@ async function toggleSquadConfirm() {
   // 預計要變成的最終結果
   let targetSquads = [];
   if (isCurrentlyConfirmed) {
-    targetSquads = state.confirmedSquads.filter(s => s !== sq);
+    targetSquads = confirmedNow.filter(s => s !== sq);
   } else {
-    targetSquads = [...state.confirmedSquads, sq];
+    targetSquads = [...confirmedNow, sq];
   }
 
-  const today = getTodayAttendanceDate();
+  // 回報鍵一律用 ISO 日期 (confirm_2026-09-12)，不再用沒年份的舊式欄名
+  const today = localTodayISO();
   try {
     // 儲存到 Notion (系統全域共用)，需等候完成才改變本地狀態。
     // 新後端只加/減自己這隊，不會蓋掉別隊同時按的回報；舊後端沒有 /api/confirm 才退回整串寫入
@@ -2007,6 +2187,7 @@ async function toggleSquadConfirm() {
 
     // 如果沒有拋出錯誤，代表網路更新成功！
     state.confirmedSquads = targetSquads;
+    state.confirmedDate = today;
     state.config['confirm_' + today] = targetSquads.join(',');
 
     showToast(isCurrentlyConfirmed ? '已取消回報' : '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 點名回報成功！已即時同步至總表', 'success');
@@ -2027,17 +2208,25 @@ async function toggleSquadConfirm() {
 
 function setupSubmitButton() {
   const btn = document.getElementById('submit-btn');
+  const setupHtml = btn.innerHTML; // 記下原本的按鈕內容 (含 SVG 圖示)，提交完用它還原，不能把 svg 原始碼當文字塞
   btn.onclick = async () => {
     if (!state.changes.length) { showToast('沒有需要提交的變更', 'info'); return; }
+    // 先拍一份快照：提交途中新點的變更不在快照裡，成功後也不會被清掉
+    const snapshot = state.changes.slice();
+    const idleHtml = btn.innerHTML || setupHtml;
     btn.disabled = true; btn.textContent = '提交中...';
     try {
-      for (let i = 0; i < state.changes.length; i += 45)
-        await window._api.updateAttendance(state.changes.slice(i, i + 45));
-      showToast(`已提交 ${state.changes.length} 筆變更`, 'success');
+      const { failed, error } = await sendAttendanceChanges(snapshot);
+      const failedSet = new Set(failed);
+      // 只移除快照裡送成功的那些 (物件身分比對)；失敗的留著等下次重送
+      state.changes = state.changes.filter(c => !snapshot.includes(c) || failedSet.has(c));
+      saveUnsyncedChanges();
+      if (failed.length) throw (error || new Error(`${failed.length} 筆更新失敗`));
+      _syncFailToastShown = false;
+      showToast(`已提交 ${snapshot.length} 筆變更`, 'success');
       showSubmitSuccess();
-      state.changes = [];
     } catch (err) { showToast('提交失敗：' + err.message, 'error'); }
-    finally { btn.disabled = false; btn.textContent = '<svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 提交今日點名'; }
+    finally { btn.disabled = false; btn.innerHTML = idleHtml; }
   };
 }
 
@@ -2096,8 +2285,13 @@ async function submitEmptyBed() {
   if (student.isEmpty) { showToast('此床位已是空床', 'info'); closeModal('empty-bed-modal'); return; }
 
   try {
+    // 只把「今天以後」的日期填成勾勾；過去每一天是那個人真實的點名紀錄，Notion 與本地都不動
+    const todayISO = localTodayISO();
     const datesToClear = {};
-    for (const d of state.dateColumns) datesToClear[d] = '✓'; // 預設所有空床請假紀錄一律為勾勾
+    for (const d of state.dateColumns) {
+      const iso = dateColumnToISO(d);
+      if (iso && iso >= todayISO) datesToClear[d] = '✓'; // 預設空床請假紀錄一律為勾勾
+    }
 
     // 在 Notion 中將「空床」checkbox 設為 true，並清除學生與請假資料
     await window._api.updateAttendance([{
@@ -2113,7 +2307,7 @@ async function submitEmptyBed() {
     student.class = '';
     student.studentId = '';
     student.isForeign = false;
-    for (const d of state.dateColumns) student.attendance[d] = '✓';
+    for (const d of Object.keys(datesToClear)) student.attendance[d] = '✓';
 
     showToast(`${room} ${bed} 床已標記為空床並清除殘留資料`, 'success');
     closeModal('empty-bed-modal');
@@ -2241,6 +2435,66 @@ function updateSwapToBeds() {
   if (!allBeds.length) sel.innerHTML = '<option disabled>此房間無床位</option>';
 }
 
+// 換床前：這些 pageId 若還有沒送出的點名 (state.changes) 或後端已有欄位的本機暫存 (pendingByDate)，先嘗試送出；
+// 回傳是否已全部送完。後端還沒有欄位的暫存送不出去，不擋換床，換完由 swapPendingAttendanceKeys 跟著人走
+async function flushUnsyncedAttendanceFor(pageIds) {
+  const ids = new Set(pageIds);
+  const hasChanges = () => state.changes.some(c => ids.has(c.pageId));
+  const pendingItems = () => {
+    const items = [];
+    for (const [iso, bucket] of Object.entries(state.pendingByDate || {})) {
+      for (const pageId of Object.keys(bucket || {})) {
+        if (!ids.has(pageId) || !serverHasDateColumn(iso)) continue;
+        const column = (getExportColumnEntries().find(e => e.iso === iso) || {}).column || iso;
+        items.push({ pageId, iso, value: bucket[pageId], date: column });
+      }
+    }
+    return items;
+  };
+  // 這兩張床還在 debounce 排隊的自動同步先取消 (值已在 state.changes 裡，下面一起送)，免得換完床才發出去寫到別人身上
+  for (const key of Object.keys(_syncTimers)) {
+    const cut = key.lastIndexOf('_');
+    if (cut > 0 && ids.has(key.slice(0, cut))) { clearTimeout(_syncTimers[key]); delete _syncTimers[key]; }
+  }
+  if (hasChanges()) await backupPendingChanges();
+  const replay = pendingItems();
+  if (replay.length) await replayPendingAttendance(replay);
+  return !hasChanges() && !pendingItems().length;
+}
+
+// 換床成功後把 recentSyncs 裡兩個 pageId 的鍵互換 (值跟著人走)
+function swapRecentSyncKeys(idA, idB) {
+  const moved = {};
+  for (const key of Object.keys(state.recentSyncs)) {
+    const cut = key.lastIndexOf('_');
+    if (cut < 0) continue;
+    const id = key.slice(0, cut), date = key.slice(cut + 1);
+    if (id !== idA && id !== idB) continue;
+    moved[(id === idA ? idB : idA) + '_' + date] = state.recentSyncs[key];
+    delete state.recentSyncs[key];
+  }
+  Object.assign(state.recentSyncs, moved);
+}
+
+// 換床成功後，後端還沒有欄位的本機暫存 (pendingByDate) 也跟著人走：兩個 pageId 的值互換
+function swapPendingAttendanceKeys(idA, idB) {
+  let dirty = false;
+  for (const iso of Object.keys(state.pendingByDate || {})) {
+    const bucket = state.pendingByDate[iso];
+    if (!bucket || typeof bucket !== 'object') continue;
+    const hasA = Object.prototype.hasOwnProperty.call(bucket, idA), hasB = Object.prototype.hasOwnProperty.call(bucket, idB);
+    if (!hasA && !hasB) continue;
+    const valA = bucket[idA], valB = bucket[idB];
+    const tsA = _pendingTs[pendingTsKey(iso, idA)], tsB = _pendingTs[pendingTsKey(iso, idB)];
+    delete bucket[idA]; delete bucket[idB];
+    delete _pendingTs[pendingTsKey(iso, idA)]; delete _pendingTs[pendingTsKey(iso, idB)];
+    if (hasA) { bucket[idB] = valA; _pendingTs[pendingTsKey(iso, idB)] = tsA; }
+    if (hasB) { bucket[idA] = valB; _pendingTs[pendingTsKey(iso, idA)] = tsB; }
+    dirty = true;
+  }
+  if (dirty) savePendingAttendance();
+}
+
 async function submitSwapBed() {
   const fromRoom = document.getElementById('sw-from-room').value;
   const fromBed = document.getElementById('sw-from-bed').value;
@@ -2261,9 +2515,17 @@ async function submitSwapBed() {
   if (btn) { btn.disabled = true; btn.textContent = '交換中...'; }
 
   try {
+    // 這兩張床還有沒送出去的點名時，先送完再換；不然換完後晚到的點名會寫到別人身上
+    if (!(await flushUnsyncedAttendanceFor([studentA.id, studentB.id]))) {
+      showToast('有未同步的點名，請等同步完成再換床', 'error');
+      return;
+    }
     // 呼叫新端點：整行資料互換（姓名/班別/學號/空床/所有出席紀錄全部交換）
     // 物理位置（寢床號/床號/中隊）保持不變
     await window._api.swapBeds(studentA.id, studentB.id);
+    // 剛同步成功的保護值與後端還沒有欄位的本機暫存也跟著人走：兩個 pageId 的鍵互換
+    swapRecentSyncKeys(studentA.id, studentB.id);
+    swapPendingAttendanceKeys(studentA.id, studentB.id);
 
     // 本地狀態同步：交換兩個學生物件除位置外的所有資料
     const posA = { id: studentA.id, room: studentA.room, bed: studentA.bed, squad: studentA.squad };
@@ -2725,7 +2987,7 @@ function renderSummary() {
   // 各中隊
   const grid = document.getElementById('summary-squad-grid');
   grid.innerHTML = st.squads.map(sq => {
-    const isConfirmed = state.confirmedSquads.includes(sq.id) && isTodayAttendanceDate(date);
+    const isConfirmed = confirmedSquadsToday().includes(sq.id) && isTodayAttendanceDate(date);
     const confHtml = isConfirmed ? `<div class="sqd-conf-badge-inline"><span class="conf-ring-sm">✓</span>已回報</div>` : '';
     return `
     <div class="sqd-card" style="--sq-c:${sq.color}">
@@ -3697,6 +3959,14 @@ function applyLocalStateToRoster(rosterStudents, rosterDateColumns) {
   // 剛送出的值蓋回伺服器資料 (所有日期)；伺服器已經讀得到同樣的值就不用再保護
   const byId = new Map();
   for (const s of rosterStudents) if (s && s.id) byId.set(s.id, s);
+  // 本機暫存 (pendingByDate) 要跟「伺服器原始值」比，先在蓋回 recentSyncs / changes 之前把那些人的出席快照留下來
+  const serverAttendance = new Map();
+  for (const bucket of Object.values(state.pendingByDate || {})) {
+    for (const pageId of Object.keys(bucket || {})) {
+      const s = byId.get(pageId);
+      if (s && !serverAttendance.has(pageId)) serverAttendance.set(pageId, { ...(s.attendance && typeof s.attendance === 'object' ? s.attendance : {}) });
+    }
+  }
   Object.keys(state.recentSyncs).forEach(key => {
     const cut = key.lastIndexOf('_');
     const student = byId.get(key.slice(0, cut));
@@ -3708,6 +3978,14 @@ function applyLocalStateToRoster(rosterStudents, rosterDateColumns) {
     if (want) student.attendance[date] = want; else delete student.attendance[date];
   });
 
+  // 還沒送出的變更 (state.changes) 依 pageId 分組：所有日期都要保護，不只目前檢視的日期
+  const changesById = new Map();
+  for (const c of state.changes) {
+    if (!c || !c.pageId || !c.date) continue;
+    if (!changesById.has(c.pageId)) changesById.set(c.pageId, []);
+    changesById.get(c.pageId).push(c);
+  }
+
   const merged = rosterStudents.filter(s => s && typeof s === 'object').map(s => {
     // 資料庫偶爾會出現「未勾空床，但姓名欄完全沒資料」的殘缺床位。
     // 前端統一以姓名為住宿生的最低條件，避免這類資料可被點名或算入人數。
@@ -3715,25 +3993,14 @@ function applyLocalStateToRoster(rosterStudents, rosterDateColumns) {
     s.isEmpty = !!s.isEmpty || !s.name;
     if (!s.attendance || typeof s.attendance !== 'object') s.attendance = {};
 
-    // 1. 優先處理正在等待同步的變更 (Pending Changes)
-    const pending = state.changes.find(c => c.pageId === s.id && c.date === state.currentDate);
-    if (pending) {
-      s.attendance[state.currentDate] = pending.value;
-      return s;
-    }
-
-    // 2. 處理剛同步成功但在伺服器可能尚未穩定的變更 (Recent Syncs)
-    const syncKey = s.id + '_' + state.currentDate;
-    const recent = state.recentSyncs[syncKey];
-    if (recent) {
-      s.attendance[state.currentDate] = recent.value;
-      return s;
-    }
+    // 1. 優先處理正在等待同步的變更 (Pending Changes)：這個人在任何日期的待送值都蓋回去
+    //    (剛同步成功的 recentSyncs 已在上面對所有日期蓋過了)
+    for (const c of changesById.get(s.id) || []) s.attendance[c.date] = c.value;
 
     return s;
   });
   applyRemarksAndProfiles(merged);
-  applyPendingAttendance(merged, Array.isArray(rosterDateColumns) ? rosterDateColumns : state.dateColumns);
+  applyPendingAttendance(merged, Array.isArray(rosterDateColumns) ? rosterDateColumns : state.dateColumns, serverAttendance);
   return merged;
 }
 
@@ -3741,17 +4008,50 @@ function applyLocalStateToRoster(rosterStudents, rosterDateColumns) {
 // Notion 點名總表只有建檔時那個學期的日期欄位；沒有欄位的日期，後端不會保存任何變更。
 // 這裡把這些變更留在本機 (localStorage)，每次背景刷新都重新蓋回去，等欄位出現後自動補送。
 const PENDING_ATT_KEY = 'biyuan_pending_attendance';
+const PENDING_ATT_TS_KEY = 'biyuan_pending_attendance_ts'; // 每筆暫存是什麼時候按的 { 'iso|pageId': ts }，另存一鍵以維持舊格式相容
+const PENDING_ATT_MAX_AGE_MS = 7 * 86400000; // 超過 7 天的暫存一律丟棄，免得舊手機一打開就蓋掉別人的新資料
 let _pendingReplayBusy = false;
+let _pendingTs = {};
+
+function pendingTsKey(iso, pageId) { return iso + '|' + pageId; }
 
 function loadPendingAttendance() {
   try {
     const raw = JSON.parse(localStorage.getItem(PENDING_ATT_KEY) || '{}');
-    state.pendingByDate = raw && typeof raw === 'object' ? raw : {};
+    state.pendingByDate = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   } catch (_) { state.pendingByDate = {}; }
+  try {
+    const rawTs = JSON.parse(localStorage.getItem(PENDING_ATT_TS_KEY) || '{}');
+    _pendingTs = rawTs && typeof rawTs === 'object' && !Array.isArray(rawTs) ? rawTs : {};
+  } catch (_) { _pendingTs = {}; }
+  // 舊格式沒記時間的視為現在；超過 7 天的直接丟掉
+  const now = Date.now();
+  let dirty = false;
+  for (const iso of Object.keys(state.pendingByDate)) {
+    const bucket = state.pendingByDate[iso];
+    if (!bucket || typeof bucket !== 'object') { delete state.pendingByDate[iso]; dirty = true; continue; }
+    for (const pageId of Object.keys(bucket)) {
+      const k = pendingTsKey(iso, pageId);
+      if (!Number.isFinite(_pendingTs[k])) { _pendingTs[k] = now; dirty = true; }
+      else if (now - _pendingTs[k] > PENDING_ATT_MAX_AGE_MS) { delete bucket[pageId]; delete _pendingTs[k]; dirty = true; }
+    }
+    if (!Object.keys(bucket).length) { delete state.pendingByDate[iso]; dirty = true; }
+  }
+  if (dirty) savePendingAttendance();
 }
 
 function savePendingAttendance() {
+  // 時間表只留還存在的暫存 (直接塞進 state.pendingByDate 的沒有時間就當作現在)
+  const keep = {};
+  for (const iso of Object.keys(state.pendingByDate || {})) {
+    for (const pageId of Object.keys(state.pendingByDate[iso] || {})) {
+      const k = pendingTsKey(iso, pageId);
+      keep[k] = Number.isFinite(_pendingTs[k]) ? _pendingTs[k] : Date.now();
+    }
+  }
+  _pendingTs = keep;
   try { localStorage.setItem(PENDING_ATT_KEY, JSON.stringify(state.pendingByDate)); } catch (_) {}
+  try { localStorage.setItem(PENDING_ATT_TS_KEY, JSON.stringify(_pendingTs)); } catch (_) {}
 }
 
 function pendingDateKey(dateKey) {
@@ -3769,6 +4069,7 @@ function recordPendingAttendance(pageId, dateKey, value) {
   if (!iso || !pageId) return;
   if (!state.pendingByDate[iso]) state.pendingByDate[iso] = {};
   state.pendingByDate[iso][pageId] = value;
+  _pendingTs[pendingTsKey(iso, pageId)] = Date.now();
   savePendingAttendance();
 }
 
@@ -3777,23 +4078,47 @@ function pendingAttendanceCount(dateKey) {
   return bucket ? Object.keys(bucket).length : 0;
 }
 
-function applyPendingAttendance(students, columns) {
+// serverAttendance：{ pageId → 伺服器原始出席 } 的快照 (蓋回 recentSyncs / changes 之前)，用來判斷雲端是不是已經有別人改過的值
+function applyPendingAttendance(students, columns, serverAttendance) {
   // 用「這次伺服器回傳」的欄位判斷，因為呼叫時 state.dateColumns 還是舊的
   const byISO = new Map();
   for (const column of columns || []) { const iso = dateColumnToISO(column); if (iso && !byISO.has(iso)) byISO.set(iso, column); }
+  const byId = new Map();
+  for (const st of students || []) if (st && st.id) byId.set(st.id, st);
+  const now = Date.now();
   const replay = [];
+  let skipped = 0, dirty = false;
   for (const iso of Object.keys(state.pendingByDate)) {
     const bucket = state.pendingByDate[iso];
-    if (!bucket || typeof bucket !== 'object') { delete state.pendingByDate[iso]; continue; }
+    if (!bucket || typeof bucket !== 'object') { delete state.pendingByDate[iso]; dirty = true; continue; }
     const column = byISO.get(iso) || iso;
     for (const pageId of Object.keys(bucket)) {
-      const student = students.find(st => st.id === pageId);
+      const tsKey = pendingTsKey(iso, pageId);
+      const ts = Number.isFinite(_pendingTs[tsKey]) ? _pendingTs[tsKey] : now;
+      const student = byId.get(pageId);
+      // 超過 7 天的暫存丟棄；換學期後名單裡已經沒有這個人的也清掉 (名單抓到空的、或正在看封存學期時不算)
+      if (now - ts > PENDING_ATT_MAX_AGE_MS || (!student && byId.size && !state.viewSemester)) { delete bucket[pageId]; dirty = true; continue; }
       if (!student) continue;
       if (!student.attendance) student.attendance = {};
-      student.attendance[column] = bucket[pageId];
-      if (byISO.has(iso)) replay.push({ pageId, date: column, value: bucket[pageId], iso });
+      if (byISO.has(iso)) {
+        // 後端已有這天的欄位：只有雲端目前是空值才補送；雲端已有值 (別人已經改過) 就丟棄這筆
+        const raw = serverAttendance && serverAttendance.has(pageId) ? serverAttendance.get(pageId) : student.attendance;
+        const serverVal = (raw && raw[column]) || '';
+        if (serverVal) {
+          if (serverVal !== bucket[pageId]) skipped++;
+          delete bucket[pageId]; dirty = true;
+          continue;
+        }
+        student.attendance[column] = bucket[pageId];
+        replay.push({ pageId, date: column, value: bucket[pageId], iso });
+      } else {
+        student.attendance[column] = bucket[pageId];
+      }
     }
+    if (!Object.keys(bucket).length) { delete state.pendingByDate[iso]; dirty = true; }
   }
+  if (dirty) savePendingAttendance();
+  if (skipped) showToast(`有 ${skipped} 筆暫存點名因為雲端已有較新資料而略過`, 'info');
   if (replay.length) replayPendingAttendance(replay);
 }
 
@@ -3801,18 +4126,21 @@ async function replayPendingAttendance(replay) {
   if (_pendingReplayBusy) return;
   _pendingReplayBusy = true;
   try {
-    for (let i = 0; i < replay.length; i += 45) {
-      const sent = replay.slice(i, i + 45);
-      await window._api.updateAttendance(sent.map(({ pageId, date, value }) => ({ pageId, date, value })));
-      for (const item of sent) {
-        const bucket = state.pendingByDate[item.iso];
-        if (bucket && bucket[item.pageId] === item.value) delete bucket[item.pageId];
-        if (bucket && !Object.keys(bucket).length) delete state.pendingByDate[item.iso];
-        state.recentSyncs[item.pageId + '_' + item.date] = { value: item.value, ts: Date.now() };
-      }
-      savePendingAttendance();
+    // 每批 20 筆；失敗的留在暫存等下次背景刷新再補送，成功的才清掉
+    const { failed } = await sendAttendanceChanges(replay);
+    const failedSet = new Set(failed);
+    let sentCount = 0;
+    for (const item of replay) {
+      if (failedSet.has(item)) continue;
+      const bucket = state.pendingByDate[item.iso];
+      if (bucket && bucket[item.pageId] === item.value) delete bucket[item.pageId];
+      if (bucket && !Object.keys(bucket).length) delete state.pendingByDate[item.iso];
+      state.recentSyncs[item.pageId + '_' + item.date] = { value: item.value, ts: Date.now() };
+      sentCount++;
     }
-    showToast(`後端已建立日期欄位，補送了 ${replay.length} 筆暫存點名`, 'success');
+    savePendingAttendance();
+    if (sentCount) showToast(`後端已建立日期欄位，補送了 ${sentCount} 筆暫存點名`, 'success');
+    if (failed.length) console.warn('補送暫存點名失敗', failed.length + ' 筆');
   } catch (e) {
     console.warn('補送暫存點名失敗', e);
   } finally { _pendingReplayBusy = false; }
@@ -4011,14 +4339,16 @@ async function backupPendingChanges() {
   _backupBusy = true;
   const batch = state.changes.map(c => ({...c}));
   try {
-    for (let i = 0; i < batch.length; i += 45) {
-      const sent = batch.slice(i, i + 45);
-      await window._api.updateAttendance(sent);
-      state.changes = state.changes.filter(c => !sent.some(v => v.pageId === c.pageId && v.date === c.date && v.value === c.value));
-      sent.forEach(c => { state.recentSyncs[c.pageId + '_' + c.date] = {value:c.value,ts:Date.now()}; });
-    }
-    showToast('自動備份 ' + batch.length + ' 筆', 'info');
-  } catch (e) { console.error('自動備份失敗', e); }
+    // 每批 20 筆；只移除送成功的那些 (pageId+date+value 比對，送出途中又改過的會留著)，失敗的留在 changes 等下次重送
+    const { failed, error } = await sendAttendanceChanges(batch);
+    const failedSet = new Set(failed);
+    const sentOk = batch.filter(c => !failedSet.has(c));
+    state.changes = state.changes.filter(c => !sentOk.some(v => v.pageId === c.pageId && v.date === c.date && v.value === c.value));
+    sentOk.forEach(c => { state.recentSyncs[c.pageId + '_' + c.date] = {value:c.value,ts:Date.now()}; });
+    saveUnsyncedChanges();
+    if (sentOk.length) { _syncFailToastShown = false; showToast('自動備份 ' + sentOk.length + ' 筆', 'info'); }
+    if (failed.length) { console.error('自動備份失敗', error); notifySyncFailure(); }
+  } catch (e) { console.error('自動備份失敗', e); notifySyncFailure(); }
   finally { _backupBusy = false; }
 }
 setInterval(backupPendingChanges, CONFIG.AUTO_SAVE_INTERVAL);
@@ -4682,6 +5012,7 @@ async function archiveSemester() {
 async function viewArchivedSemester(name) {
   const arc = state.semester.archives.find(a => a.name === name);
   if (!arc) { showToast('找不到這個封存學期', 'error'); return; }
+  ++state.loadToken; // 切換學期：還在路上的舊回應 (本學期名單) 回來後一律丟棄
   state.viewSemester = name;
   state.currentDate = arc.end && parseISODate(arc.end) ? arc.end : (state.currentDate || localTodayISO());
   navigateTo('summary');
@@ -4698,6 +5029,7 @@ async function viewArchivedSemester(name) {
 }
 
 async function exitArchiveView() {
+  ++state.loadToken; // 回本學期：封存學期晚到的舊回應不能再蓋掉名單
   state.viewSemester = null;
   state.rosterSemester = null;
   state.currentDate = getTodayAttendanceDate();
@@ -5027,8 +5359,8 @@ async function cleanUpEmptyBeds() {
     });
 
     // 分批次發出 API 請求
-    for (let i = 0; i < updates.length; i += 45) {
-      await window._api.updateAttendance(updates.slice(i, i + 45));
+    for (let i = 0; i < updates.length; i += 20) {
+      await window._api.updateAttendance(updates.slice(i, i + 20));
     }
 
     showToast(`成功清理了 ${emptyBeds.length} 張空床的資料，請假全數補上勾勾！`, 'success');
@@ -5077,8 +5409,8 @@ async function fillEmptyBedsWithCheckmarks() {
     });
 
     // 分批次發出 API 請求
-    for (let i = 0; i < updates.length; i += 45) {
-      await window._api.updateAttendance(updates.slice(i, i + 45));
+    for (let i = 0; i < updates.length; i += 20) {
+      await window._api.updateAttendance(updates.slice(i, i + 20));
     }
 
     showToast(`成功將 ${emptyBeds.length} 張空床的請假紀錄統一填上勾勾！`, 'success');
@@ -5360,8 +5692,8 @@ async function submitCounterLeave() {
       updates.push(pageUpdate);
 
       // 送出至總表 (分批每45筆)
-      for (let i = 0; i < updates.length; i += 45) {
-        await window._api.updateAttendance(updates.slice(i, i + 45));
+      for (let i = 0; i < updates.length; i += 20) {
+        await window._api.updateAttendance(updates.slice(i, i + 20));
       }
     } else if (localOnlyDays > 0) {
       showToast(`後端點名表還沒有這 ${localOnlyDays} 天的欄位，請假先暫存在這台裝置的總表`, 'info');
