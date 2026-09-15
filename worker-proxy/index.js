@@ -133,7 +133,15 @@ function masterFixedProperties() {
     '中隊': { select: { options: SQUAD_OPTIONS } },
     '外籍生': { checkbox: {} },
     '空床': { checkbox: {} },
+    // 電話/住址：新學期表一開始就有，封存帶人過去時才寫得進去 (舊表沒有的話 ensureContactColumns 會補)
+    '電話': { rich_text: {} },
+    '住址': { rich_text: {} },
   };
+}
+
+/** 台灣時間 (+08:00) 的 YYYY-MM-DD；「今天」用途一律用這個，別用 toISOString (那是 UTC，台灣 00:00~07:59 會差一天) */
+function taipeiDateString(ts) {
+  return new Date((ts == null ? Date.now() : ts) + 8 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
 // ─── 日期欄位工具 ──────────────────────────────────────────────────────────────
@@ -235,9 +243,22 @@ async function getSemesterState(env) {
 async function saveSemesterState(state, env) {
   const st = normalizeSemesterState(state, env);
   const text = JSON.stringify(st);
-  if (env.POLL_KV) await env.POLL_KV.put(SEMESTER_KEY, text);
+  // 先寫 Notion 設定表 (正本)，成功後才寫 KV (快取)：Notion 失敗就直接丟錯、KV 維持原狀，
+  // 不會出現「KV 指到新表、正本還是舊表」的半套狀態
   if (env.CONFIG_DB_ID) await handleSetConfig({ [SEMESTER_KEY]: text }, env);
+  if (env.POLL_KV) await env.POLL_KV.put(SEMESTER_KEY, text);
   return st;
+}
+
+// 封存學期進行到一半的記號 (KV)：{ newName, newDbId, ts }。新表建好就記下來、學期切換成功才刪，
+// 中途失敗重試時優先重用同一張新表，不會再建第二張孤兒表
+const ARCHIVE_PENDING_KEY = 'archive_pending';
+async function getArchivePending(env) {
+  if (!env.POLL_KV) return null;
+  try {
+    const raw = await env.POLL_KV.get(ARCHIVE_PENDING_KEY, 'json');
+    return raw && typeof raw === 'object' && raw.newDbId ? raw : null;
+  } catch (e) { console.error('KV archive_pending read failed', e); return null; }
 }
 
 async function getMasterDbId(env) {
@@ -538,7 +559,11 @@ export default {
 
       if (url.pathname === '/api/leave-records') {
         if (request.method === 'GET') {
-          return json(await handleGetLeaveRecords(env, url.searchParams.get('from'), url.searchParams.get('to')));
+          // 回傳維持陣列 (前端直接當陣列用)；超過上限被截斷時多一個 X-Truncated: 1 header (前端不用讀)
+          const records = await handleGetLeaveRecords(env, url.searchParams.get('from'), url.searchParams.get('to'), url.searchParams.get('name'));
+          const res = json(records);
+          if (records.truncated) res.headers.set('X-Truncated', '1');
+          return res;
         }
         if (request.method === 'POST') {
           const data = await request.json();
@@ -686,8 +711,49 @@ async function handleInitDb(data, env) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
-// API: 批次匯入學生（每次最多 45 筆，受 CF 50 subrequest 限制）
+// API: 批次匯入學生 (單次最多 20 筆，受 CF 50 subrequest 限制：每床 1 次寫入 + 備註最多 1 次 + 查表)
+//
+// 回傳約定：{ success:boolean, imported, updated, errors:[{name,room,bed,error}], total }
+//   ★ 有錯時「不帶 error 字串」，只用 success:false + errors 清單：前端 api.js 看到 data.error 會整包 throw，
+//     這裡要讓前端自己看 success / errors 顯示哪幾床失敗、再重送那幾床就好
+// 冪等：寫入前先查目標表建立「寢床號+床號 → pageId」對照，已存在的床位改用 PATCH (只覆蓋傳入的欄位)，
+//   不存在的才 POST 建立；前端重送同一批不會產生重複床位
+// 額外欄位：phone / address 寫進「電話」「住址」(舊表沒有這兩欄會先補)；remark 非空時寫進備註表 (REMARKS_DB_ID 沒設就略過)
 // ════════════════════════════════════════════════════════════════════════════════
+const IMPORT_BATCH_MAX = 20;
+const hasStr = v => String(v == null ? '' : v).trim() !== '';
+/** 寢床號+床號 的對照鍵；沒有寢床號就回空字串 (不做對照) */
+function bedKey(room, bed) {
+  const r = String(room || '').trim();
+  return r ? `${r}|${String(bed || '').trim() || 'A'}` : '';
+}
+/** 匯入一床的 Notion 屬性；partial=true (更新既有床位) 時只放有傳入的欄位 */
+function importBedProperties(s, partial) {
+  const has = k => !partial || s[k] !== undefined;
+  const properties = {};
+  if (has('name')) properties['姓名'] = { title: [{ text: { content: s.name || '' } }] };
+  if (has('room')) properties['寢床號'] = { rich_text: [{ text: { content: s.room || '' } }] };
+  if (has('bed')) properties['床號'] = { select: { name: s.bed || 'A' } };
+  if (has('class')) properties['班別'] = { rich_text: [{ text: { content: s.class || '' } }] };
+  if (has('studentId')) properties['學號'] = { rich_text: [{ text: { content: s.studentId || '' } }] };
+  if (has('squad')) properties['中隊'] = { select: { name: s.squad || '一單' } };
+  if (has('isForeign')) properties['外籍生'] = { checkbox: !!s.isForeign };
+  if (has('isEmpty')) properties['空床'] = { checkbox: !!s.isEmpty };
+  // 電話/住址只在有值時才寫 (沒值就不碰，舊表沒這兩欄也不會因此失敗)
+  if (hasStr(s.phone)) properties['電話'] = { rich_text: richTextChunks(String(s.phone).trim()) };
+  if (hasStr(s.address)) properties['住址'] = { rich_text: richTextChunks(String(s.address).trim()) };
+
+  // 加入日期欄位
+  if (s.attendance) {
+    for (const [date, value] of Object.entries(s.attendance)) {
+      if (value) {
+        properties[date] = { select: { name: value } };
+      }
+    }
+  }
+  return properties;
+}
+
 async function handleImportBatch(data, env) {
   const dbId = data.db_id || await getMasterDbId(env);
 
@@ -695,43 +761,80 @@ async function handleImportBatch(data, env) {
   if (!students || !students.length) throw new Error('缺少 students');
 
   let imported = 0;
+  let updated = 0;
   const errors = [];
+  const batch = students.slice(0, IMPORT_BATCH_MAX);
+  for (const s of students.slice(IMPORT_BATCH_MAX)) errors.push({ name: s.name, room: s.room, bed: s.bed, error: '超過單次上限，請分批' });
 
-  for (const s of students.slice(0, 45)) {
+  // 有帶電話/住址才確認欄位存在 (舊表可能沒有這兩欄)
+  if (batch.some(s => hasStr(s.phone) || hasStr(s.address))) await ensureContactColumns(dbId, env);
+
+  // 既有床位對照 (寢床號+床號 → pageId)
+  const byBed = new Map();
+  for (const page of await queryAll(dbId, null, null, env)) {
+    const key = bedKey(getText(page.properties['寢床號']), getSelect(page.properties['床號']));
+    if (key && !byBed.has(key)) byBed.set(key, page.id);
+  }
+
+  // 備註：先查一次備註表 (pageId → { id, text })，之後每床最多 1 次寫入
+  // (逐筆呼叫 handleUpdateRemark 每床要多查一次，20 床會撞到子請求上限)；內容一樣就不再寫
+  let remarkIndex = null;
+  if (env.REMARKS_DB_ID && batch.some(s => hasStr(s.remark))) {
+    remarkIndex = new Map();
+    // 只有「已存在的床位」才可能已經有備註列 (新建的頁 id 是全新的)；整批都是新床位就不用查備註表，省子請求
+    if (batch.some(s => hasStr(s.remark) && byBed.has(bedKey(s.room, s.bed)))) {
+      for (const p of await queryAll(env.REMARKS_DB_ID, null, null, env)) {
+        const k = getTitle(p.properties['學號或姓名']);
+        if (k && !remarkIndex.has(k)) remarkIndex.set(k, { id: p.id, text: getText(p.properties['備註內容']) });
+      }
+    }
+  }
+
+  for (const s of batch) {
     try {
-      const properties = {
-        '姓名': { title: [{ text: { content: s.name || '' } }] },
-        '寢床號': { rich_text: [{ text: { content: s.room || '' } }] },
-        '床號': { select: { name: s.bed || 'A' } },
-        '班別': { rich_text: [{ text: { content: s.class || '' } }] },
-        '學號': { rich_text: [{ text: { content: s.studentId || '' } }] },
-        '中隊': { select: { name: s.squad || '一單' } },
-        '外籍生': { checkbox: !!s.isForeign },
-        '空床': { checkbox: !!s.isEmpty },
-      };
+      const key = bedKey(s.room, s.bed);
+      const existingId = key ? byBed.get(key) : undefined;
+      let pageId;
+      if (existingId) {
+        await notion(`/pages/${existingId}`, 'PATCH', { properties: importBedProperties(s, true) }, env);
+        pageId = existingId;
+        updated++;
+      } else {
+        const created = await notion('/pages', 'POST', {
+          parent: { database_id: dbId },
+          properties: importBedProperties(s, false),
+        }, env);
+        pageId = created.id;
+        if (key) byBed.set(key, pageId); // 同一批裡重複的床位之後改成更新
+        imported++;
+      }
+      await sleep(340);
 
-      // 加入日期欄位
-      if (s.attendance) {
-        for (const [date, value] of Object.entries(s.attendance)) {
-          if (value) {
-            properties[date] = { select: { name: value } };
-          }
+      if (remarkIndex && hasStr(s.remark) && pageId) {
+        const remark = String(s.remark);
+        const hit = remarkIndex.get(pageId);
+        if (!hit) {
+          const r = await notion('/pages', 'POST', {
+            parent: { database_id: env.REMARKS_DB_ID },
+            properties: {
+              '學號或姓名': { title: [{ text: { content: pageId } }] },
+              '備註內容': { rich_text: richTextChunks(remark) },
+            },
+          }, env);
+          remarkIndex.set(pageId, { id: r.id, text: remark });
+          await sleep(340);
+        } else if (hit.text !== remark) {
+          await notion(`/pages/${hit.id}`, 'PATCH', { properties: { '備註內容': { rich_text: richTextChunks(remark) } } }, env);
+          hit.text = remark;
+          await sleep(340);
         }
       }
-
-      await notion('/pages', 'POST', {
-        parent: { database_id: dbId },
-        properties,
-      }, env);
-
-      imported++;
-      await sleep(340);
     } catch (err) {
       errors.push({ name: s.name, room: s.room, bed: s.bed, error: err.message });
     }
   }
 
-  return { success: true, imported, errors, total: students.length };
+  return { success: errors.length === 0, imported, updated, errors, total: students.length };
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -929,12 +1032,42 @@ async function handleApplySemesterDates(data, env) {
   return { success: true, added: toAdd, removed: toRemove, current: st.current };
 }
 
+/** Notion id 有時帶連字號有時沒有 (環境變數常是沒有的)，比對前先拿掉 */
+const sameNotionId = (a, b) => !!a && !!b && String(a).replace(/-/g, '') === String(b).replace(/-/g, '');
+/** 資料庫物件的標題純文字 */
+const dbTitleOf = db => (Array.isArray(db?.title) ? db.title : []).map(t => t?.plain_text ?? t?.text?.content ?? '').join('').trim();
+
+/** 舊表的床位清單 (帶或不帶目前住宿生)，給前端分批呼叫 /api/import-batch 建到新表 */
+async function archiveBedList(oldDbId, carry, env) {
+  const pages = await queryAll(oldDbId, null, [
+    { property: '寢床號', direction: 'ascending' },
+    { property: '床號', direction: 'ascending' },
+  ], env);
+  // 備註存在另一張表、以舊 pageId 為鍵：一次查完整張表，不逐床查
+  const remarks = carry ? await handleGetRemarks(env) : {};
+  return pages.map(page => {
+    const p = page.properties;
+    const isEmpty = getCheckbox(p['空床']) || !getTitle(p['姓名']).trim();
+    const keep = carry && !isEmpty;
+    return {
+      room: getText(p['寢床號']), bed: getSelect(p['床號']) || 'A', squad: getSelect(p['中隊']) || '一單',
+      name: keep ? getTitle(p['姓名']) : '', class: keep ? getText(p['班別']) : '', studentId: keep ? getText(p['學號']) : '',
+      isForeign: keep ? getCheckbox(p['外籍生']) : false, isEmpty: !keep, attendance: {},
+      // 電話 / 住址 / 備註也一起帶過去 (以前封存後這三樣就不見了)
+      phone: keep ? getText(p['電話']) : '', address: keep ? getText(p['住址']) : '', remark: keep ? (remarks[page.id] || '') : '',
+    };
+  }).filter(b => b.room);
+}
+
 /**
- * 封存本學期並建立新學期資料庫：
- * 1. 目前總表改名「碧苑點名總表 <舊學期>」原封保留
+ * 封存本學期並建立新學期資料庫 (順序以「任何一步失敗都不會留下半套狀態」為原則)：
+ * 1. 先查舊表床位清單 (純讀取，失敗什麼都沒動)
  * 2. 在同一個 Notion 父頁面建立「碧苑點名總表 <新學期>」，欄位 = 固定欄位 + 新學期每一天
- * 3. 切換目前學期指向新資料庫
- * 4. 回傳床位清單，由前端分批呼叫 /api/import-batch 建立床位 (Worker 單次請求有子請求上限)
+ *    冪等：KV 有 archive_pending 記號或 Notion 搜尋到同名未封存的表就重用，不會再建第二張孤兒表
+ * 3. 切換目前學期指向新資料庫 (saveSemesterState 先寫 Notion 正本、再寫 KV)
+ * 4. 最後才把舊表改名「碧苑點名總表 <舊學期>」原封保留 (改名失敗只記錄，學期已經切換成功)
+ * 5. 回傳床位清單，由前端分批呼叫 /api/import-batch 建立床位 (Worker 單次請求有子請求上限)
+ * 若 st.current.name 已經等於新名稱 (上次已切換成功、只剩床位沒建完)，回 alreadyCurrent:true 讓前端接著建床位
  */
 async function handleArchiveSemester(data, env) {
   const { newName, start, end, currentName, carryResidents } = data || {};
@@ -944,6 +1077,21 @@ async function handleArchiveSemester(data, env) {
   const st = await getSemesterState(env);
   const oldDbId = st.current.dbId;
   if (!oldDbId) throw new Error('目前沒有點名總表資料庫');
+  const carry = carryResidents !== false;
+
+  const clientCurrent = String(currentName || '').trim();
+  if (st.current.name && st.current.name === cleanNew && st.archives.length && clientCurrent && clientCurrent !== cleanNew) {
+    // 上次已經切換成功 (只剩床位沒建完就斷線)，前端還以為目前是舊學期 (currentName ≠ 新名稱) 又送了一次：
+    // 不報錯，回傳床位清單讓前端把剩下的建完。前端送的 currentName 就是新名稱 (或沒送) 仍照舊報「跟目前學期一樣」。
+    // 床位從剛封存的舊表 (archives 最後一筆) 查；安全起見只回傳新表裡「還沒有」的床位，
+    // 新表已有的一律不動 (萬一是誤把目前學期名稱當新名稱送進來，也不會被舊資料蓋掉)
+    const last = st.archives[st.archives.length - 1];
+    const existing = new Set((await queryAll(st.current.dbId, null, null, env))
+      .map(p => bedKey(getText(p.properties['寢床號']), getSelect(p.properties['床號']))));
+    const beds = (await archiveBedList(last.dbId, carry, env)).filter(b => !existing.has(bedKey(b.room, b.bed)));
+    return { success: true, alreadyCurrent: true, newDbId: st.current.dbId, archived: { name: last.name, dbId: last.dbId }, current: st.current, beds };
+  }
+
   const oldName = String(st.current.name || currentName || '').trim() || '舊學期';
   if (oldName === cleanNew) throw new Error('新學期名稱不能跟目前學期一樣');
   if (st.archives.some(a => a.name === cleanNew)) throw new Error(`已經有封存的學期「${cleanNew}」`);
@@ -953,43 +1101,66 @@ async function handleArchiveSemester(data, env) {
   if (!parentPageId) throw new Error('目前總表不在 Notion 頁面底下，無法在旁邊建立新學期總表');
   await sleep(340);
 
-  // 1. 舊表改名保留
-  await notion(`/databases/${oldDbId}`, 'PATCH', { title: [{ text: { content: `碧苑點名總表 ${oldName}` } }] }, env);
-  await sleep(340);
+  // 1. 床位清單 (純讀取；這裡失敗 Notion 什麼都沒動)
+  const beds = await archiveBedList(oldDbId, carry, env);
 
-  // 2. 建新表
-  const properties = masterFixedProperties();
-  for (const d of dates) properties[d] = { select: { options: ATTENDANCE_OPTIONS.map(o => ({ ...o })) } };
-  const newDb = await notion('/databases', 'POST', {
-    parent: { page_id: parentPageId },
-    title: [{ text: { content: `碧苑點名總表 ${cleanNew}` } }],
-    properties,
-  }, env);
-  await sleep(340);
+  // 2. 建新表 —— 先找上次建到一半的：KV 記號優先，再用 Notion 搜尋 (剛建的表搜尋不一定馬上找得到，所以兩個都要)
+  const newTitle = `碧苑點名總表 ${cleanNew}`;
+  const usable = db => db && !db.archived && !db.in_trash && dbTitleOf(db) === newTitle
+    && !sameNotionId(db.id, oldDbId) && !st.archives.some(a => sameNotionId(a.dbId, db.id));
+  let newDbId = '';
+  let newDbInfo = null;
+  const pending = await getArchivePending(env);
+  if (pending && pending.newName === cleanNew) {
+    try {
+      const info = await notion(`/databases/${pending.newDbId}`, 'GET', null, env);
+      await sleep(340);
+      if (usable(info)) { newDbId = info.id; newDbInfo = info; }
+    } catch (e) { console.error('archive_pending 指到的新表讀不到，忽略', e); }
+  }
+  if (!newDbId) {
+    try {
+      const found = await notion('/search', 'POST', { query: newTitle, filter: { value: 'database', property: 'object' }, page_size: 100 }, env);
+      await sleep(340);
+      const hit = (found.results || []).find(db => db.object === 'database' && usable(db) && sameNotionId(db.parent?.page_id, parentPageId));
+      if (hit) { newDbId = hit.id; newDbInfo = hit.properties ? hit : null; }
+    } catch (e) { console.error('Notion 搜尋同名新表失敗，改直接建立：' + (e && e.message)); }
+  }
+  if (newDbId) {
+    // 重用上次建到一半的新表：補齊可能缺的欄位
+    if (!newDbInfo) { newDbInfo = await notion(`/databases/${newDbId}`, 'GET', null, env); await sleep(340); }
+    await ensureContactColumns(newDbId, env, newDbInfo);
+    await ensureDateColumns(newDbId, dates, env, newDbInfo);
+  } else {
+    const properties = masterFixedProperties();
+    for (const d of dates) properties[d] = { select: { options: ATTENDANCE_OPTIONS.map(o => ({ ...o })) } };
+    const newDb = await notion('/databases', 'POST', {
+      parent: { page_id: parentPageId },
+      title: [{ text: { content: newTitle } }],
+      properties,
+    }, env);
+    await sleep(340);
+    newDbId = newDb.id;
+  }
+  if (env.POLL_KV) {
+    try { await env.POLL_KV.put(ARCHIVE_PENDING_KEY, JSON.stringify({ newName: cleanNew, newDbId, ts: Date.now() })); }
+    catch (e) { console.error('KV archive_pending write failed', e); }
+  }
 
-  // 3. 床位清單 (帶或不帶目前住宿生)
-  const pages = await queryAll(oldDbId, null, [
-    { property: '寢床號', direction: 'ascending' },
-    { property: '床號', direction: 'ascending' },
-  ], env);
-  const carry = carryResidents !== false;
-  const beds = pages.map(page => {
-    const p = page.properties;
-    const isEmpty = getCheckbox(p['空床']) || !getTitle(p['姓名']).trim();
-    const keep = carry && !isEmpty;
-    return {
-      room: getText(p['寢床號']), bed: getSelect(p['床號']) || 'A', squad: getSelect(p['中隊']) || '一單',
-      name: keep ? getTitle(p['姓名']) : '', class: keep ? getText(p['班別']) : '', studentId: keep ? getText(p['學號']) : '',
-      isForeign: keep ? getCheckbox(p['外籍生']) : false, isEmpty: !keep, attendance: {},
-    };
-  }).filter(b => b.room);
-
-  // 4. 切換學期
+  // 3. 切換學期 (Notion 正本成功才寫 KV；失敗就丟錯，舊表還是目前學期、新表留著下次重用)
   st.archives.push({ name: oldName, dbId: oldDbId, start: st.current.start, end: st.current.end, archivedAt: new Date().toISOString() });
-  st.current = { name: cleanNew, dbId: newDb.id, start, end };
+  st.current = { name: cleanNew, dbId: newDbId, start, end };
   const saved = await saveSemesterState(st, env);
+  if (env.POLL_KV && typeof env.POLL_KV.delete === 'function') {
+    try { await env.POLL_KV.delete(ARCHIVE_PENDING_KEY); } catch (e) { console.error('KV archive_pending delete failed', e); }
+  }
 
-  return { success: true, newDbId: newDb.id, archived: { name: oldName, dbId: oldDbId }, current: saved.current, beds };
+  // 4. 最後才改舊表標題：學期已經切換成功，改名失敗只記錄不影響結果
+  try {
+    await notion(`/databases/${oldDbId}`, 'PATCH', { title: [{ text: { content: `碧苑點名總表 ${oldName}` } }] }, env);
+  } catch (e) { console.error('舊表改名失敗 (學期已切換，可到 Notion 手動改名)', e); }
+
+  return { success: true, newDbId, archived: { name: oldName, dbId: oldDbId }, current: saved.current, beds };
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -1238,30 +1409,40 @@ function ensureLeaveColumns(dbId, env) {
 
 const plainText = arr => (Array.isArray(arr) ? arr.map(t => t.plain_text ?? t.text?.content ?? '').join('') : '');
 
-// from / to = 來電日 YYYY-MM-DD (台灣時間)；沒給就回最新的紀錄
-async function handleGetLeaveRecords(env, from, to) {
+// from / to = 來電日 YYYY-MM-DD (台灣時間)；沒給就回最新的紀錄。name = 姓名包含 (個人查詢用)
+// 最多 30 頁 (3000 筆)；超過就截斷並在回傳陣列掛 truncated=true (路由會轉成 X-Truncated header，JSON 本身還是純陣列)
+const LEAVE_RECORDS_MAX_PAGES = 30;
+async function handleGetLeaveRecords(env, from, to, name) {
   const dbId = env.LEAVE_DB_ID;
   if (!dbId) return [];
   const isDay = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '');
   const query = { sorts: [{ timestamp: 'created_time', direction: 'descending' }], page_size: 100 };
+  const conds = [];
   if (isDay(from) && isDay(to)) {
     const end = new Date(to + 'T00:00:00Z');
     end.setUTCDate(end.getUTCDate() + 1);
-    query.filter = { and: [
+    conds.push(
       { timestamp: 'created_time', created_time: { on_or_after: `${from}T00:00:00+08:00` } },
       { timestamp: 'created_time', created_time: { before: `${end.toISOString().slice(0, 10)}T00:00:00+08:00` } },
-    ] };
+    );
   }
+  const cleanName = String(name || '').trim().slice(0, 50);
+  if (cleanName) conds.push({ property: '姓名', rich_text: { contains: cleanName } });
+  if (conds.length === 1) query.filter = conds[0];
+  else if (conds.length > 1) query.filter = { and: conds };
 
   const pages = [];
-  for (let i = 0; i < 10; i++) {
+  let truncated = false;
+  for (let i = 0; i < LEAVE_RECORDS_MAX_PAGES; i++) {
+    if (i > 0) await sleep(340); // 頁與頁之間歇一下，別連打 Notion
     const res = await notion(`/databases/${dbId}/query`, 'POST', query, env);
     pages.push(...(res.results || []));
     if (!res.has_more || !res.next_cursor) break;
     query.start_cursor = res.next_cursor;
+    if (i === LEAVE_RECORDS_MAX_PAGES - 1) truncated = true;
   }
 
-  return pages.map(page => {
+  const out = pages.map(page => {
     const props = page.properties || {};
     return {
       id: page.id,
@@ -1276,6 +1457,8 @@ async function handleGetLeaveRecords(env, from, to) {
       createdAt: props['建立時間']?.created_time || page.created_time || ''
     };
   });
+  if (truncated) out.truncated = true; // 陣列上的額外屬性不會進 JSON
+  return out;
 }
 
 async function handleAddLeaveRecord(data, env) {
@@ -1323,17 +1506,27 @@ async function handleSetupRepairDb(parentPageId, env) {
   return { success: true, REPAIR_DB_ID: db.id };
 }
 
+/** 依建立時間新到舊分頁抓最多 maxPages 頁 (每頁 100，頁間歇 340ms)；報修與回饋紀錄共用 */
+async function queryLatest(dbId, maxPages, env) {
+  const query = { sorts: [{ property: '建立時間', direction: 'descending' }], page_size: 100 };
+  const pages = [];
+  for (let i = 0; i < maxPages; i++) {
+    if (i > 0) await sleep(340);
+    const res = await notion(`/databases/${dbId}/query`, 'POST', query, env);
+    pages.push(...(res.results || []));
+    if (!res.has_more || !res.next_cursor) break;
+    query.start_cursor = res.next_cursor;
+  }
+  return pages;
+}
+
 async function handleGetRepairRecords(env) {
   const dbId = env.REPAIR_DB_ID;
   if (!dbId) return [];
-  const res = await notion(`/databases/${dbId}/query`, 'POST', {
-    sorts: [{ property: '建立時間', direction: 'descending' }],
-    page_size: 50
-  }, env);
+  // 以前只取最新 50 筆，舊的看不到；現在分頁抓到最多 500 筆，回傳格式不變 (陣列)
+  const results = await queryLatest(dbId, 5, env);
 
-  if (!res.results) return [];
-
-  return res.results.map(page => {
+  return results.map(page => {
     const props = page.properties;
     // 照片存在 rich_text 中，以 JSON array 格式
     let photos = [];
@@ -1367,7 +1560,8 @@ async function handleAddRepairRecord(data, env) {
   }
 
   const properties = {
-    '標題': { title: [{ text: { content: (reporter || '未知') + ' 的報修通知 ' + new Date().toISOString().slice(0, 10) } }] },
+    // 日期用台灣時間 (以前用 UTC，台灣 00:00~07:59 報修會顯示成前一天)
+    '標題': { title: [{ text: { content: (reporter || '未知') + ' 的報修通知 ' + taipeiDateString() } }] },
     '原因': { rich_text: [{ text: { content: reason } }] },
     '照片': { rich_text: photoChunks.length > 0 ? photoChunks : [] },
   };
@@ -1465,14 +1659,10 @@ async function handleUpdateRemark(data, env) {
 async function handleGetFeedbackRecords(env) {
   const dbId = env.FEEDBACK_DB_ID;
   if (!dbId) return [];
-  const res = await notion(`/databases/${dbId}/query`, 'POST', {
-    sorts: [{ property: '建立時間', direction: 'descending' }],
-    page_size: 50
-  }, env);
+  // 以前只取最新 50 筆；現在分頁抓到最多 500 筆，回傳格式不變 (陣列)
+  const results = await queryLatest(dbId, 5, env);
 
-  if (!res.results) return [];
-
-  return res.results.map(page => {
+  return results.map(page => {
     const props = page.properties;
     let photos = [];
     try {
@@ -1808,7 +1998,7 @@ async function run() {
     addLog('   CONFIG_DB_ID: ' + initRes.config_db_id, 'ok');
 
     // Step 2: 批次匯入
-    const BATCH_SIZE = 40;
+    const BATCH_SIZE = 20; // 後端 import-batch 單次上限 20 筆
     const total = parsedData.students.length;
     let imported = 0;
 
