@@ -67,7 +67,7 @@ function setupNav(){
   // 邊緣折射：鏡片邊緣一圈往外取樣，外面的圖示被「彎進」邊緣；中間保持原樣。複本上的一般 filter，iOS Safari 也吃
   const refractId=buildLensRefraction(LENS_W,54,27);
   if(refractId)bend.style.filter=`url(#${refractId})`;
-  let index=0,lastIndex=-1,travelTimer=0,retryTimer=0,w=0,slot=0,suppressClick=false;
+  let index=0,lastIndex=-1,travelTimer=0,retryTimer=0,w=0,slot=0,suppressClick=false,retryCount=0;
   const pageIndex=()=>{
     const page=typeof navTabFor==='function'?navTabFor(currentPage):'home';
     return Math.max(0,items.findIndex(item=>item.dataset.page===page));
@@ -84,8 +84,16 @@ function setupNav(){
   }
   function update(){
     measure();
-    // 尚未完成排版 (分頁在背景、剛切回前景) 時量到的寬度不可信，稍後再算一次
-    if(w<120){clearTimeout(retryTimer);retryTimer=setTimeout(update,120);return;}
+    // 尚未完成排版 (分頁在背景、剛切回前景) 時量到的寬度不可信，稍後再算一次；
+    // 但平板模式下 bottom-nav 是 display:none，寬度永遠是 0，不能無限重排 → 這種情況直接放棄，
+    // 等下次 resize (模式切換會自己 dispatch) 或 ResizeObserver 再量
+    if(w<120){
+      clearTimeout(retryTimer);
+      const hidden=document.documentElement.classList.contains('tablet-mode')||getComputedStyle(nav).display==='none';
+      if(hidden||retryCount>=20){retryCount=0;return;}
+      retryCount++;retryTimer=setTimeout(update,120);return;
+    }
+    retryCount=0;
     index=pageIndex();
     if(drag.active)return; // 拖曳中鏡片跟著手指，不被外部更新拉走
     nav.style.setProperty('--lens-x',xFor(index)+'px');

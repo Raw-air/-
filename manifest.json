@@ -4,7 +4,7 @@
   "description": "碧苑宿舍人性化點名管理系統",
   "start_url": "./index.html",
   "display": "fullscreen",
-  "orientation": "portrait",
+  "orientation": "any",
   "theme_color": "#151518",
   "background_color": "#151518",
   "icons": [

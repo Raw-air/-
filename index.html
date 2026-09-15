@@ -61,11 +61,43 @@
   <script defer src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
+      let _swReg = null;
+      // 不擋操作的小提示條：新 SW 接手後才顯示，一律等使用者自己點了才 reload，
+      // 絕不自動重新整理 (尤其點名頁可能還有 state.changes 未送出的變更，蓋掉就回不來了)
+      function _showSwUpdateToast() {
+        const el = document.getElementById('sw-update-toast');
+        if (!el || el.classList.contains('show')) return;
+        el.hidden = false;
+        requestAnimationFrame(() => el.classList.add('show'));
+      }
+      // 第一次安裝 (之前沒有 SW 在控制) 的 controllerchange 不算新版本，不提示
+      if (navigator.serviceWorker.controller) document.documentElement.dataset.swControlled = '1';
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        const had = document.documentElement.dataset.swControlled === '1';
+        document.documentElement.dataset.swControlled = '1';
+        if (had) _showSwUpdateToast();
+      });
       navigator.serviceWorker.register('./sw.js').then(reg => {
+        _swReg = reg;
+        reg.addEventListener('updatefound', () => {
+          const nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener('statechange', () => {
+            // 裝好且已經有舊 SW 在控制頁面，才是真的有新版本；第一次安裝不用提示
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) _showSwUpdateToast();
+          });
+        });
         // Do not reload a form while the user is editing; the next navigation/reload
         // receives the complete new shell after the worker takes control.
         reg.update().catch(() => {});
       }).catch(() => { });
+      // 從背景切回前景時順便檢查一次有沒有新版本
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && _swReg) _swReg.update().catch(() => {});
+      });
+      document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('sw-update-toast')?.addEventListener('click', () => location.reload());
+      });
     }
   </script>
 </head>
@@ -175,6 +207,19 @@
   <div id="rawair-boot" role="status" aria-label="系統啟動中"><div id="rb-term"></div></div>
   <script src="boot-screen.js?v=171"></script>
   <div id="toast-container" class="toast-container"></div>
+
+  <!-- SW 有新版本：不擋操作的小提示，點了才重新整理 -->
+  <button type="button" id="sw-update-toast" class="sw-update-toast" hidden>有新版本，點一下更新</button>
+  <style>
+    .sw-update-toast {
+      position: fixed; left: 50%; bottom: calc(var(--nav-h) + var(--safe-b) + 16px); z-index: 9998;
+      transform: translate(-50%, 12px); background: #2b2b30; color: #fff; font: inherit; font-size: 13px; line-height: 1;
+      padding: 11px 18px; border: none; border-radius: 999px; box-shadow: 0 6px 20px rgba(0, 0, 0, .35);
+      opacity: 0; pointer-events: none; transition: opacity .25s ease, transform .25s ease; cursor: pointer;
+    }
+    .sw-update-toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+    body.light-mode .sw-update-toast { background: #fff; color: #151518; box-shadow: 0 6px 20px rgba(0, 0, 0, .18); }
+  </style>
 
   <!-- 返回 -->
   <button id="back-btn" class="back-btn" style="display:none" onclick="navigateTo('home')">
