@@ -59,14 +59,14 @@ async function run(engine){
   await page.waitForFunction(txt=>[...document.querySelectorAll('.confirm-overlay .confirm-msg')].some(e=>e.textContent.includes(txt)),'2027-01-15');await page.locator('#cfd-cancel').last().click();await cancelPromise;
   assert.equal(posts.filter(p=>p.p==='/api/semester/dates').length,3,'取消後沒有第二次呼叫');
 
-  // 3. 封存並開新學期：確認 → 45 張床位分 2 批建立 → 狀態切換
+  // 3. 封存並開新學期：確認 → 45 張床位分 3 批建立 (每批 20) → 狀態切換
   await page.fill('#sem-new-name','115-2');await page.fill('#sem-new-start','2027-02-01');await page.fill('#sem-new-end','2027-06-30');
   const archivePromise=page.evaluate(()=>archiveSemester()).catch(e=>console.error("archive failed",e.message));
   await page.waitForFunction(txt=>[...document.querySelectorAll('.confirm-overlay .confirm-msg')].some(e=>e.textContent.includes(txt)),'碧苑點名總表 115-1');
   assert.match(await page.locator('.confirm-overlay .confirm-msg').last().innerText(),/碧苑點名總表 115-1/);
   await page.locator('#cfd-confirm').last().click();await archivePromise;
   const arch=posts.filter(p=>p.p==='/api/semester/archive');assert.equal(arch.length,1);assert.equal(arch[0].b.newName,'115-2');assert.equal(arch[0].b.currentName,'115-1');assert.equal(arch[0].b.carryResidents,true);
-  const batches=posts.filter(p=>p.p==='/api/import-batch');assert.deepEqual(batches.map(b=>b.b.students.length),[40,5]);assert.ok(batches.every(b=>b.b.db_id==='db-newer'));
+  const batches=posts.filter(p=>p.p==='/api/import-batch');assert.deepEqual(batches.map(b=>b.b.students.length),[20,20,5]);assert.ok(batches.every(b=>b.b.db_id==='db-newer'));
   const r3=await page.evaluate(()=>({name:state.semester.current.name,archives:state.semester.archives.map(a=>a.name),list:document.getElementById('sem-archive-list').innerText}));
   assert.equal(r3.name,'115-2');assert.deepEqual(r3.archives,['114-2','115-1']);assert.match(r3.list,/115-1/);
 

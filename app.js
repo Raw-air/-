@@ -4263,8 +4263,8 @@ function populateExportSemesterSelect() {
   if (!sel) return;
   const sem = state.semester;
   const previous = sel.value;
-  const options = [`<option value="">本學期${sem.current.name ? '（' + sem.current.name + '）' : ''}</option>`];
-  for (const arc of sem.archives) options.push(`<option value="${arc.name}">封存 ${arc.name}${arc.start ? '（' + arc.start + ' ~ ' + arc.end + '）' : ''}</option>`);
+  const options = [`<option value="">本學期${sem.current.name ? '（' + escSem(sem.current.name) + '）' : ''}</option>`];
+  for (const arc of sem.archives) options.push(`<option value="${escSem(arc.name)}">封存 ${escSem(arc.name)}${arc.start ? '（' + escSem(arc.start) + ' ~ ' + escSem(arc.end) + '）' : ''}</option>`);
   sel.innerHTML = options.join('');
   if ([...sel.options].some(o => o.value === previous)) sel.value = previous;
   const wrap = sel.closest('.export-semester-field');
@@ -4408,11 +4408,14 @@ function renderSemesterCard() {
   if (list) {
     list.innerHTML = sem.archives.length
       ? sem.archives.slice().reverse().map(arc => `<div class="sem-archive-row">
-          <div><b>${arc.name || '未命名'}</b><span>${arc.start ? arc.start + ' ~ ' + arc.end : '日期未記錄'}</span></div>
-          <button type="button" class="action-btn" onclick="viewArchivedSemester('${arc.name}')">查看總表</button>
+          <div><b>${escSem(arc.name || '未命名')}</b><span>${arc.start ? escSem(arc.start + ' ~ ' + arc.end) : '日期未記錄'}</span></div>
+          <button type="button" class="action-btn sem-archive-view" data-name="${escSem(arc.name || '')}">查看總表</button>
         </div>`).join('')
       : '<p class="dev-card-hint">還沒有封存的學期。</p>';
+    // 學期名稱不進 onclick 字串，改用 dataset 傳
+    for (const b of list.querySelectorAll('.sem-archive-view')) b.addEventListener('click', () => viewArchivedSemester(b.dataset.name));
   }
+  renderArchivePendingUI();
 }
 
 function semesterInputsTouched() {
@@ -4462,40 +4465,177 @@ async function applySemesterDates() {
   }
 }
 
-let _archiveBedsPending = null; // 封存後尚未建立的床位 (分批失敗時可重試)
-let _archiveBedsDbId = '';
+// ─── 封存後的床位建立進度 ───────────────────────────────────────────────────
+// 進度存在 localStorage (鍵 biyuan_archive_pending)，手機被切掉/重新整理後回來還能接著建，不會只剩一半床位。
+// 格式：{ newName, newDbId, oldName, carry, beds: [...], createdAt }
+//   beds = 還沒建好的床位，欄位與後端 /api/semester/archive 回傳的相同
+//   (room/bed/squad/name/class/studentId/isForeign/isEmpty/phone/address/remark/attendance)；
+//   每建完一批就更新剩餘清單，全部建好才把整筆刪掉。
+const ARCHIVE_PENDING_KEY = 'biyuan_archive_pending';
+const ARCHIVE_IMPORT_BATCH = 20; // /api/import-batch 單次上限 20 筆
+let _archivePendingWarned = false; // localStorage 存不下時只警告一次
 
-async function importArchiveBeds() {
-  const progress = document.getElementById('sem-archive-progress');
-  const total = _archiveBedsPending ? _archiveBedsPending.length : 0;
-  let done = 0;
-  while (_archiveBedsPending && _archiveBedsPending.length) {
-    const batch = _archiveBedsPending.slice(0, 40);
-    if (progress) { progress.hidden = false; progress.textContent = `正在建立新學期床位… ${done}/${total}`; }
-    const res = await window._api.importBatch({ db_id: _archiveBedsDbId, students: batch });
-    if (res && res.errors && res.errors.length) console.warn('床位建立部分失敗', res.errors);
-    done += batch.length;
-    _archiveBedsPending = _archiveBedsPending.slice(40);
+// 學期名稱進 innerHTML / 屬性前跳脫 (& < > " ')
+function escSem(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function readArchivePending() {
+  try {
+    const raw = localStorage.getItem(ARCHIVE_PENDING_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw);
+    if (!p || typeof p !== 'object' || !p.newDbId) return null;
+    if (!Array.isArray(p.beds)) p.beds = [];
+    return p;
+  } catch (e) { return null; }
+}
+
+// 存不下 (隱私模式/空間不足) 只 toast 警告，流程照常繼續
+function writeArchivePending(p) {
+  try {
+    if (p) localStorage.setItem(ARCHIVE_PENDING_KEY, JSON.stringify(p));
+    else localStorage.removeItem(ARCHIVE_PENDING_KEY);
+  } catch (e) {
+    if (!_archivePendingWarned) { _archivePendingWarned = true; showToast('無法把建床位進度存到這台裝置；床位建立中請不要離開或重新整理', 'error'); }
   }
-  _archiveBedsPending = null;
-  if (progress) { progress.textContent = `新學期床位建立完成（${total} 張）`; }
+}
+
+// 目前學期還沒建完的床位進度；別的學期留下的舊紀錄不算 (也不主動刪，避免砍到別台裝置正在用的資料)
+function getArchivePending() {
+  const p = readArchivePending();
+  if (!p) return null;
+  const curDb = state.semester && state.semester.current && state.semester.current.dbId;
+  return curDb && p.newDbId === curDb ? p : null;
+}
+
+// 從舊學期總表重建床位清單 (欄位對應與後端 beds 相同；帶不帶人依當時的 carry 旗標)
+function bedsFromRoster(students, carry) {
+  return (Array.isArray(students) ? students : []).map(s => {
+    const isEmpty = !!s.isEmpty || !String(s.name || '').trim();
+    const keep = !!carry && !isEmpty;
+    return {
+      room: s.room || '', bed: s.bed || 'A', squad: s.squad || '一單',
+      name: keep ? (s.name || '') : '', class: keep ? (s.class || '') : '', studentId: keep ? (s.studentId || '') : '',
+      isForeign: keep ? !!s.isForeign : false, isEmpty: !keep,
+      phone: keep ? (s.phone || '') : '', address: keep ? (s.address || '') : '', remark: keep ? (s.remark || '') : '',
+      attendance: {},
+    };
+  }).filter(b => b.room);
+}
+
+function archiveBedsLabel(beds) {
+  const s = beds.slice(0, 5).map(b => `${b.room}-${b.bed}${b.name ? '（' + b.name + '）' : ''}`).join('、');
+  return beds.length > 5 ? s + '…' : s;
+}
+
+// 學期卡上的「上次床位沒建完」提示；有 pending 時封存按鈕只做「繼續建立床位」
+function renderArchivePendingUI() {
+  const btn = document.getElementById('sem-archive-btn');
+  if (!btn) return;
+  const pending = getArchivePending();
+  let box = document.getElementById('sem-archive-resume');
+  if (!pending) {
+    if (box) box.remove();
+    btn.textContent = '封存本學期並建立新學期';
+    return;
+  }
+  const n = pending.beds.length;
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'sem-archive-resume';
+    btn.parentNode.insertBefore(box, btn);
+  }
+  box.innerHTML = `<p class="export-date-summary is-error" role="alert"><b>上次新學期「${escSem(pending.newName)}」的床位還沒建完${n ? `（剩 ${n} 張）` : '（床位清單需從舊學期總表重新讀取）'}。</b>請按「繼續建立床位」接著建；已建好的床位不會重複。</p>`;
+  btn.textContent = n ? `繼續建立床位（剩 ${n} 張）` : '繼續建立床位';
+}
+
+// 分批把 pending.beds 送到 /api/import-batch。後端同「寢床號+床號」會更新不會重建 (冪等)，所以中斷後重送是安全的。
+// 每批做完就把剩餘清單 (含失敗的) 寫回 localStorage，全部成功才刪掉整筆。
+// 回傳 { total, imported, updated, failed }；網路例外直接 throw，這批連同後面的都留在 pending。
+async function importArchiveBeds(pending) {
+  const progress = document.getElementById('sem-archive-progress');
+  const queue = pending.beds.slice();
+  const total = queue.length;
+  const failed = [];
+  const bedKey = b => `${b.room || ''}|${b.bed || ''}`;
+  let imported = 0, updated = 0, i = 0;
+  while (i < queue.length) {
+    const batch = queue.slice(i, i + ARCHIVE_IMPORT_BATCH);
+    if (progress) { progress.hidden = false; progress.textContent = `正在建立新學期床位… ${i}/${total}`; }
+    let res;
+    try {
+      // beds 原封不動送出 (含 phone/address/remark)，不要 map 掉欄位
+      res = await window._api.importBatch({ db_id: pending.newDbId, students: batch });
+    } catch (err) {
+      // 網路例外：這批和後面的都留在 pending，下次按「繼續建立床位」重送 (後端冪等，重送安全)
+      pending.beds = failed.concat(queue.slice(i));
+      writeArchivePending(pending);
+      throw err;
+    }
+    const errs = res && Array.isArray(res.errors) ? res.errors : [];
+    const badKeys = new Set(errs.map(bedKey));
+    // 失敗的用 room+bed 對回去留著；success 為 false 但沒列出是哪幾張 → 整批當失敗留著 (冪等，重送安全)
+    const batchFailed = (!res || res.success === false) && !errs.length ? batch.slice() : batch.filter(b => badKeys.has(bedKey(b)));
+    if (batchFailed.length) console.warn('床位建立部分失敗', errs);
+    failed.push(...batchFailed);
+    imported += Number(res && res.imported) || 0;
+    updated += Number(res && res.updated) || 0;
+    i += batch.length;
+    pending.beds = failed.concat(queue.slice(i));
+    writeArchivePending(pending.beds.length ? pending : null);
+  }
+  if (progress) {
+    progress.textContent = failed.length
+      ? `有 ${failed.length} 張床位建立失敗：${archiveBedsLabel(failed)}，按「繼續建立床位」重試`
+      : `新學期床位建立完成（新增 ${imported} 張、更新 ${updated} 張）`;
+  }
+  return { total, imported, updated, failed };
+}
+
+// 「繼續建立床位」：讀 localStorage 的進度接著建；beds 遺失就用舊學期名稱從總表重建清單
+async function resumeArchiveBeds(pending) {
+  pending = pending || getArchivePending();
+  if (!pending) { showToast('沒有待建立的床位', 'info'); renderArchivePendingUI(); return; }
+  const btn = document.getElementById('sem-archive-btn');
+  if (btn) { btn.disabled = true; btn.setAttribute('aria-busy', 'true'); }
+  const progress = document.getElementById('sem-archive-progress');
+  try {
+    if (!pending.beds.length) {
+      if (!pending.oldName) throw new Error('找不到床位清單，也不知道舊學期名稱，無法重建');
+      if (progress) { progress.hidden = false; progress.textContent = `正在從「${pending.oldName}」的總表重新讀取床位清單…`; }
+      const roster = await window._api.getRoster(pending.oldName);
+      pending.beds = bedsFromRoster(roster && roster.students, pending.carry);
+      if (!pending.beds.length) throw new Error(`「${pending.oldName}」的總表讀不到任何床位`);
+      writeArchivePending(pending);
+    }
+    const r = await importArchiveBeds(pending);
+    if (r.failed.length) {
+      showToast(`有 ${r.failed.length} 張床位建立失敗：${archiveBedsLabel(r.failed)}，按「繼續建立床位」重試`, 'error');
+    } else {
+      showToast(`新學期 ${pending.newName || ''} 床位建立完成：新增 ${r.imported} 張、更新 ${r.updated} 張`, 'success');
+    }
+  } catch (err) {
+    showToast(`床位建立中斷：${err.message}。進度已保留，再按一次「繼續建立床位」會接著建（已建好的不會重複）`, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); }
+    await refreshSemesterUI(); // 重新讀學期狀態並重畫學期卡：有剩就顯示提示，沒剩就恢復正常
+    // 走到這裡表示後端學期早已切換 (封存成功或 pending 對得上目前學期)，不論床位建完沒都重新載入，
+    // 讓這台裝置跟著切到新學期，不會繼續對著舊學期的名單點名
+    await loadData();
+    if (progress && !getArchivePending()) setTimeout(() => { progress.hidden = true; }, 4000);
+  }
 }
 
 async function archiveSemester() {
+  // 上次床位沒建完 → 只做「繼續建立」，不會再封存一次 (進度以 localStorage 為準)
+  if (getArchivePending()) { await resumeArchiveBeds(); return; }
+
   const newName = (document.getElementById('sem-new-name')?.value || '').trim();
   const start = document.getElementById('sem-new-start')?.value || '';
   const end = document.getElementById('sem-new-end')?.value || '';
   const carry = !!document.getElementById('sem-carry')?.checked;
   const btn = document.getElementById('sem-archive-btn');
-
-  // 上次床位沒建完 → 先把剩下的補完
-  if (_archiveBedsPending && _archiveBedsPending.length) {
-    if (btn) { btn.disabled = true; btn.setAttribute('aria-busy', 'true'); }
-    try { await importArchiveBeds(); showToast('剩餘床位已建立完成', 'success'); await refreshSemesterUI(); await loadData(); }
-    catch (err) { showToast('床位建立又失敗了，稍後再按一次：' + err.message, 'error'); }
-    finally { if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); btn.textContent = '封存本學期並建立新學期'; } }
-    return;
-  }
 
   if (!newName) { showToast('請輸入新學期名稱（例如 115-2）', 'error'); return; }
   if (!parseISODate(start) || !parseISODate(end)) { showToast('請選擇新學期的開始與結束日期', 'error'); return; }
@@ -4504,8 +4644,8 @@ async function archiveSemester() {
   if (newName === currentName) { showToast('新學期名稱不能跟目前學期一樣', 'error'); return; }
 
   const ok = await showConfirmDialog({
-    title: `封存「${currentName}」並建立「${newName}」？`,
-    message: `<p>目前的總表會原封不動保留（改名為「碧苑點名總表 ${currentName}」），之後可在此查看。</p><p>系統會另外建立「碧苑點名總表 ${newName}」，日期範圍 ${semesterRangeText(start, end)}。</p><p>床位會照抄；${carry ? '目前住宿生的姓名、班級、學號會一起帶到新學期' : '新學期所有床位都是空床，之後用匯入精靈匯入名單'}。</p><p>所有幹部的裝置都會立刻切到新學期。</p>`,
+    title: `封存「${escSem(currentName)}」並建立「${escSem(newName)}」？`,
+    message: `<p>目前的總表會原封不動保留（改名為「碧苑點名總表 ${escSem(currentName)}」），之後可在此查看。</p><p>系統會另外建立「碧苑點名總表 ${escSem(newName)}」，日期範圍 ${semesterRangeText(start, end)}。</p><p>床位會照抄；${carry ? '目前住宿生的姓名、班級、學號會一起帶到新學期，會一併帶入電話、住址與備註' : '新學期所有床位都是空床，之後用匯入精靈匯入名單'}。</p><p>所有幹部的裝置都會立刻切到新學期。</p>`,
     confirmText: '確定封存並建立', danger: true,
   });
   if (!ok) return;
@@ -4514,27 +4654,28 @@ async function archiveSemester() {
   const progress = document.getElementById('sem-archive-progress');
   try {
     const res = await window._api.archiveSemester({ newName, start, end, currentName, carryResidents: carry });
-    if (!res || !res.success) throw new Error(res && res.error ? res.error : '後端沒有回報成功');
-    _archiveBedsDbId = res.newDbId;
-    _archiveBedsPending = Array.isArray(res.beds) ? res.beds.slice() : [];
-    try {
-      await importArchiveBeds();
-    } catch (err) {
-      showToast(`新學期已建立，但床位只建了一部分：${err.message}。再按一次按鈕會把剩下的補完`, 'error');
-      if (btn) btn.textContent = `繼續建立剩餘 ${_archiveBedsPending.length} 張床位`;
-      return;
-    }
-    showToast(`已封存 ${res.archived.name}，新學期 ${newName} 建立完成`, 'success');
+    // alreadyCurrent：後端說這個新學期先前就已經切換成功 (例如上次回應沒送到)，直接進入建床位流程，不當錯誤
+    if (!res || (!res.success && !res.alreadyCurrent)) throw new Error(res && res.error ? res.error : '後端沒有回報成功');
+    let newDbId = res.newDbId || (res.current && res.current.dbId) || '';
+    if (!newDbId) { await loadSemesterState(); if (state.semester.current.name === newName) newDbId = state.semester.current.dbId; }
+    if (!newDbId) throw new Error('後端沒有回傳新學期的資料庫 ID');
+    // 封存 API 回來後「先」把進度存進 localStorage 再開始建床位：中途被切掉/重新整理也能回來接著建
+    const pending = {
+      newName, newDbId, oldName: (res.archived && res.archived.name) || currentName, carry,
+      beds: Array.isArray(res.beds) ? res.beds.slice() : [], createdAt: new Date().toISOString(),
+    };
+    writeArchivePending(pending);
+    showToast(`已封存 ${pending.oldName}，新學期 ${newName} 已建立，正在建立床位…`, 'info');
     for (const id of ['sem-new-name', 'sem-new-start', 'sem-new-end']) { const el = document.getElementById(id); if (el) el.value = ''; }
     state.viewSemester = null;
-    await refreshSemesterUI();
-    await loadData();
+    await resumeArchiveBeds(pending); // 失敗/中斷都由它提示並保留進度，不會再走到下面的「封存失敗」
   } catch (err) {
-    showToast('封存失敗：' + err.message, 'error');
+    // 後端是先切換學期成功才回 success；失敗表示學期沒有變，直接重試即可
+    showToast(`封存失敗：${err.message}（學期沒有切換，可以直接重試）`, 'error');
   } finally {
-    if (btn && !(_archiveBedsPending && _archiveBedsPending.length)) { btn.disabled = false; btn.removeAttribute('aria-busy'); btn.textContent = '封存本學期並建立新學期'; }
-    else if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); }
-    if (progress && !(_archiveBedsPending && _archiveBedsPending.length)) setTimeout(() => { progress.hidden = true; }, 4000);
+    if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); }
+    renderArchivePendingUI();
+    if (progress && !getArchivePending()) setTimeout(() => { progress.hidden = true; }, 4000);
   }
 }
 
@@ -4568,6 +4709,8 @@ async function exitArchiveView() {
 
 window.applySemesterDates = applySemesterDates;
 window.archiveSemester = archiveSemester;
+window.resumeArchiveBeds = resumeArchiveBeds;
+window.importArchiveBeds = importArchiveBeds;
 window.viewArchivedSemester = viewArchivedSemester;
 window.exitArchiveView = exitArchiveView;
 window.updateSemesterRangeSummary = updateSemesterRangeSummary;
