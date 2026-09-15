@@ -128,17 +128,36 @@
   addEventListener('resize',schedule);
   document.addEventListener('load',e=>{if(e.target.tagName==='IMG')schedule();},true);
   document.addEventListener('visibilitychange',schedule);
-  // 背景照片淡入 (.8s)、離開首頁淡出 (.6s)：量到一半會偏暗，動畫/轉場結束時補量
-  const bgLayer=e=>{const t=e.target;if(t.closest&&t.closest('#custom-video-bg,.home-anim-bg,.page'))schedule();};
-  document.addEventListener('animationend',bgLayer,true);
-  document.addEventListener('transitionend',bgLayer,true);
+  // 背景照片淡入 (.8s)、首頁進場 (.3s)：量到一半會偏暗，動畫/轉場結束時補量。
+  // 這效果只有首頁用得到，改成只掛在首頁本身跟它的背景層上 (原本掛 document 捕捉會攔到全站每個轉場)，並節流 200ms。
+  const pageHomeEl=document.getElementById('page-home');
+  const bg=document.getElementById('custom-video-bg');
+  const animBg=document.querySelector('.home-anim-bg');
+  let bgLayerAt=0;
+  const bgLayer=()=>{const now=performance.now();if(now-bgLayerAt<200)return;bgLayerAt=now;schedule();};
+  for(const el of [pageHomeEl,bg,animBg]){
+    if(!el)continue;
+    el.addEventListener('animationend',bgLayer);
+    el.addEventListener('transitionend',bgLayer);
+  }
   const nav=document.querySelector('.bottom-nav');
   if(nav)nav.addEventListener('click',()=>setTimeout(schedule,450));
   new MutationObserver(schedule).observe(document.body,{attributes:true,attributeFilter:['class']});
-  const bg=document.getElementById('custom-video-bg');
   if(bg)new MutationObserver(()=>{IMG_CACHE.clear();schedule();}).observe(bg,{childList:true,subtree:true,attributes:true,attributeFilter:['class','src']});
-  // 保險：換頁、背景淡入等沒有事件的變化，每 1.5 秒補量一次 (背景分頁不跑)
-  setInterval(()=>{if(!document.hidden)schedule();},1500);
+  // 保險：換頁、背景淡入等沒有事件的變化，補量一次；這效果只有首頁用得到，只在首頁且畫面可見時才排程，
+  // 離開首頁或切到背景就 clearInterval，避免在其他頁面白跑
+  let resampleTimer=0;
+  const isHomeActive=()=>!!pageHomeEl&&pageHomeEl.classList.contains('active');
+  function syncResample(){
+    if(isHomeActive()&&!document.hidden){
+      if(!resampleTimer)resampleTimer=setInterval(schedule,4000);
+    }else if(resampleTimer){
+      clearInterval(resampleTimer);resampleTimer=0;
+    }
+  }
+  window.addEventListener('app:navigate',syncResample);
+  document.addEventListener('visibilitychange',syncResample);
+  syncResample();
   schedule();
   window.navAdapt={measure,toneOf:el=>TONE.get(el)||'',get tone(){return nav?TONE.get(nav)||'':'';}};
 })();

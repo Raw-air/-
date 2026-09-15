@@ -20,8 +20,12 @@
 
   function loadMonth(month, force) {
     const hit = monthCache.get(month);
-    if (hit && !force && (hit.loading || hit.records)) return;
-    const entry = { records: hit && hit.records, loading: true, error: '' };
+    if (hit && !force) {
+      if (hit.loading || hit.records) return;
+      // 抓取失敗：30 秒內不自動重抓，避免每次 render 都再打一次 API；使用者按重試 (force) 才立刻重抓
+      if (hit.error && hit.retryAt && Date.now() < hit.retryAt) return;
+    }
+    const entry = { records: hit && hit.records, loading: true, error: '', retryAt: 0 };
     monthCache.set(month, entry);
     const [y, m] = month.split('-').map(Number);
     const last = new Date(y, m, 0).getDate();
@@ -29,7 +33,7 @@
     fetch(url)
       .then(res => { if (!res.ok) throw new Error('API 回應錯誤 ' + res.status); return res.json(); })
       .then(data => { entry.records = Array.isArray(data) ? data : []; })
-      .catch(err => { entry.error = err.message || String(err); })
+      .catch(err => { entry.error = err.message || String(err); entry.retryAt = Date.now() + 30000; })
       .finally(() => { entry.loading = false; if (currentPage === 'leave-records') render(); });
   }
 
@@ -102,7 +106,7 @@
       return;
     }
     if (entry.error && !entry.records) {
-      box.innerHTML = `<div class="ll-hint ll-hint-error">載入失敗：${esc(entry.error)}<br><button type="button" class="ll-change-btn" onclick="phoneLeaveReload()">重新讀取</button></div>`;
+      box.innerHTML = `<div class="ll-hint ll-hint-error"><button type="button" class="ll-change-btn" onclick="phoneLeaveReload()" title="${esc(entry.error)}">載入失敗，點此重試</button></div>`;
       return;
     }
     const q = (document.getElementById('pl-filter')?.value || '').trim().toLowerCase();
