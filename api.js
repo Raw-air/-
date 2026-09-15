@@ -31,9 +31,14 @@ class ApiClient {
         if (!res.ok) {
           const httpError = new Error(data.error || `HTTP ${res.status}`);
           httpError.status = res.status;
+          httpError.data = data; // 整包回應附在錯誤上，呼叫端可讀 err.data.errors / err.data.updated 判斷哪幾筆失敗
           throw httpError;
         }
-        if (data.error) throw new Error(data.error);
+        if (data.error) {
+          const apiError = new Error(data.error);
+          apiError.data = data; // 後端部分失敗仍帶 error 字串：把 errors / updated 清單一起帶給呼叫端
+          throw apiError;
+        }
         return data;
       } catch (err) {
         const normalized = timedOut
