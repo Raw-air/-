@@ -1,10 +1,10 @@
 // ─── 點名頁「全部請假」：假日大家都回家，一鍵把本中隊全部改成請假 ─────────────
-// 每一條住宿生橫條會像店門口的牌子一樣翻一圈 (打烊)，翻到側面看不見的那一瞬間換成「請假」。
+// 每一條住宿生橫條會像店門口掛的牌子被推了一把，橫向轉一圈 (打烊)，翻到側面看不見的那一瞬間換成「請假」。
 // 資料在按下確認時就先寫進 state，動畫只是畫面；中途換頁或背景刷新都不會少改。
 (function () {
   const LEAVE = '◎';
-  const FLIP_MS = 720;      // 單條翻一圈的時間
-  const STAGGER_MS = 55;    // 上下兩條的間隔 (由上往下一條接一條翻)
+  const STAGGER_MS = 110;   // 上下兩條的間隔 (由上往下一條接一條轉)
+  const SPIN = buildSpin();   // 一條牌子橫向轉一圈的關鍵影格 (算一次，大家共用)
   let running = false;
 
   function paintRow(row, pending) {
@@ -19,23 +19,40 @@
     if (dot && pending) dot.classList.add('pending');
   }
 
+  // 像用手推一把掛著的牌子：一開始很快，靠慣性越轉越慢，轉過頭一點再盪回來停住。
+  // 用彈簧+阻尼模擬 (推出去的初速 500°/s)，取樣成關鍵影格交給瀏覽器播，播放時不用算。
+  function buildSpin() {
+    const W = 3.2, Z = 0.72, dt = 1 / 240;
+    let x = 0, v = 500, t = 0, swapAt = 0, last = 0;
+    const pts = [[0, 0]];
+    while (t < 4) {
+      v += (-W * W * (x - 360) - 2 * Z * W * v) * dt;
+      x += v * dt; t += dt;
+      if (!swapAt && x >= 90) swapAt = t;              // 轉到 90° (側面、看不見) 的那一刻換內容
+      if (Math.abs(x - 360) > 0.6 || Math.abs(v) > 3) last = t;
+      if (t - pts[pts.length - 1][0] >= 1 / 30) pts.push([t, x]);
+    }
+    const dur = Math.ceil(last * 1000);
+    const frames = pts.filter(p => p[0] < last).map(([pt, deg]) => ({
+      offset: pt / last,
+      transform: `perspective(1400px) rotateY(${deg.toFixed(2)}deg)`,
+    }));
+    frames.push({ offset: 1, transform: 'perspective(1400px) rotateY(360deg)' });
+    return { frames, dur, swapMs: Math.round(swapAt * 1000) };
+  }
+
   function flipRow(row, delay, onSwap) {
     return new Promise(resolve => {
-      // offset 是時間比例：0.25 那格剛好轉到 90° (側面、看不見)，就在那一刻換內容
-      const anim = row.animate([
-        { transform: 'perspective(900px) rotateX(0deg)', easing: 'cubic-bezier(.55,0,1,.45)' },
-        { transform: 'perspective(900px) rotateX(90deg) scale(.97)', offset: 0.25, easing: 'linear' },
-        { transform: 'perspective(900px) rotateX(270deg) scale(.97)', offset: 0.75, easing: 'cubic-bezier(.2,1.5,.45,1)' },
-        { transform: 'perspective(900px) rotateX(360deg)' },
-      ], { duration: FLIP_MS, delay, fill: 'backwards' });
-      setTimeout(onSwap, delay + FLIP_MS * 0.25);
-      anim.onfinish = anim.oncancel = () => {
-        row.classList.remove('la-landed');
-        void row.offsetWidth;
-        row.classList.add('la-landed');
+      const anim = row.animate(SPIN.frames, { duration: SPIN.dur, delay, fill: 'backwards' });
+      setTimeout(onSwap, delay + SPIN.swapMs);
+      let landed = false;
+      // 轉過頭最遠那一下 (約 1.2 秒) 亮黃光，像牌子晃到定位
+      setTimeout(() => {
+        if (landed) return; landed = true;
+        row.classList.remove('la-landed'); void row.offsetWidth; row.classList.add('la-landed');
         setTimeout(() => row.classList.remove('la-landed'), 900);
-        resolve();
-      };
+      }, delay + 1200);
+      anim.onfinish = anim.oncancel = () => resolve();
     });
   }
 

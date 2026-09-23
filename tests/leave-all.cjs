@@ -61,10 +61,10 @@ const out = path.join(root, 'test-results'); fs.mkdirSync(out, { recursive: true
     await page.click('#rc-leave-all-btn');
     await page.waitForSelector('.confirm-overlay.visible');
     await page.click('#cfd-confirm');
-    await page.waitForTimeout(260);
+    await page.waitForTimeout(450);
     await page.screenshot({ path: path.join(out, 'leave-all-1-flipping.png') });
     assert.ok(await page.evaluate(() => document.getElementById('rc-student-list').classList.contains('la-running')), '翻牌中不能點');
-    await page.waitForTimeout(420);
+    await page.waitForTimeout(900);
     await page.screenshot({ path: path.join(out, 'leave-all-2-flipping.png') });
     await page.waitForFunction(() => !document.getElementById('rc-student-list').classList.contains('la-running'), null, { timeout: 5000 });
     await page.waitForTimeout(300);
