@@ -1,10 +1,10 @@
 // Atomic shell cache: HTML and JS must always come from the same release.
-const CACHE_NAME = 'biyuan-v137';
-const ASSETS = ['./', './index.html', './style.css?v=174', './phonetic-search.js?v=174', './app.js?v=174', './import.js?v=174',
-  './api.js?v=174', './config.js?v=174', './theme.js?v=174',
-  './carousel.js?v=174', './navigation.js?v=174', './motion.css?v=174', './liquid-nav.css?v=174', './nav-adapt.css?v=174', './nav-adapt.js?v=174', './folder.css?v=174', './dissolve.js?v=174',
-  './quick-menu.css?v=174', './quick-menu.js?v=174', './boot-screen.css?v=174', './boot-screen.js?v=174', './tablet.css?v=174', './tablet.js?v=174', './tablet-transform.css?v=174', './tablet-transform.js?v=174', './color-mode.css?v=174', './color-mode.js?v=174', './phone-leave.css?v=174', './phone-leave.js?v=174', './role-claim.js?v=174', './yellow-card.css?v=174', './yellow-card.js?v=174',
-  './manifest.json?v=174', './icon-192.png?v=174',
+const CACHE_NAME = 'biyuan-v138';
+const ASSETS = ['./', './index.html', './style.css?v=175', './phonetic-search.js?v=175', './app.js?v=175', './import.js?v=175',
+  './api.js?v=175', './config.js?v=175', './theme.js?v=175',
+  './carousel.js?v=175', './navigation.js?v=175', './motion.css?v=175', './liquid-nav.css?v=175', './nav-adapt.css?v=175', './nav-adapt.js?v=175', './folder.css?v=175', './dissolve.js?v=175',
+  './quick-menu.css?v=175', './quick-menu.js?v=175', './boot-screen.css?v=175', './boot-screen.js?v=175', './tablet.css?v=175', './tablet.js?v=175', './tablet-transform.css?v=175', './tablet-transform.js?v=175', './color-mode.css?v=175', './color-mode.js?v=175', './phone-leave.css?v=175', './phone-leave.js?v=175', './role-claim.js?v=175', './yellow-card.css?v=175', './yellow-card.js?v=175', './leave-all.css?v=175', './leave-all.js?v=175',
+  './manifest.json?v=175', './icon-192.png?v=175',
   './Lp/ICON/COPY.svg', './Lp/ICON/HOME.svg', './Lp/ICON/NEW.svg', './Lp/ICON/RESET.svg', './Lp/ICON/SETTIN.svg'];
 self.addEventListener('install', event => {
   // cache:'reload' 繞過瀏覽器 HTTP 快取，避免裝新版 SW 時把舊的 index.html 誤存進去

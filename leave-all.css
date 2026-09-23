@@ -1,0 +1,38 @@
+/* ─── 點名頁「一鍵全部請假」按鈕 + 打烊翻牌 ─── */
+/* 放在統計列下面、名單上面；不在固定的頂部裡，往下捲就會跟著名單離開，不佔畫面 */
+.la-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin: 0 0 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--yellow, #f59e0b);
+  background: rgba(245, 158, 11, .08);
+  border: 1px dashed rgba(245, 158, 11, .45);
+  cursor: pointer;
+  transition: transform .15s, background .2s;
+  -webkit-tap-highlight-color: transparent;
+}
+.la-btn:active { transform: scale(.97); background: rgba(245, 158, 11, .18); }
+.la-btn .ui-icon { flex-shrink: 0; }
+
+/* 翻牌中：不能點，避免翻到一半又被單點改掉 */
+.student-list.la-running .student-row { pointer-events: none; }
+
+/* 落地時亮一下黃光 */
+.student-row.la-landed { animation: la-glow .9s ease-out; }
+@keyframes la-glow {
+  0%   { box-shadow: 0 0 0 0 rgba(245, 158, 11, .55); }
+  100% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .student-row.la-landed { animation: none; }
+}
