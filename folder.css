@@ -155,7 +155,9 @@ body.light-mode {
   opacity: 0;
   transition: opacity .45s var(--fd-ease);
 }
-.sf-folder.active > .fd-back::after { opacity: 1; }
+/* .fd-back::after 的 opacity 由後面 #page-student-files 那條「連續 --fd-sel」規則接管 (優先權較高，
+   這條 .active 版本一律被蓋掉)，拿掉純粹是少一條 .active → .fd-back::after 的樣式依賴，
+   拖曳時 .active 換人不用再連帶檢查這個偽元素、畫面不變。 */
 .sf-folder.active > .fd-back { box-shadow: var(--fd-shadow), var(--fd-glow); }
 
 /* 標籤：貼在背板頂端左側，像真的資料夾耳朵 (跟背板同一個深度，自己是一層才能跟著遮罩消散) */
@@ -289,7 +291,8 @@ body.light-mode .sf-folder > .fd-top { background: linear-gradient(180deg, rgba(
 
 /* 摘要：只有抽出來的那本看得到 (其餘資料夾被前一本蓋掉大半，改看右緣的側標) */
 .fd-summary { position: relative; display: flex; flex-direction: column; gap: 4px; opacity: 0; transition: opacity .3s ease; }
-.sf-folder.active .fd-summary { opacity: 1; }
+/* .active 版 opacity:1 被後面 #page-student-files 的連續 --fd-sel 規則蓋掉 (一律套用、優先權較高)，
+   拿掉可以少一條 .active → .fd-summary 的樣式依賴，數值不變 */
 /* 軌道側標：像檔案背脊上的標籤，寫在右緣那條露出來的地方 */
 .fd-rail-label {
   position: absolute;
@@ -303,7 +306,7 @@ body.light-mode .sf-folder > .fd-top { background: linear-gradient(180deg, rgba(
   opacity: 1; transition: opacity .28s ease;
   pointer-events: none;
 }
-.sf-folder.active .fd-rail-label { opacity: 0; }
+/* 同上：.active 版 opacity:0 被後面連續 --fd-sel 規則蓋掉，拿掉這條依賴 */
 /* 露出來的是哪一邊，側標與房號標籤就放哪一邊 (fd-lefty = 左緣露出)；同一本只顯示一個標籤 */
 .sf-folder.fd-lefty .fd-rail-label { right: auto; left: 13px; }
 .sf-folder.fd-lefty > .fd-tab-r { opacity: 0; }
@@ -523,6 +526,10 @@ body.light-mode .sf-folder.fd-dissolving.is-open > .fd-sheet { background: rgba(
 #page-student-files.sf-moving .sf-folder,
 #page-student-files.sf-moving .sf-folder > * { transition: none !important; }
 #page-student-files.sf-moving .sf-folder > .fd-back::after { transition: none !important; }
+/* 拖曳/吸附中先關掉背板的大模糊發光陰影 (box-shadow 換值一定要重繪，快速滑動時 .active 一直換本，
+   等於一直重畫大模糊陰影)；選取的綠色疊層走 --fd-sel 連續 opacity，不受影響，選取感不會消失。
+   放手吸附完成 (.sf-moving 拿掉) 才用原本 .5s 過渡把發光補回來。 */
+#page-student-files.sf-moving .sf-folder.active > .fd-back { box-shadow: var(--fd-shadow) !important; }
 
 /* ─── 主題切換快照期間：拿掉毛玻璃讓截圖便宜 ─────────────────────────── */
 html.vt-active .sf-folder > .fd-front,
@@ -684,7 +691,7 @@ body.power-save-mode .sf-card-area-2d::before { display: none; }
 #page-student-files .fd-name {font-size:17px;line-height:1.4;font-weight:400;}
 #page-student-files .fd-class,#page-student-files .fd-count {display:none;}
 .fd-file-mark {position:absolute;left:22px;top:25px;display:flex;align-items:center;gap:5px;color:#152b1b;font-size:12px;font-weight:500;}
-.sf-folder.active .fd-file-mark {color:#d9ffe0;}
+/* .active 版 color 被後面連續 --fd-sel 的 color-mix 規則蓋掉，拿掉這條依賴 */
 #page-student-files .sf-folder.fd-blur1 > .fd-front,#page-student-files .sf-folder.fd-blur2 > .fd-front {filter:none;}
 #page-student-files .sf-folder.fd-blur1 > .fd-paper,#page-student-files .sf-folder.fd-blur1 > .fd-back {filter:blur(.25px);}
 #page-student-files .sf-folder.fd-blur2 > .fd-paper,#page-student-files .sf-folder.fd-blur2 > .fd-back {filter:blur(.55px);}
@@ -807,11 +814,11 @@ body.light-mode #page-student-files .sf-folder.active > .fd-front {background:li
   content:'';position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;
   background:var(--fd-active-front);opacity:var(--fd-sel,0);
 }
-#page-student-files .sf-folder > .fd-back::after,
-#page-student-files .sf-folder.active > .fd-back::after {opacity:var(--fd-sel,0);transition:none;}
+/* 不分 .active，本來就是所有 .fd-back::after 都套用同一條連續公式 (原本 .active 那個逗號分支是重複的) */
+#page-student-files .sf-folder > .fd-back::after {opacity:var(--fd-sel,0);transition:none;}
 #page-student-files .sf-folder .fd-summary {opacity:clamp(0,calc(var(--fd-sel,0) * 2 - 1),1);transition:none;}
-#page-student-files .sf-folder .fd-rail-label,
-#page-student-files .sf-folder.active .fd-rail-label {opacity:clamp(0,calc(1 - var(--fd-sel,0) * 2),1);transition:none;}
+/* 同上，不分 .active (原本的逗號分支重複) */
+#page-student-files .sf-folder .fd-rail-label {opacity:clamp(0,calc(1 - var(--fd-sel,0) * 2),1);transition:none;}
 #page-student-files .sf-folder .fd-file-mark {color:color-mix(in srgb,#d9ffe0 calc(var(--fd-sel,0) * 100%),#152b1b);}
 /* 滑鼠拖曳時不要反白選到資料夾上的字 (紫色選取框) */
 #page-student-files .sf-card-area-2d {-webkit-user-select:none;user-select:none;}

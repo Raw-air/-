@@ -93,10 +93,22 @@ function setup2DCarouselInteraction() {
   const ext = { mode: 'none', t0: 0, from: 0, base: 0, basePart: 0, ex: 1, part: 1, pulse: 1, done: null };   // 抽出時間軸
   let ent = null;                     // 進場：{ t0, only: entry|null }
   const sheet = { amt: 0, target: 0, t0: 0, from: 0, shift: 0, timer: 0, entry: null, vIndex: null };   // 詳細資料紙
-  const snap = { active: false, target: 0, delta: 0, speed: 0, t0: 0 };
+  const snap = { active: false, target: 0, delta: 0, speed: 0, t0: 0, decay: null };
   let active = false, dragging = false, touchId = null, mouseActive = false;
   let startX = 0, startY = 0, startC = 0, lastX = 0, lastTime = 0, velocity = 0;
   const wheel = { acc: 0, timer: 0, lastStep: 0 };
+  // 甩動速度感知：中心 c 快速掃過很多本時，逐幀算出的選取高亮 (--fd-sel) 與 .active 換本
+  // 會在每一本經過中心的瞬間閃現又消失，肉眼看起來就是連續閃爍。railSpeed 用「本/秒」量測
+  // c 的變化速度 (升快降慢的 EMA，避免尖峰抖動)；calm 是遲滯 (Schmitt trigger) 後的「慢/靜止」
+  // 程度 (0~1)，靜止或慢拖曳時維持 1，畫面與行為跟舊版完全一樣，只有真的滑很快才會降下來。
+  let railSpeed = 0, spdC = null, spdT = 0, calm = 1;
+  // .active 換本／背板發光／標籤文字／觸感回饋共用同一個節流後的「顯示用索引」：
+  // fast 是純遲滯 (Schmitt trigger，門檻 6.5 進 / 3.0 出) 的「快」布林值，跟 calm 分開算——
+  // calm 是給高亮淡出用的平滑值，fast 要立刻反應，才能一超過門檻就馬上開始節流，不用等 calm 慢慢降。
+  // fast 時最多 220ms 才追一次 _sfActiveIndex (實測：太短的節流窗口一次只延遲一幀，本本還是會全部
+  // 經過，換不了幾次；220ms 才夠讓快速甩動跳過中間那幾本，一次只換到甩動當下真正落點)；
+  // 一旦真的停下來 (state idle) 立刻補齊，不會卡在舊選取上。
+  let dispIndex = null, dispSwapT = 0, fast = false;
   const count = () => _sfResults.length;
   // 黃單模式不循環：索引限制在 0..n-1，拖出頭尾時有橡皮筋阻力
   const finite = () => !!window.sfFinite?.();
@@ -109,7 +121,7 @@ function setup2DCarouselInteraction() {
   function requestFrame() { if (!frame) frame = requestAnimationFrame(tick); }
   function stopFrame() { cancelAnimationFrame(frame); frame = 0; }
   // 打斷所有進行中的動畫 (拖曳開始、點鄰居、滾輪、方向鍵)
-  function interrupt() { stopFrame(); snap.active = false; ent = null; clearTimeout(sheet.timer); clearTimeout(wheel.timer); }
+  function interrupt() { stopFrame(); snap.active = false; snap.decay = null; ent = null; clearTimeout(sheet.timer); clearTimeout(wheel.timer); }
 
   // ── 曲線 ───────────────────────────────────────────────────────────────
   const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
@@ -188,6 +200,24 @@ function setup2DCarouselInteraction() {
     _currentX = -c * _cardWidth;
     sfSyncWindow(c);
     const now = performance.now();
+    // 本/秒 (folders/s)：c 這幀相對上一幀的變化量 ÷ 經過的秒數。dt 過大 (切頁、掉幀) 就跳過，
+    // 免得算出離譜的瞬時值。上升用大權重 (立刻反應快甩)，下降用小權重 (放手後緩緩回穩)。
+    if (spdT) {
+      const dt = now - spdT;
+      if (dt > 0 && dt < 250) {
+        const inst = Math.abs(c - spdC) / (dt / 1000);
+        railSpeed += (inst - railSpeed) * (inst > railSpeed ? .6 : .12);
+      }
+    }
+    spdC = c; spdT = now;
+    if (railSpeed > 6.5) fast = true; else if (railSpeed < 3) fast = false;   // 遲滯，門檻附近不會來回切
+    const calmTarget = fast ? 0 : 1;
+    calm += (calmTarget - calm) * .18;
+    if (dispIndex === null) dispIndex = _sfActiveIndex;
+    const settled = !dragging && !snap.active && !snap.decay && state !== 'dragging';   // 放手、吸附完就立刻補齊 (抽出動畫期間也算)
+    if (dispIndex !== _sfActiveIndex && (!fast || settled || now - dispSwapT >= 220)) {
+      dispIndex = _sfActiveIndex; dispSwapT = now;
+    }
     // Explicit camera projection avoids WebKit dropping inherited perspective through clipped ancestors.
     const opening = sheet.amt;
     const depart = smooth(opening / .48);
@@ -201,7 +231,7 @@ function setup2DCarouselInteraction() {
       const visible = p.alpha > .012;
       el.classList.toggle('sf-far', !visible);
       if (!visible) { el._tf = null; continue; }
-      const isActive = v === _sfActiveIndex;
+      const isActive = v === dispIndex;   // 節流後的顯示索引，不是每幀都跟著 c 走 (見上面 calm)
       el.classList.toggle('active', isActive);
       // 進場：從「整疊還沒攤開」的姿態依序沿軌道展開 (每本 380ms，離中心越遠越晚 30ms)
       if (ent && (!ent.only || ent.only === entry)) {
@@ -242,7 +272,9 @@ function setup2DCarouselInteraction() {
       if (el._layer !== layer) { el.style.zIndex = layer; el._layer = layer; }
       // 選取的綠色與標籤依「離中心多近」連續淡入淡出。原本靠 .active class 瞬間換本，
       // 快速滑動時綠色一幀一幀在資料夾之間跳，看起來就是閃爍。
-      const sel = (ad < 1 ? 1 - smooth(ad) : 0).toFixed(2);
+      // 高亮乘上 calm：滑很快時 (calm→0) 連續淡出，本本掠過中心不再一閃一閃；
+      // 靜止或慢拖曳 calm=1，跟舊版同一條連續函數，選取一樣平滑跟著中心走。
+      const sel = ((ad < 1 ? 1 - smooth(ad) : 0) * calm).toFixed(2);
       // 只寫在前板與背板上：寫在資料夾根節點會連整張詳細資料表單一起重算樣式
       if (!el._front || el._front.parentNode !== el) { el._front = el.querySelector(':scope > .fd-front'); el._back = el.querySelector(':scope > .fd-back'); el._sel = null; }
       if (el._sel !== sel && el._front) { el._front.style.setProperty('--fd-sel', sel); el._back.style.setProperty('--fd-sel', sel); el._sel = sel; }
@@ -254,7 +286,7 @@ function setup2DCarouselInteraction() {
         if (el._cy !== cy && el._sheet) { el._sheet.style.setProperty('--fd-counter-yaw', cy); el._cy = cy; }
       }
     }
-    const selected = sfStudentAt(_sfActiveIndex);
+    const selected = sfStudentAt(dispIndex);   // 標籤跟著節流後的索引，滑很快時文字不用每幀重寫
     const summaryName = document.getElementById('sf-selection-name');
     const summaryMeta = document.getElementById('sf-selection-meta');
     if (selected && summaryName) {
@@ -263,7 +295,7 @@ function setup2DCarouselInteraction() {
       if (summaryName.textContent !== name) summaryName.textContent = name;
       if (summaryMeta.textContent !== meta) summaryMeta.textContent = meta;
     }
-    if (_sfActiveIndex !== lastIndex) { haptic('light'); lastIndex = _sfActiveIndex; }
+    if (dispIndex !== lastIndex) { haptic('light'); lastIndex = dispIndex; }   // 同一個節流索引，觸感也一起降頻
   }
   window._updateContinuousScale = () => paint();
 
@@ -272,7 +304,20 @@ function setup2DCarouselInteraction() {
     frame = 0;
     let more = false;
     // 彈簧吸附 (臨界阻尼 + 初速度，60/120Hz 都一樣)。公式以 px 計 (_currentX)，換算回索引
-    if (snap.active) {
+    // 慣性滑行：放手的速度照指數衰減滑出去 (距離 = 速度 × τ)，剩不到 1/3 本時交給彈簧收尾，
+    // 交接時把當下速度帶過去，所以從放手、滑行到停下都沒有速度斷點 (不會像被彈簧往前拉一下)
+    if (snap.decay) {
+      const d = snap.decay, t = (now - d.t0) / 1000, e = Math.exp(-t / d.tau);
+      c = d.from + d.dist * (1 - e);
+      const left = d.dist * e;
+      if (Math.abs(left) > .3) more = true;
+      else {
+        snap.decay = null;
+        snap.delta = (snap.target - c) * _cardWidth;
+        snap.speed = -(d.dist / d.tau) * e * _cardWidth;   // 指數衰減的當下速度 (索引/秒 → 手指 px/s 座標)
+        snap.t0 = now; snap.active = true; more = true;
+      }
+    } else if (snap.active) {
       const t = (now - snap.t0) / 1000, omega = 19;
       const offsetPx = (snap.delta + (snap.speed + omega * snap.delta) * t) * Math.exp(-omega * t);
       c = snap.target - offsetPx / _cardWidth;
@@ -372,8 +417,9 @@ function setup2DCarouselInteraction() {
   }
 
   // ── 吸附到某一本 ─────────────────────────────────────────────────────────
-  function settle(index, initialVelocity = 0) {
+  function settle(index, initialVelocity = 0, glide = false) {
     clearTimeout(sheet.timer);
+    snap.decay = null;
     index = bound(index);
     _sfActiveIndex = index;
     if (reduced()) { c = index; snap.active = false; ext.mode = "none"; ext.ex = ext.part = ext.pulse = 1; state = "idle"; moving(false); paint(); scheduleOpen(); return; }
@@ -386,6 +432,16 @@ function setup2DCarouselInteraction() {
       return;
     }
     state = 'snapping';
+    // 甩出去 2 本以上、方向跟手指一致：走慣性滑行。τ 用「剛好停在目標那本」反推 (手指 v px/s → c 每秒變 -v/寬)
+    const dist = index - c, rate = -initialVelocity / _cardWidth;
+    const tau = rate ? dist / rate : 0;
+    if (glide && Math.abs(dist) >= 1.5 && tau > .08 && tau < .42) {
+      snap.decay = { from: c, dist, tau, t0: performance.now() };
+      snap.active = false;
+      moving(true);
+      requestFrame();
+      return;
+    }
     snap.speed = Math.max(-2600, Math.min(2600, initialVelocity));
     snap.t0 = performance.now(); snap.active = true;
     moving(true);
@@ -438,10 +494,11 @@ function setup2DCarouselInteraction() {
     if (cancelled || performance.now() - lastTime > 100) velocity = 0;
     // velocity 是手指的 px/s (往右為正)；往右拖 = 索引變小
     const projected = c - velocity * .16 / _cardWidth;
-    const current = Math.round(c);          // 以放手時的位置為準：拖超過 3 本也不會猛彈回去
+    const current = Math.round(c);          // 以放手時的位置為準：拖很遠也不會猛彈回去
     let next = Math.round(projected);
-    next = Math.max(current - 3, Math.min(current + 3, next));
-    settle(next, velocity);
+    // 輕輕甩 1 本、用力甩可以一路滑過去 (最多 12 本)，不再在 3 本硬煞車
+    next = Math.max(current - 12, Math.min(current + 12, next));
+    settle(next, velocity, true);
     setTimeout(() => suppressClick = false, 0);
   }
   // ── 觸控 (iPhone / Android) ─────────────────────────────────────────────
