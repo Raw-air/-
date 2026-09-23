@@ -7073,6 +7073,7 @@ function sfStudentAt(vIndex) {
   // 無限循環：虛擬索引可正可負，取模對應名單，滑到底會自動接回第一張
   const n = _sfResults.length;
   if (!n) return null;
+  if (window.sfFinite?.()) return vIndex >= 0 && vIndex < n ? _sfResults[vIndex] : null;   // 黃單模式：頭尾不接起來
   return _sfResults[((vIndex % n) + n) % n];
 }
 
@@ -7148,7 +7149,22 @@ function sfCardHTML(s, draft) {
         </div>
       </div>
       <div class="fd-edge"></div>
-      <div class="fd-sheet">
+      <div class="fd-sheet" data-lazy="1"></div>
+    `;
+}
+
+// 詳細資料紙 (表單) 點開才做：以前每本資料夾都先塞一整份表單藏著，
+// 滑動換本時 innerHTML 重建、進出畫面時整棵重算樣式，都被這些看不到的輸入框拖慢
+function sfSheetHTML(s, draft) {
+  const d = draft || {};
+  const name = d.name !== undefined ? d.name : (s.name || '');
+  const sid = d.studentId !== undefined ? d.studentId : (s.studentId || '');
+  const cls = d.class !== undefined ? d.class : (s.class || '');
+  const remarks = d.remarks !== undefined ? d.remarks : (s.remarks || '');
+  const isForeign = d.isForeign !== undefined ? d.isForeign : !!s.isForeign;
+  const isEmpty = d.isEmpty !== undefined ? d.isEmpty : (s.isEmpty || !s.name);
+  const m = sfSummary(s, draft);
+  return `
         <div class="sf-card-title">
           <span class="sf-title-text">${sfEsc(s.room)} ${sfEsc(s.bed)}</span>
           <div class="sf-card-badge-relative">${sfEsc(m.badge)}</div>
@@ -7182,9 +7198,18 @@ function sfCardHTML(s, draft) {
           </div>
           <button class="sf-save-action-btn" onclick="autoSaveStudentFile(this)"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg> 儲存修改</button>
         </div>
-      </div>
     `;
 }
+
+// 打開紙之前 (carousel.js openSheet / 刪除動畫) 才把表單做出來；草稿優先
+window.sfEnsureSheet = function (el) {
+  const sheet = el?.querySelector(':scope > .fd-sheet');
+  const s = el && _sfRenderMap.get(el);
+  if (!sheet || !s || !sheet.hasAttribute('data-lazy')) return sheet;
+  sheet.innerHTML = window.yc?.active() ? window.yc.sheetHTML(s) : sfSheetHTML(s, _sfDrafts.get(s.id) || sfLiveDraft(s.id, el));
+  sheet.removeAttribute('data-lazy');
+  return sheet;
+};
 
 // 讀出一張卡目前的欄位內容，並判斷是否跟原始資料相同
 function sfReadCard(el, s) {
@@ -7482,7 +7507,9 @@ window.autoSaveStudentFile = async function (elem) {
     const cards = document.querySelectorAll('.sf-folder');
     cards.forEach(c => {
       const obj = _sfRenderMap.get(c);
-      if (obj?.id === studentObj.id && beforeViews.get(c) === fingerprint(c)) {
+      if (obj?.id === studentObj.id && !c.querySelector('.sf-input-name')) {
+        // 這本的紙還沒做出來：下次打開時會照最新資料畫
+      } else if (obj?.id === studentObj.id && beforeViews.get(c) === fingerprint(c)) {
         c.querySelector('.sf-input-name').value = studentObj.name;
         c.querySelector('.sf-input-id').value = studentObj.studentId;
         c.querySelector('.sf-input-class').value = studentObj.class;
@@ -7535,7 +7562,8 @@ window.onStudentFileSearch = onStudentFileSearch;
 // ─── 資料夾軌道下方的「儲存」：可以連續黑洞好幾本、改好幾本，最後按一次全部送出 ───
 // 待儲存 = 回收池裡被改過的卡 + 已經被回收、存成草稿的卡
 function sfPendingIds() {
-  for (const entry of _sfPool) if (entry.vIndex !== null && entry.student) sfSaveDraft(entry);
+  // 只讀「內容跟對應的人一致」的卡：sfBindCard 換人換到一半 (innerHTML 還沒換) 時讀到的是上一個人的欄位
+  for (const entry of _sfPool) if (entry.vIndex !== null && entry.student && _sfRenderMap.get(entry.el) === entry.student) sfSaveDraft(entry);
   return Array.from(_sfDrafts.keys()).filter(id => state.students.some(s => s.id === id));
 }
 

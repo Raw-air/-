@@ -1114,6 +1114,7 @@
       for (const s of rigid) { s.style.visibility = ''; s.style.opacity = ''; }
       root.style.removeProperty('--fd-del-scale');
       root.classList.remove('fd-dissolving');
+      root._op = null;                        // 上面清掉了殼的 inline opacity，下一幀讓 carousel.js 重寫
     }
     function finish(ok) {
       if (finished) return;
@@ -1393,11 +1394,11 @@
     const onVisibility = () => { if (document.hidden) abort(); };
     const onNavigation = () => { if (currentPage !== 'student-files') abort(); };
     const ycMode = !!window.yc?.active();
-    if (ycMode && !window.yc.list(owner).length) { window._sfBHBusy = false; showToast(owner.name ? '這一本沒有黃單可以銷' : '空床沒有黃單', 'info'); return; }
-    const doneMsg = ycMode ? '黃單已銷掉，清完一輪按下方「儲存」同步' : '床位已清空，清完一輪按下方「儲存」同步';
+    if (ycMode && !window.yc.activeCount(owner)) { window._sfBHBusy = false; showToast(owner.name ? '這一本沒有待執行的黃單' : '空床沒有黃單', 'info'); return; }
+    const doneMsg = ycMode ? '已標記執行 (紀錄會留著)，清完一輪按下方「儲存」同步' : '床位已清空，清完一輪按下方「儲存」同步';
     const resetFields = () => {
       if (_sfRenderMap.get(folder) !== owner) return;
-      if (ycMode) { window.yc.markCleared(owner); window.sfRefreshCommitBar?.(); return; }
+      if (ycMode) { window.yc.markCleared(owner, folder); window.sfRefreshCommitBar?.(); return; }
       const draft = { name: '', studentId: '', class: '', remarks: '', isForeign: false, isEmpty: true };
       _sfDrafts.set(owner.id, draft);          // 清空是草稿，跟「儲存修改」同一套流程
       // 名單少於回收池時同一床會出現在好幾本上，每一本都要清，否則另一本被回收時會把草稿還原

@@ -118,8 +118,6 @@ body.light-mode {
   transform-style: preserve-3d;
   transform-origin: 50% 50%;
   /* 不設 opacity / filter / overflow：那會把 6 層壓平，厚度就不見了。透明度由各層自己吃 --fd-alpha */
-  --fd-alpha: 1;
-  --fd-del-scale: 1;
   pointer-events: auto;
 }
 .sf-folder.sf-far {
@@ -137,7 +135,7 @@ body.light-mode {
   position: absolute;
   inset: 0;
   border-radius: var(--fd-radius);
-  opacity: var(--fd-alpha);
+  opacity: var(--fd-alpha, 1);
 }
 
 /* 背板：最裡面那片壓克力，被選中時染上紫→洋紅 */
@@ -163,7 +161,7 @@ body.light-mode {
 /* 標籤：貼在背板頂端左側，像真的資料夾耳朵 (跟背板同一個深度，自己是一層才能跟著遮罩消散) */
 .sf-folder > .fd-tab {
   transform: translateZ(calc(-1 * var(--fd-depth)));
-  opacity: var(--fd-alpha);
+  opacity: var(--fd-alpha, 1);
   backface-visibility: hidden;
 }
 .fd-tab {
@@ -210,7 +208,7 @@ body.light-mode {
   left: 0;
   width: var(--fd-depth);
   background: var(--fd-spine);
-  opacity: var(--fd-alpha);
+  opacity: var(--fd-alpha, 1);
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.35);
   transform-origin: left center;
   transform: translateZ(calc(-1 * var(--fd-depth))) rotateY(-90deg);   /* 先退到背板深度再轉，厚度才填在前板與背板之間 */
@@ -231,7 +229,7 @@ body.light-mode {
   transform-origin: 50% 0;
   transform: rotateX(-90deg);
   background: linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,.18));
-  opacity: calc(var(--fd-alpha) * .95);
+  opacity: calc(var(--fd-alpha, 1) * .95);
   border-radius: 2px;
   backface-visibility: hidden;
 }
@@ -262,7 +260,7 @@ body.light-mode .sf-folder > .fd-top { background: linear-gradient(180deg, rgba(
 
 /* 前板玻璃：真正的透明面，摘要文字就在上面 */
 .sf-folder > .fd-front {
-  transform: translateZ(0) scale(var(--fd-del-scale));
+  transform: translateZ(0) scale(var(--fd-del-scale, 1));
   background: var(--fd-front);
   border: 1px solid var(--fd-front-border-soft);
   box-shadow:
@@ -367,7 +365,7 @@ body.light-mode .fd-tag.fd-tag-remark { background: rgba(255,214,10,.32); border
   border: 1.5px solid;
   border-color: var(--fd-edge) var(--fd-edge-soft) var(--fd-edge-soft) var(--fd-edge);
   pointer-events: none;
-  opacity: calc(var(--fd-alpha) * .8);
+  opacity: calc(var(--fd-alpha, 1) * .8);
 }
 
 /* 遠處：兩段固定模糊 (切 class，不逐幀寫 filter)。filter 套在根節點會把 preserve-3d 壓平 (到第 3 本會跳一下)，
@@ -400,7 +398,7 @@ body.power-save-mode .sf-folder.fd-blur2 > * { filter: none; }
   pointer-events: none;
 }
 .sf-folder.is-open > .fd-sheet {
-  transform: translate3d(0, 0, 40px) rotateY(var(--fd-counter-yaw, 16deg)) scale(var(--fd-del-scale));
+  transform: translate3d(0, 0, 40px) rotateY(var(--fd-counter-yaw, 16deg)) scale(var(--fd-del-scale, 1));
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
@@ -630,7 +628,7 @@ body.power-save-mode .sf-card-area-2d::before { display: none; }
 #page-student-files .sf-scene-2d:has(.is-open) .sf-selection {opacity:0;pointer-events:none;transform:translateY(-8px);}
 #page-student-files .sf-folder.is-open > .fd-sheet {z-index:20;}
 #page-student-files .sf-folder > .fd-sheet {bottom:auto;top:-15px;transform-origin:50% 50%;}
-#page-student-files .sf-folder.is-open > .fd-sheet {transform:translate3d(0,0,40px) scale(var(--fd-del-scale));}
+#page-student-files .sf-folder.is-open > .fd-sheet {transform:translate3d(0,0,40px) scale(var(--fd-del-scale, 1));}
 #page-student-files .sf-folder > .fd-sheet {transition:opacity .22s ease,visibility 0s linear .22s;}
 #page-student-files .sf-folder.is-open > .fd-sheet {transition:opacity .3s ease,visibility 0s;}
 #page-student-files {font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif;}
@@ -703,7 +701,7 @@ body.power-save-mode .sf-card-area-2d::before { display: none; }
 }
 #page-student-files .sf-folder.is-open > .fd-sheet {visibility:visible;transform:translate3d(0,var(--fd-sheet-y,45px),12px);opacity:var(--fd-sheet-opacity,0);pointer-events:auto;backdrop-filter:none;-webkit-backdrop-filter:none;transition:none;}
 #page-student-files .sf-folder.is-closing > .fd-sheet {pointer-events:none;}
-#page-student-files .sf-folder.is-open > :not(.fd-sheet) {opacity:var(--fd-alpha);}
+#page-student-files .sf-folder.is-open > :not(.fd-sheet) {opacity:var(--fd-alpha, 1);}
 #page-student-files .sf-folder.is-open > .fd-front {z-index:21;}
 #page-student-files .sf-folder.is-open > .fd-sheet {z-index:auto;}
 #page-student-files .fd-sheet .sf-icon-btn {color:#34533f;background:#47604d0a;border-color:#3a684028;}

@@ -26,15 +26,22 @@
 .sf-commit-save {
   flex: 1 1 auto; color: #d9e6dc; background: #ffffff08; border: 1px dashed #ffffff30;
 }
+.sf-commit-save { position: relative; }
 .sf-commit-bar.has-pending .sf-commit-save {
   color: #f0fff4; background: #226a40; border: 1px solid #57e99180;
-  box-shadow: 0 0 0 0 #57e99166; animation: sfCommitPulse 2.2s ease-out infinite;
 }
-.sf-commit-save.is-busy { animation: none !important; opacity: .8; }
-@keyframes sfCommitPulse { 0% { box-shadow: 0 0 0 0 #57e99155; } 70%, 100% { box-shadow: 0 0 0 12px #57e99100; } }
+/* 待儲存的呼吸光圈：用 transform/opacity 動一個偽元素 (合成器就能做)，不動 box-shadow (每幀重畫) */
+.sf-commit-bar.has-pending .sf-commit-save::after {
+  content: ''; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none;
+  border: 2px solid var(--sf-pulse, #57e991); opacity: 0;
+  animation: sfCommitPulse 2.2s ease-out infinite;
+}
+.sf-commit-save.is-busy::after { animation: none !important; }
+.sf-commit-save.is-busy { opacity: .8; }
+@keyframes sfCommitPulse { 0% { opacity: .7; transform: scale(1); } 70%, 100% { opacity: 0; transform: scale(1.06, 1.3); } }
 body.light-mode .sf-commit-hole { color: #263a2d; background: #ffffff8c; border-color: #3b614330; }
 body.light-mode .sf-commit-save { color: #4c6352; background: #ffffff60; border-color: #3b614340; }
-@media (prefers-reduced-motion: reduce) { .sf-commit-bar.has-pending .sf-commit-save { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .sf-commit-bar.has-pending .sf-commit-save::after { animation: none; } }
 @media (max-width: 639px) { .sf-commit-bar button { min-height: 46px; padding: 0 14px; font-size: 13px; } }
 
 /* ─── 黃單模式：琥珀色壓克力，選取的那本前板是警示黃 ─────────────────── */
@@ -106,18 +113,34 @@ body.light-mode #page-student-files.yc-mode .sf-archive-heading h1 { color: #3b2
 #page-student-files.yc-mode .fd-sheet .sf-broom-btn:disabled { opacity: .3; cursor: default; }
 .yc-sheet .yc-label { font-size: 10.5px; letter-spacing: .5px; color: var(--fd-sheet-text-dim); margin: 6px 0 4px; }
 .yc-sheet .yc-list {
-  height: 128px; overflow-y: auto; overscroll-behavior: contain;
+  height: 150px; overflow-y: auto; overscroll-behavior: contain;
   display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 4px;
   -webkit-user-select: text; user-select: text;
 }
 .yc-sheet .yc-row {
-  display: grid; grid-template-columns: 44px 1fr 28px; align-items: center; gap: 6px;
-  padding: 7px 6px 7px 10px; border-radius: 9px;
+  display: grid; grid-template-columns: 62px 1fr auto; align-items: center; gap: 6px;
+  padding: 6px 4px 6px 9px; border-radius: 9px; flex-shrink: 0;
   background: linear-gradient(170deg, #fff1a8, #ffe27a); border: 1px solid #d9a40040;
   font-size: 13px; color: #3b2e12;
 }
-.yc-sheet .yc-row time { font-size: 11px; font-weight: 700; color: #8a5a00; font-variant-numeric: tabular-nums; }
-.yc-sheet .yc-row span { overflow-wrap: anywhere; line-height: 1.35; }
+.yc-sheet .yc-row.is-done { background: #f3eee0; border-color: #3b2e1214; color: #7a6c50; }
+.yc-sheet .yc-row.is-done .yc-reason-text { text-decoration: line-through; text-decoration-color: #7a6c5066; }
+.yc-sheet .yc-dates { display: flex; flex-direction: column; gap: 2px; font-size: 11px; font-weight: 700; color: #8a5a00; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.yc-sheet .yc-dates em { font-style: normal; font-weight: 500; opacity: .7; margin-right: 3px; font-size: 10px; }
+.yc-sheet .yc-dates i { font-style: normal; color: #c42a14; }
+.yc-sheet .is-done .yc-dates { color: #6b5f45; }
+.yc-sheet .yc-reason-text { overflow-wrap: anywhere; line-height: 1.35; }
+.yc-sheet .yc-row-act { display: flex; align-items: center; gap: 2px; }
+.yc-sheet .yc-exec, .yc-sheet .yc-undo {
+  height: 28px; padding: 0 9px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 11.5px; font-weight: 700;
+  border: 1px solid #b7790055; background: #fffbe9; color: #6b4a00;
+}
+.yc-sheet .yc-exec:active, .yc-sheet .yc-undo:active { transform: scale(.94); }
+.yc-sheet .yc-undo { background: transparent; border-style: dashed; color: #7a6c50; }
+.yc-sheet .yc-sep { font-size: 10.5px; color: var(--fd-sheet-text-dim); margin: 6px 2px 0; letter-spacing: .5px; }
+.yc-sheet .yc-date-row { display: flex; gap: 6px; margin-bottom: 8px; }
+.yc-sheet .yc-date-row label { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; color: var(--fd-sheet-text-dim); }
+.yc-sheet .yc-date-row input { height: 36px; padding: 0 8px; border-radius: 9px; font-size: 13px; background: #ffffffc0; border: 1px solid var(--fd-input-border); color: var(--fd-sheet-text); min-width: 0; }
 .yc-sheet .yc-del {
   width: 28px; height: 28px; border-radius: 8px; border: 0; cursor: pointer;
   background: transparent; color: #8a5a00; font-size: 18px; line-height: 1;
@@ -146,7 +169,7 @@ body.light-mode #page-student-files.yc-mode .sf-archive-heading h1 { color: #3b2
 .yc-sheet .yc-add-btn:disabled { opacity: .6; }
 
 /* 標題旁的清冰箱看板 */
-#page-student-files .yc-duty {
+#page-student-files .yc-duty { flex-wrap: wrap;
   display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 16px;
   background: linear-gradient(150deg, #ffd21f1f, #ff9f0a12); border: 1px solid #ffc62940; color: #fff4d6;
 }
@@ -165,9 +188,9 @@ body.light-mode .yc-duty-n span, body.light-mode .yc-duty-meta small { color: #7
 /* 黃單模式的儲存鈕是黃的 */
 #page-student-files.yc-mode .sf-commit-bar.has-pending .sf-commit-save {
   color: #2b1d00; background: linear-gradient(170deg, #ffd84a, #ffb400); border-color: #ffe28a;
-  animation-name: ycCommitPulse;
+  --sf-pulse: #ffc629;
 }
-@keyframes ycCommitPulse { 0% { box-shadow: 0 0 0 0 #ffc62966; } 70%, 100% { box-shadow: 0 0 0 12px #ffc62900; } }
+
 
 /* 沒有人有黃單 */
 .yc-empty-card {
@@ -184,3 +207,38 @@ body.light-mode .yc-duty-n span, body.light-mode .yc-duty-meta small { color: #7
 #page-student-files.yc-mode .sf-selection i { background: #d98a00; box-shadow: 0 0 0 6px #ffc62940; }
 .yc-sheet .yc-label b { color: var(--fd-sheet-text); font-weight: 700; }
 #page-student-files.yc-mode .sf-folder .fd-summary .fd-name { color: #3b2500; font-weight: 600; }
+
+/* 清冰箱看板上的「開單紀錄」 */
+#page-student-files .yc-duty .yc-log-btn {
+  margin-left: auto; flex-shrink: 0; height: 36px; padding: 0 12px; border-radius: 10px; cursor: pointer;
+  font: inherit; font-size: 12.5px; font-weight: 700; color: #2b1d00; background: #ffc629; border: 0;
+}
+.yc-log {
+  position: fixed; inset: 0; z-index: 9990; display: flex; align-items: flex-end; justify-content: center;
+  background: #0008; opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.yc-log.is-open { opacity: 1; pointer-events: auto; }
+.yc-log-panel {
+  width: min(560px, 100%); max-height: 82vh; display: flex; flex-direction: column;
+  background: #fffaf0; color: #3b2e12; border-radius: 22px 22px 0 0; padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  transform: translateY(24px); transition: transform .28s var(--fd-ease, ease);
+}
+.yc-log.is-open .yc-log-panel { transform: none; }
+@media (min-width: 640px) { .yc-log { align-items: center; } .yc-log-panel { border-radius: 22px; } }
+.yc-log-head { display: flex; align-items: baseline; gap: 10px; }
+.yc-log-head b { font-size: 18px; }
+.yc-log-head span { font-size: 11px; color: #7a6640; }
+.yc-log-close { margin-left: auto; width: 36px; height: 36px; border-radius: 50%; border: 0; background: #b7790014; color: #5a3d00; font-size: 20px; cursor: pointer; }
+.yc-log-tabs { display: flex; gap: 6px; margin: 12px 0 8px; }
+.yc-log-tabs button { padding: 6px 12px; border-radius: 999px; font: inherit; font-size: 12px; cursor: pointer; border: 1px solid #b7790038; background: #fff8dc; color: #5a3d00; }
+.yc-log-tabs button.is-on { background: #ffc629; border-color: #b77900; font-weight: 700; }
+.yc-log-body { overflow-y: auto; overscroll-behavior: contain; }
+.yc-log-body table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.yc-log-body th { position: sticky; top: 0; background: #fffaf0; text-align: left; font-size: 11px; color: #7a6640; font-weight: 600; padding: 6px 4px; border-bottom: 1px solid #b7790030; }
+.yc-log-body td { padding: 8px 4px; border-bottom: 1px solid #b779001a; vertical-align: top; font-variant-numeric: tabular-nums; }
+.yc-log-body td small { display: block; font-size: 10.5px; color: #8a7a58; }
+.yc-log-body td i { font-style: normal; color: #c42a14; font-weight: 700; }
+.yc-log-body tr.is-done td { color: #7a6c50; }
+.yc-log-body .yc-none { padding: 30px 0; text-align: center; color: #7a6640; }
+body.light-mode .yc-log { background: #0005; }
+.yc-sheet .sf-title-text { white-space: nowrap; }

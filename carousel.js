@@ -98,6 +98,10 @@ function setup2DCarouselInteraction() {
   let startX = 0, startY = 0, startC = 0, lastX = 0, lastTime = 0, velocity = 0;
   const wheel = { acc: 0, timer: 0, lastStep: 0 };
   const count = () => _sfResults.length;
+  // 黃單模式不循環：索引限制在 0..n-1，拖出頭尾時有橡皮筋阻力
+  const finite = () => !!window.sfFinite?.();
+  const bound = i => finite() ? Math.max(0, Math.min(count() - 1, i)) : i;
+  const rubber = v => { if (!finite()) return v; const hi = Math.max(0, count() - 1); return v < 0 ? v * .28 : v > hi ? hi + (v - hi) * .28 : v; };
   // 省電模式也算「減少動態」→ 3D 資料夾輪播直接跳到最終狀態，不跑 rAF 動畫
   const reduced = () => (window.sfReduceMotion ? window.sfReduceMotion() : matchMedia('(prefers-reduced-motion: reduce)').matches);
 
@@ -151,9 +155,26 @@ function setup2DCarouselInteraction() {
   }
 
   // 只有值真的變了才寫 style，拖曳時省下大量樣式計算
+  // 透明度直接寫在每一層殼上 (inline opacity)，不寫在資料夾根節點的 --fd-alpha：
+  // 自訂屬性會繼承，根節點每幀改一次，整本資料夾 (含藏起來的詳細資料表單) 的每個元素都要重算樣式。
+  // 實測 (412x915、CPU 4x 降速、拖 6 趟) 樣式重算佔主執行緒 8~11 秒，這是最大宗。
+  const LAYER_ALPHA = { 'fd-top': .95, 'fd-edge': .8 };
+  function layersOf(el) {
+    if (!el._layers || !el._layers.length || el._layers[0].parentNode !== el) {
+      el._layers = Array.from(el.children).filter(c => !c.classList.contains('fd-sheet'));
+      el._layerK = el._layers.map(c => LAYER_ALPHA[c.classList[0]] || 1);
+      el._op = null;   // 內容換過 (innerHTML 重畫)：新的殼還沒有透明度
+    }
+    return el._layers;
+  }
   function put(el, transform, alpha, near, blur, lefty) {
     if (el._tf !== transform) { el.style.transform = transform; el._tf = transform; }
-    if (el._op !== alpha) { el.style.setProperty('--fd-alpha', alpha); el._op = alpha; }
+    const layers = layersOf(el);
+    if (el._op !== alpha) {
+      const a = +alpha;
+      for (let i = 0; i < layers.length; i++) layers[i].style.opacity = a === 1 && el._layerK[i] === 1 ? '' : String(+(a * el._layerK[i]).toFixed(3));
+      el._op = alpha;
+    }
     if (el._nr !== near) { el.classList.toggle('fd-near', near); el._nr = near; }
     if (el._bl !== blur) { el.classList.toggle('fd-blur1', blur === 1); el.classList.toggle('fd-blur2', blur === 2); el._bl = blur; }
     if (el._lf !== lefty) { el.classList.toggle('fd-lefty', lefty); el._lf = lefty; }
@@ -163,7 +184,7 @@ function setup2DCarouselInteraction() {
     const n = count();
     // The selected file follows the folder that is visually crossing the centre,
     // instead of waiting for the drag/wheel gesture to stop and snap.
-    if (n) _sfActiveIndex = Math.round(c);
+    if (n) _sfActiveIndex = bound(Math.round(c));
     _currentX = -c * _cardWidth;
     sfSyncWindow(c);
     const now = performance.now();
@@ -174,7 +195,7 @@ function setup2DCarouselInteraction() {
     const pull = outQuint((opening - .35) / .65);
     for (const entry of _sfPool) {
       const el = entry.el, v = entry.vIndex;
-      if (v === null || !n) { el.classList.add('sf-far'); continue; }
+      if (v === null || !n || !entry.student) { el.classList.add('sf-far'); el._tf = null; continue; }
       const d = v - c, ad = Math.abs(d);
       const p = pose(d, P0);
       const visible = p.alpha > .012;
@@ -225,10 +246,12 @@ function setup2DCarouselInteraction() {
       // 只寫在前板與背板上：寫在資料夾根節點會連整張詳細資料表單一起重算樣式
       if (!el._front || el._front.parentNode !== el) { el._front = el.querySelector(':scope > .fd-front'); el._back = el.querySelector(':scope > .fd-back'); el._sel = null; }
       if (el._sel !== sel && el._front) { el._front.style.setProperty('--fd-sel', sel); el._back.style.setProperty('--fd-sel', sel); el._sel = sel; }
-      // 資料紙要正對使用者，所以把這本的 yaw 反轉回去
-      if (isActive) {
+      // 資料紙要正對使用者，所以把這本的 yaw 反轉回去。
+      // 只有紙打開 (或正在打開/收起) 的那本才需要，而且寫在紙本身，不寫在資料夾根節點 (理由同上：繼承 → 整本重算)
+      if (entry === sheet.entry) {
         const cy = (-p.rot).toFixed(2) + 'deg';
-        if (el._cy !== cy) { el.style.setProperty('--fd-counter-yaw', cy); el._cy = cy; }
+        if (!el._sheet || el._sheet.parentNode !== el) { el._sheet = el.querySelector(':scope > .fd-sheet'); el._cy = null; }
+        if (el._cy !== cy && el._sheet) { el._sheet.style.setProperty('--fd-counter-yaw', cy); el._cy = cy; }
       }
     }
     const selected = sfStudentAt(_sfActiveIndex);
@@ -316,6 +339,7 @@ function setup2DCarouselInteraction() {
     if (!entry || !entry.student || state === 'locked') return;
     if (state !== 'idle') { resumeEditor = true; return; }
     if (entry.el.classList.contains('is-open') && sheet.target === 1) return;
+    window.sfEnsureSheet?.(entry.el);   // 紙 (表單) 點開才做
     for (const e of _sfPool) if (e !== entry) e.el.classList.remove('is-open');
     entry.el.classList.add('is-open');
     entry.el.classList.remove('is-closing');
@@ -350,6 +374,7 @@ function setup2DCarouselInteraction() {
   // ── 吸附到某一本 ─────────────────────────────────────────────────────────
   function settle(index, initialVelocity = 0) {
     clearTimeout(sheet.timer);
+    index = bound(index);
     _sfActiveIndex = index;
     if (reduced()) { c = index; snap.active = false; ext.mode = "none"; ext.ex = ext.part = ext.pulse = 1; state = "idle"; moving(false); paint(); scheduleOpen(); return; }
     snap.target = index;
@@ -401,7 +426,7 @@ function setup2DCarouselInteraction() {
     const dt = now - lastTime;
     if (dt > 0) velocity = .65 * ((x - lastX) / dt * 1000) + .35 * velocity;
     lastX = x; lastTime = now;
-    c = startC - dx / _cardWidth;          // 無限循環：兩端都不設限
+    c = rubber(startC - dx / _cardWidth);   // 無限循環：兩端都不設限 (黃單模式頭尾有阻力)
     requestFrame();
     return true;
   }
@@ -452,6 +477,9 @@ function setup2DCarouselInteraction() {
   window.addEventListener('mouseup', mouseEnd);
   window.addEventListener('blur', () => { mouseEnd(); if (touchId !== null) { touchId = null; up(true); } });
   area.addEventListener('dragstart', e => e.preventDefault());
+  // 舞台是 overflow:hidden，但點紙上的輸入框時瀏覽器會把它「捲」到輸入框的位置 (實測被捲走 99px,90px)，
+  // 紙就整張被推出畫面。舞台本來就不該捲，一動就歸零。
+  area.addEventListener('scroll', () => { if (area.scrollLeft || area.scrollTop) { area.scrollLeft = 0; area.scrollTop = 0; } }, { passive: true });
   // ── 觸控板橫向捲動 / 滾輪 ───────────────────────────────────────────────
   const pageScrollable = () => (document.scrollingElement || document.documentElement).scrollHeight > innerHeight + 4;
   area.addEventListener('wheel', e => {
@@ -462,7 +490,7 @@ function setup2DCarouselInteraction() {
       e.preventDefault();
       if (state !== 'dragging') { interrupt(); state = 'dragging'; moving(true); closeSheet(false); pushBack(); wheel.acc = 0; }
       const px = e.deltaMode === 1 ? e.deltaX * 16 : e.deltaX;
-      c += px / _cardWidth; wheel.acc = .6 * px + .4 * wheel.acc;
+      c = rubber(c + px / _cardWidth); wheel.acc = .6 * px + .4 * wheel.acc;
       requestFrame();
       clearTimeout(wheel.timer);
       wheel.timer = setTimeout(() => {
