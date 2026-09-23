@@ -23,17 +23,18 @@
   <meta name="theme-color" content="#151518">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=172">
-  <link rel="stylesheet" href="motion.css?v=172">
-  <link rel="stylesheet" href="folder.css?v=172">
-  <link rel="stylesheet" href="liquid-nav.css?v=172">
-  <link rel="stylesheet" href="quick-menu.css?v=172">
-  <link rel="stylesheet" href="boot-screen.css?v=172">
-  <link rel="stylesheet" href="tablet.css?v=172">
-  <link rel="stylesheet" href="tablet-transform.css?v=172">
-  <link rel="stylesheet" href="nav-adapt.css?v=172">
-  <link rel="stylesheet" href="color-mode.css?v=172">
-  <link rel="stylesheet" href="phone-leave.css?v=172">
+  <link rel="stylesheet" href="style.css?v=173">
+  <link rel="stylesheet" href="motion.css?v=173">
+  <link rel="stylesheet" href="folder.css?v=173">
+  <link rel="stylesheet" href="liquid-nav.css?v=173">
+  <link rel="stylesheet" href="quick-menu.css?v=173">
+  <link rel="stylesheet" href="boot-screen.css?v=173">
+  <link rel="stylesheet" href="tablet.css?v=173">
+  <link rel="stylesheet" href="tablet-transform.css?v=173">
+  <link rel="stylesheet" href="nav-adapt.css?v=173">
+  <link rel="stylesheet" href="color-mode.css?v=173">
+  <link rel="stylesheet" href="phone-leave.css?v=173">
+  <link rel="stylesheet" href="yellow-card.css?v=173">
   <script>
     /* 統一色系模式：用上次存的改色版樣式直接蓋上，避免開 App 先閃一次彩色 (細節見 color-mode.js) */
     try {
@@ -55,8 +56,8 @@
     /* 平板模式在畫面出來前就套上，避免先閃一次手機版排版 */
     try { if (localStorage.getItem('tablet_mode') === 'true') document.documentElement.classList.add('tablet-mode'); } catch (_) {}
   </script>
-  <link rel="manifest" href="manifest.json?v=172">
-  <link rel="apple-touch-icon" href="icon-192.png?v=172">
+  <link rel="manifest" href="manifest.json?v=173">
+  <link rel="apple-touch-icon" href="icon-192.png?v=173">
   <!-- xlsx-js-style 與 marked 改由 app.js 的 window.ensureXLSX() / window.ensureMarked() 需要時才載入，不再拖住啟動 -->
   <script>
     if ('serviceWorker' in navigator) {
@@ -204,7 +205,7 @@
 
   <!-- RAWAIR OS 開機畫面 (只在第一次打開 App 時出現) -->
   <div id="rawair-boot" role="status" aria-label="系統啟動中"><div id="rb-term"></div></div>
-  <script src="boot-screen.js?v=172"></script>
+  <script src="boot-screen.js?v=173"></script>
   <div id="toast-container" class="toast-container"></div>
 
   <!-- SW 有新版本：不擋操作的小提示，點了才重新整理 -->
@@ -760,6 +761,16 @@
       <span class="eb-arrow">›</span>
     </button>
 
+    <!-- 黃單額度 (同一條資料夾軌道，換成違規紀錄) -->
+    <button class="empty-bed-action" onclick="openYellowCards()">
+      <span class="eb-icon"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2" transform="rotate(-8 12 12)"/><path d="M12 8v5"/><path d="M12 16.5h.01"/></svg></span>
+      <div class="eb-content">
+        <span class="eb-title" style="color:#f5b400">黃單額度</span>
+        <span class="eb-desc">誰犯規、累犯幾次、這週清冰箱可以派誰</span>
+      </div>
+      <span class="eb-arrow">›</span>
+    </button>
+
     <!-- 住宿生檔案管理（Excel 表格） -->
     <button class="empty-bed-action" onclick="navigateTo('resident-management')">
       <span class="eb-icon"><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16M15 4v16"/></svg></span>
@@ -868,7 +879,11 @@
     <div class="sf-archive-footer"><span id="sf-result-count" role="status" aria-live="polite"></span><span class="sf-gesture-hint">左右拖曳瀏覽 · 點選綠色檔案編輯</span><div class="sf-rail-controls"><button aria-label="上一份檔案" onclick="sfCarousel?.previous()">←</button><button aria-label="下一份檔案" onclick="sfCarousel?.next()">→</button></div></div>
     <div id="sf-card-dots" class="sf-card-dots"></div>
 
-    <!-- Auto-save enabled: no manual save button needed -->
+    <!-- 軌道下方的操作列：不用打開資料夾就能黑洞目前這本，清完一輪按一次儲存 -->
+    <div id="sf-commit-bar" class="sf-commit-bar">
+      <button type="button" class="sf-commit-hole" onclick="clearStudentData(null)" aria-label="黑洞目前選取的檔案"><i aria-hidden="true"></i><span>黑洞這一本</span></button>
+      <button type="button" class="sf-commit-save" onclick="sfSaveAllPending()" disabled><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>沒有待儲存的變更</span></button>
+    </div>
   </div>
 
   <!-- ═══════════ 住宿生檔案管理（Excel 表格） ═══════════ -->
@@ -1779,22 +1794,23 @@
     <button type="button" class="nav-item" data-page="settings"><span class="nav-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-label">設定</span></button>
   </nav>
 
-  <script src="config.js?v=172"></script>
-  <script src="api.js?v=172"></script>
-  <script src="phonetic-search.js?v=172"></script>
-  <script src="app.js?v=172"></script>
-  <script src="import.js?v=172"></script>
-  <script src="theme.js?v=172"></script>
-  <script src="carousel.js?v=172"></script>
-  <script src="dissolve.js?v=172"></script>
-  <script src="navigation.js?v=172"></script>
-  <script src="nav-adapt.js?v=172"></script>
-  <script src="quick-menu.js?v=172"></script>
-  <script src="tablet.js?v=172"></script>
-  <script src="color-mode.js?v=172"></script>
-  <script src="tablet-transform.js?v=172"></script>
-  <script src="phone-leave.js?v=172"></script>
-  <script src="role-claim.js?v=172"></script>
+  <script src="config.js?v=173"></script>
+  <script src="api.js?v=173"></script>
+  <script src="phonetic-search.js?v=173"></script>
+  <script src="app.js?v=173"></script>
+  <script src="import.js?v=173"></script>
+  <script src="theme.js?v=173"></script>
+  <script src="carousel.js?v=173"></script>
+  <script src="dissolve.js?v=173"></script>
+  <script src="navigation.js?v=173"></script>
+  <script src="nav-adapt.js?v=173"></script>
+  <script src="quick-menu.js?v=173"></script>
+  <script src="tablet.js?v=173"></script>
+  <script src="color-mode.js?v=173"></script>
+  <script src="tablet-transform.js?v=173"></script>
+  <script src="phone-leave.js?v=173"></script>
+  <script src="role-claim.js?v=173"></script>
+  <script src="yellow-card.js?v=173"></script>
 
   <!-- 幹部工作手冊 Modal -->
   <div id="duty-manual-modal" class="modal-overlay">

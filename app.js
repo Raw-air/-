@@ -7103,6 +7103,7 @@ function sfSummary(s, draft) {
 // 把摘要寫回一本已經存在的資料夾 (儲存、清空之後用)
 function sfUpdateSummary(el, s, draft) {
   if (!el || !s) return;
+  if (window.yc?.active()) return;   // 黃單模式的資料夾內容由 yellow-card.js 自己畫
   const m = sfSummary(s, draft);
   const q = sel => el.querySelector(sel);
   const name = q('.fd-name'); if (name) { name.textContent = m.name; name.classList.toggle('is-empty', m.nameEmpty); }
@@ -7116,6 +7117,7 @@ function sfUpdateSummary(el, s, draft) {
 
 // 資料夾 DOM：6 層真正有 Z 深度的殼 (背板+標籤 / 左右側邊 / 內頁 / 前板玻璃+摘要 / 邊緣高光) + 抽出來的詳細資料紙
 function sfCardHTML(s, draft) {
+  if (window.yc?.active()) return window.yc.cardHTML(s);   // 黃單額度：同一條資料夾軌道，換成違規紀錄
   const d = draft || {};
   const name = d.name !== undefined ? d.name : (s.name || '');
   const sid = d.studentId !== undefined ? d.studentId : (s.studentId || '');
@@ -7287,10 +7289,13 @@ function onStudentFileSearch(query) {
     if (mirror) mirror.style.display = 'none';
     if (scene) scene.classList.remove('is-searching');
 
-    if (_sfRandomDefaults.length === 0) {
-      _sfRandomDefaults = state.students.slice();
+    if (window.yc?.active()) {
+      // 黃單模式：沒打字時只列出有黃單的人 (累犯多的排前面)
+      _sfResults = window.yc.roster();
+    } else {
+      if (_sfRandomDefaults.length === 0) _sfRandomDefaults = state.students.slice();
+      _sfResults = _sfRandomDefaults;
     }
-    _sfResults = _sfRandomDefaults;
     renderStudentFileCards();
     return;
   }
@@ -7336,7 +7341,10 @@ function onStudentFileSearch(query) {
 function renderStudentFileCards(sweepIn = false) {
   const track = document.getElementById('sf-card-track');
   if (!track) return;
-  document.getElementById('sf-result-count').textContent = String(_sfResults.length).padStart(2, '0') + ' 份檔案';
+  document.getElementById('sf-result-count').textContent = window.yc?.active()
+    ? window.yc.countLabel(_sfResults)
+    : String(_sfResults.length).padStart(2, '0') + ' 份檔案';
+  sfRefreshCommitBar();
   document.querySelector('.sf-selection').hidden = !_sfResults.length;
   document.querySelectorAll('.sf-rail-controls button').forEach(b => b.disabled = !_sfResults.length);
   if (window._sfAbortClear) window._sfAbortClear();   // 刪除動畫跑到一半就重新搜尋：先收掉那一場
@@ -7347,6 +7355,10 @@ function renderStudentFileCards(sweepIn = false) {
     for (const entry of _sfPool) if (entry.vIndex !== null) sfSaveDraft(entry);
     _sfPool = [];
     _sfWindowStart = null;
+    if (window.yc?.active() && !document.getElementById('sf-search-input').value.trim()) {
+      track.innerHTML = window.yc.emptyHTML();
+      return;
+    }
     track.innerHTML = `<div class="sf-empty-hint">
       <div style="font-size:48px; margin-bottom:12px;"><svg class="ui-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
       <div style="color:var(--dim); font-size:14px;">找不到符合的住宿生或床位</div>
@@ -7375,6 +7387,7 @@ let _carouselAttached = false;
 // Carousel interactions are defined in carousel.js.
 
 window.initStudentFiles = function () {
+  window.yc?.setMode('files');
   if (window.sfDissolve) window.sfDissolve.init();   // 刪除用的粒子 canvas 現在就建好，按垃圾桶不用等
   _sfRandomDefaults = [];
   document.getElementById('sf-search-input').value = '';
@@ -7494,6 +7507,7 @@ window.autoSaveStudentFile = async function (elem) {
     }
 
     if (typeof playClickSound === 'function') playClickSound('all_present');
+    sfRefreshCommitBar();
 
   } catch (err) {
     if (btn) {
@@ -7512,6 +7526,97 @@ window.autoSaveStudentFile = async function (elem) {
 };
 
 window.onStudentFileSearch = onStudentFileSearch;
+
+// ─── 資料夾軌道下方的「儲存」：可以連續黑洞好幾本、改好幾本，最後按一次全部送出 ───
+// 待儲存 = 回收池裡被改過的卡 + 已經被回收、存成草稿的卡
+function sfPendingIds() {
+  for (const entry of _sfPool) if (entry.vIndex !== null && entry.student) sfSaveDraft(entry);
+  return Array.from(_sfDrafts.keys()).filter(id => state.students.some(s => s.id === id));
+}
+
+function sfRefreshCommitBar() {
+  const bar = document.getElementById('sf-commit-bar');
+  if (!bar) return;
+  const n = window.yc?.active() ? window.yc.pendingCount() : sfPendingIds().length;
+  const btn = bar.querySelector('.sf-commit-save');
+  if (btn && !btn.classList.contains('is-busy')) {
+    btn.disabled = !n;
+    btn.querySelector('span').textContent = n ? '儲存 ' + n + ' 筆變更' : '沒有待儲存的變更';
+  }
+  bar.classList.toggle('has-pending', n > 0);
+  const hole = bar.querySelector('.sf-commit-hole');
+  if (hole) hole.disabled = !_sfResults.length;
+}
+window.sfRefreshCommitBar = sfRefreshCommitBar;
+
+window.sfSaveAllPending = async function () {
+  if (window.yc?.active()) return window.yc.saveAll();
+  const bar = document.getElementById('sf-commit-bar');
+  const btn = bar?.querySelector('.sf-commit-save');
+  if (!btn || btn.classList.contains('is-busy')) return;
+  const ids = sfPendingIds();
+  if (!ids.length) return;
+  const jobs = ids.map(id => {
+    const s = state.students.find(x => x.id === id);
+    const d = _sfDrafts.get(id);
+    const name = (d.name || '').trim();
+    const isEmpty = !!d.isEmpty || !name;
+    const values = {
+      name: isEmpty ? '' : name,
+      studentId: isEmpty ? '' : (d.studentId || '').trim(),
+      class: isEmpty ? '' : (d.class || '').trim(),
+      isForeign: isEmpty ? false : !!d.isForeign,
+      isEmpty,
+    };
+    const remarks = (d.remarks || '').trim();
+    const payload = { pageId: id, updateProfile: { name: values.name, class: values.class, studentId: values.studentId, isForeign: values.isForeign }, markEmpty: isEmpty };
+    if (isEmpty) payload.clearProfile = true;
+    return { s, d, values, remarks, remarkChanged: remarks !== (s.remarks || ''), payload };
+  });
+  btn.classList.add('is-busy'); btn.disabled = true;
+  btn.querySelector('span').textContent = '儲存中… 0/' + jobs.length;
+  let done = 0; const failed = [];
+  // 後端一次最多 25 筆，照點名那邊的慣例每批 20
+  for (let i = 0; i < jobs.length; i += 20) {
+    const part = jobs.slice(i, i + 20);
+    try {
+      await Promise.all([
+        window._api.updateAttendance(part.map(j => j.payload)),
+        ...part.filter(j => j.remarkChanged).map(j => window._api.updateRemark(j.s.id, j.remarks)),
+      ]);
+      for (const j of part) {
+        // 送出途中又被改過的卡，保留新的草稿
+        const stillSame = JSON.stringify(_sfDrafts.get(j.s.id)) === JSON.stringify(j.d);
+        rememberSavedProfile(j.s.id, { ...j.values, ...(j.remarkChanged ? { remarks: j.remarks } : {}) });
+        Object.assign(j.s, j.values, { remarks: j.remarks });
+        if (stillSame) _sfDrafts.delete(j.s.id);
+        done++;
+      }
+    } catch (err) {
+      failed.push(...part);
+      console.warn('[sfSaveAllPending]', err);
+    }
+    btn.querySelector('span').textContent = '儲存中… ' + done + '/' + jobs.length;
+  }
+  // 存好的那幾本重新畫 (打開的紙先收起來，不然重畫會把紙抽掉)
+  const savedIds = new Set(jobs.filter(j => !failed.includes(j)).map(j => j.s.id));
+  if (_sfPool.some(e => e.student && savedIds.has(e.student.id) && e.el.classList.contains('is-open'))) window.sfCarousel?.closeSheet(true);
+  for (const entry of _sfPool) {
+    if (entry.vIndex === null || !entry.student || !savedIds.has(entry.student.id)) continue;
+    const draft = _sfDrafts.get(entry.student.id);
+    entry.el.innerHTML = sfCardHTML(entry.student, draft);
+  }
+  window.sfCarousel?.paint();
+  btn.classList.remove('is-busy');
+  if (failed.length) {
+    showToast('有 ' + failed.length + ' 筆沒存成功，其餘 ' + done + ' 筆已同步。再按一次儲存重試', 'error');
+    haptic?.('heavy');
+  } else {
+    showToast('已同步 ' + done + ' 筆資料到總表', 'success');
+    if (typeof playClickSound === 'function') playClickSound('all_present');
+  }
+  sfRefreshCommitBar();
+};
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 圖片預覽彈窗 (Image Preview Modal)

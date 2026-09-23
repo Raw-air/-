@@ -1380,7 +1380,8 @@
   // 床位本身不會從房間裡消失，所以黑洞崩塌之後，同一本資料夾會以「空床」重新長回來；
   // 清空跟以前一樣是草稿，要按「儲存修改」才會同步 (誤按可以直接改回來)。
   window.clearStudentData = async function (btn) {
-    const folder = btn?.closest('.sf-folder') || document.querySelector('.sf-folder.active');
+    // 紙上的垃圾桶 = 那一本；軌道下方的黑洞鈕 (不用先打開) = 目前選取的那本
+    const folder = btn?.closest('.sf-folder') || (typeof sfActiveEntry === 'function' && sfActiveEntry()?.el) || document.querySelector('.sf-folder.active');
     if (!folder || window._sfBHBusy) return;
     const owner = _sfRenderMap.get(folder);
     if (!owner) return;
@@ -1391,8 +1392,12 @@
     const abort = () => { if (cancelled) return; cancelled = true; handle?.cancel(); };
     const onVisibility = () => { if (document.hidden) abort(); };
     const onNavigation = () => { if (currentPage !== 'student-files') abort(); };
+    const ycMode = !!window.yc?.active();
+    if (ycMode && !window.yc.list(owner).length) { window._sfBHBusy = false; showToast(owner.name ? '這一本沒有黃單可以銷' : '空床沒有黃單', 'info'); return; }
+    const doneMsg = ycMode ? '黃單已銷掉，清完一輪按下方「儲存」同步' : '床位已清空，清完一輪按下方「儲存」同步';
     const resetFields = () => {
       if (_sfRenderMap.get(folder) !== owner) return;
+      if (ycMode) { window.yc.markCleared(owner); window.sfRefreshCommitBar?.(); return; }
       const draft = { name: '', studentId: '', class: '', remarks: '', isForeign: false, isEmpty: true };
       _sfDrafts.set(owner.id, draft);          // 清空是草稿，跟「儲存修改」同一套流程
       // 名單少於回收池時同一床會出現在好幾本上，每一本都要清，否則另一本被回收時會把草稿還原
@@ -1405,6 +1410,7 @@
         if (badge) badge.textContent = '空床';
         if (typeof sfUpdateSummary === 'function') sfUpdateSummary(f, owner, draft);
       }
+      window.sfRefreshCommitBar?.();
     };
     try {
       window.sfCarousel?.lock();
@@ -1413,16 +1419,16 @@
       document.addEventListener('visibilitychange', onVisibility);
       window.addEventListener('app:navigate', onNavigation);
       // 省電模式：跳過黑洞，直接清空欄位
-      if (window.sfReduceMotion ? window.sfReduceMotion() : matchMedia('(prefers-reduced-motion: reduce)').matches) { haptic('medium'); resetFields(); showToast('床位已清空，按「儲存修改」同步', 'info'); return; }
+      if (window.sfReduceMotion ? window.sfReduceMotion() : matchMedia('(prefers-reduced-motion: reduce)').matches) { haptic('medium'); resetFields(); window.sfCarousel?.closeSheet(true); showToast(doneMsg, 'info'); return; }
       handle = run(folder);                     // 震動與聲音的節奏都在動畫的時間軸裡
       // 黑洞崩塌之後才補位：清空欄位、資料夾在黑暗裡以空床長回來，燈亮時已經在抽出
       const ok = await handle.reflow;
       if (!ok || cancelled) return;
       resetFields();
-      showToast('床位已清空，按「儲存修改」同步', 'info');
+      showToast(doneMsg, 'info');
       handle.restore();
-      window.sfCarousel?.closeSheet(true);      // 先把紙收回去，長回來、抽出之後會再自動打開
-      window.sfCarousel?.materialize(folder);   // 不 await：跟燈光回來同時進行
+      window.sfCarousel?.closeSheet(true);      // 紙收回去，長回來之後停在軌道上 (方便接著黑洞下一本，最後一次儲存)
+      window.sfCarousel?.materialize(folder, { reopen: false });   // 不 await：跟燈光回來同時進行
       await handle.done;
     } catch (err) {
       console.warn('[Dissolve]', err);

@@ -1,0 +1,186 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   1) 資料夾軌道下方的操作列 (資料微動 / 黃單 共用)：不用打開資料夾就能黑洞，清完一輪按一次儲存
+   2) 黃單額度 (#page-student-files.yc-mode)：同一條軌道、同一個黑洞，換成琥珀色的違規檔案
+   ═══════════════════════════════════════════════════════════════════════════ */
+.sf-commit-bar {
+  display: flex; gap: 10px; justify-content: center; align-items: stretch;
+  margin: 16px auto 0; max-width: 520px;
+}
+.sf-commit-bar button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 48px; padding: 0 18px; border-radius: 14px; cursor: pointer;
+  font: inherit; font-size: 14px; font-weight: 600; letter-spacing: .5px;
+  transition: transform .18s var(--fd-ease), background .2s, box-shadow .25s, opacity .2s;
+}
+.sf-commit-bar button:active:not(:disabled) { transform: scale(.96); }
+.sf-commit-bar button:disabled { opacity: .38; cursor: default; }
+.sf-commit-hole {
+  flex: 0 0 auto; color: #e9eee9; background: #ffffff0a; border: 1px solid #ffffff26;
+}
+.sf-commit-hole i {
+  width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
+  background: radial-gradient(circle at 50% 50%, #000 38%, #ff9a3c 46%, #ffd18a 52%, transparent 70%);
+  box-shadow: 0 0 10px #ff8a1f88;
+}
+.sf-commit-hole:hover:not(:disabled) { background: #ffffff16; }
+.sf-commit-save {
+  flex: 1 1 auto; color: #d9e6dc; background: #ffffff08; border: 1px dashed #ffffff30;
+}
+.sf-commit-bar.has-pending .sf-commit-save {
+  color: #f0fff4; background: #226a40; border: 1px solid #57e99180;
+  box-shadow: 0 0 0 0 #57e99166; animation: sfCommitPulse 2.2s ease-out infinite;
+}
+.sf-commit-save.is-busy { animation: none !important; opacity: .8; }
+@keyframes sfCommitPulse { 0% { box-shadow: 0 0 0 0 #57e99155; } 70%, 100% { box-shadow: 0 0 0 12px #57e99100; } }
+body.light-mode .sf-commit-hole { color: #263a2d; background: #ffffff8c; border-color: #3b614330; }
+body.light-mode .sf-commit-save { color: #4c6352; background: #ffffff60; border-color: #3b614340; }
+@media (prefers-reduced-motion: reduce) { .sf-commit-bar.has-pending .sf-commit-save { animation: none; } }
+@media (max-width: 639px) { .sf-commit-bar button { min-height: 46px; padding: 0 14px; font-size: 13px; } }
+
+/* ─── 黃單模式：琥珀色壓克力，選取的那本前板是警示黃 ─────────────────── */
+#page-student-files.yc-mode {
+  background: radial-gradient(ellipse 80% 55% at 40% 62%, #2a1c0355, transparent 70%), #0e0c08;
+  --fd-accent: linear-gradient(160deg, rgba(58,34,0,.87), rgba(245,166,0,.6) 31%, rgba(230,140,0,.5) 80%, rgba(46,24,0,.84));
+  --fd-active-front: linear-gradient(155deg, rgba(255,226,92,.9), rgba(255,190,20,.84) 38%, rgba(240,150,0,.82) 68%, rgba(120,58,0,.9));
+  --fd-accent-solid: #ffc629; --fd-glow: 0 0 26px -14px #ffb70080;
+  --fd-side: rgba(255,238,200,.5);
+  --fd-sheet: linear-gradient(160deg, #fffaf0, #f7eed6);
+  --fd-sheet-text: #3b2e12; --fd-sheet-text-dim: #7a6640;
+  --fd-input-border: #3b2e1230;
+}
+body.light-mode #page-student-files.yc-mode {
+  background: radial-gradient(ellipse 80% 55% at 40% 62%, #ffd66b40, transparent 70%), #f4f0e4;
+  --fd-active-front: linear-gradient(155deg, #ffe58ad0, #ffc42fc4 55%, #d98a00c8);
+  --fd-accent: linear-gradient(160deg, #7a4d00dd, #f5a60085 45%, #b876009e);
+  --fd-sheet: linear-gradient(160deg, #fffdf6, #f8f0da);
+}
+#page-student-files.yc-mode .sf-archive-status i { background: #ffc629; box-shadow: 0 0 12px #ffc62999; animation: ycBlink 1.6s ease-in-out infinite; }
+@keyframes ycBlink { 50% { opacity: .25; } }
+#page-student-files.yc-mode .sf-archive-heading h1 { color: #fff4d6; }
+body.light-mode #page-student-files.yc-mode .sf-archive-heading h1 { color: #3b2e12; }
+#page-student-files.yc-mode .sf-selection { background: linear-gradient(145deg, #fffdf2d6, #fff3cfa8 60%, #ffc62999); color: #3b2e12; }
+#page-student-files.yc-mode .sf-rail-controls button:hover { background: #ffc62924; }
+#page-student-files.yc-mode .sf-folder .fd-file-mark { color: color-mix(in srgb, #3b2500 calc(var(--fd-sel,0) * 100%), #6b4a00); }
+#page-student-files.yc-mode .sf-folder.active > .fd-front { border-color: #fff0b0b0; }
+#page-student-files.yc-mode .sf-search-mirror, #page-student-files.yc-mode .modern-input { caret-color: #ffc629; }
+
+/* 選取那本的前板頂端：黃黑警示條 (跟著 --fd-sel 淡入，跟綠色疊層同一個節奏) */
+#page-student-files.yc-mode .sf-folder .yc-hazard {
+  position: absolute; left: 0; right: 0; top: 0; height: 9px; border-radius: 18px 18px 0 0;
+  background: repeating-linear-gradient(-45deg, #1b1400 0 7px, #ffd21f 7px 14px);
+  opacity: calc(var(--fd-sel, 0) * .85); pointer-events: none;
+}
+/* 資料夾裡夾的黃色單子：幾張黃單就露出幾張，一張張錯開往上疊 */
+#page-student-files.yc-mode .sf-folder > .fd-paper { gap: 0; padding: 14px 16px; }
+#page-student-files.yc-mode .sf-folder > .fd-paper i.yc-slip {
+  position: absolute; left: calc(14px + var(--i) * 9px); top: calc(12px + var(--i) * 7px);
+  width: 58% !important; height: 44% !important; margin: 0; border-radius: 4px; opacity: 1 !important;
+  background: linear-gradient(170deg, #ffe45c, #ffc21a); box-shadow: 0 2px 5px #6b4a0038, inset 0 -1px #0000001a;
+  transform: rotate(calc(-4deg + var(--i) * 2.2deg));
+}
+#page-student-files.yc-mode .sf-folder > .fd-paper i.yc-slip::after {
+  content: ''; position: absolute; left: 10%; right: 22%; top: 22%; height: 3px; border-radius: 2px;
+  background: #8a5a0055; box-shadow: 0 8px 0 #8a5a0040, 0 16px 0 #8a5a0030;
+}
+/* 前板上的蓋章：累犯次數，3 次以上變紅 */
+.yc-stamp {
+  position: absolute; right: 16px; top: 18px; z-index: 2;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 64px; height: 64px; border-radius: 50%;
+  border: 2.5px solid #b77900; color: #8a5a00; background: #fff5c94d;
+  transform: rotate(-12deg); line-height: 1; pointer-events: none;
+  box-shadow: inset 0 0 0 3px #fff5c966;
+}
+.yc-stamp b { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.yc-stamp span { font-size: 9px; letter-spacing: 1px; margin-top: 2px; font-weight: 700; }
+.yc-stamp.is-hot { border-color: #d0321c; color: #c42a14; background: #ffe2d94d; box-shadow: inset 0 0 0 3px #ffd6cc66, 0 0 14px -4px #ff3b1f66; }
+.yc-stamp.is-zero { opacity: .45; border-style: dashed; }
+#page-student-files.yc-mode .sf-folder .yc-stamp { opacity: clamp(.35, calc(.35 + var(--fd-sel, 0)), 1); }
+#page-student-files.yc-mode .sf-folder .yc-stamp.is-zero { opacity: .35; }
+#page-student-files.yc-mode .fd-tag.yc-tag-reason { background: #fff3c2cc; border-color: #b7790055; color: #5a3d00; }
+#page-student-files.yc-mode .fd-tag.yc-tag-pending { background: #1b1400cc; border-color: #ffd21f; color: #ffd21f; }
+
+/* 抽出來的紙：違規紀錄 + 開單 */
+#page-student-files.yc-mode .fd-sheet .sf-card-badge-relative { color: #7a4d00; background: #ffe28a; border-color: #b7790040; }
+#page-student-files.yc-mode .fd-sheet .sf-icon-btn { color: #5a3d00; background: #b779000d; border-color: #b7790030; }
+#page-student-files.yc-mode .fd-sheet .sf-broom-btn:disabled { opacity: .3; cursor: default; }
+.yc-sheet .yc-label { font-size: 10.5px; letter-spacing: .5px; color: var(--fd-sheet-text-dim); margin: 6px 0 4px; }
+.yc-sheet .yc-list {
+  height: 128px; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 4px;
+  -webkit-user-select: text; user-select: text;
+}
+.yc-sheet .yc-row {
+  display: grid; grid-template-columns: 44px 1fr 28px; align-items: center; gap: 6px;
+  padding: 7px 6px 7px 10px; border-radius: 9px;
+  background: linear-gradient(170deg, #fff1a8, #ffe27a); border: 1px solid #d9a40040;
+  font-size: 13px; color: #3b2e12;
+}
+.yc-sheet .yc-row time { font-size: 11px; font-weight: 700; color: #8a5a00; font-variant-numeric: tabular-nums; }
+.yc-sheet .yc-row span { overflow-wrap: anywhere; line-height: 1.35; }
+.yc-sheet .yc-del {
+  width: 28px; height: 28px; border-radius: 8px; border: 0; cursor: pointer;
+  background: transparent; color: #8a5a00; font-size: 18px; line-height: 1;
+}
+.yc-sheet .yc-del:hover { background: #ff3b1f1f; color: #c42a14; }
+.yc-sheet .yc-none { font-size: 12.5px; color: var(--fd-sheet-text-dim); padding: 14px 4px; text-align: center; }
+.yc-sheet .yc-add { border-top: 1px dashed #b7790040; margin-top: 8px; padding-top: 9px; }
+.yc-sheet .yc-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+.yc-sheet .yc-chip {
+  padding: 5px 9px; border-radius: 999px; font: inherit; font-size: 11.5px; cursor: pointer;
+  color: #5a3d00; background: #fff8dc; border: 1px solid #b7790038; transition: background .15s, transform .15s;
+}
+.yc-sheet .yc-chip:active { transform: scale(.94); }
+.yc-sheet .yc-chip.is-on { background: #ffc629; border-color: #b77900; color: #2b1d00; font-weight: 700; }
+.yc-sheet .yc-add-row { display: flex; gap: 6px; }
+.yc-sheet .yc-reason {
+  flex: 1; min-width: 0; height: 40px; padding: 0 10px; border-radius: 10px; font-size: 13px;
+  background: #ffffffc0; border: 1px solid var(--fd-input-border); color: var(--fd-sheet-text);
+}
+.yc-sheet .yc-add-btn {
+  flex: 0 0 auto; height: 40px; padding: 0 14px; border-radius: 10px; border: 0; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 800; letter-spacing: 1px;
+  color: #2b1d00; background: linear-gradient(170deg, #ffd84a, #ffb400); box-shadow: 0 3px 10px #b779003a;
+}
+.yc-sheet .yc-add-btn:active { transform: scale(.96); }
+.yc-sheet .yc-add-btn:disabled { opacity: .6; }
+
+/* 標題旁的清冰箱看板 */
+#page-student-files .yc-duty {
+  display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 16px;
+  background: linear-gradient(150deg, #ffd21f1f, #ff9f0a12); border: 1px solid #ffc62940; color: #fff4d6;
+}
+#page-student-files .yc-duty[hidden] { display: none; }
+.yc-duty-n { display: flex; align-items: center; gap: 8px; }
+.yc-duty-n b { font-size: 34px; font-weight: 800; color: #ffc629; line-height: 1; font-variant-numeric: tabular-nums; }
+.yc-duty-n span { font-size: 11px; line-height: 1.35; color: #e8d9ad; }
+.yc-duty-meta small { font-size: 11px; color: #bba674; letter-spacing: .5px; }
+.yc-duty-meta p { margin: 3px 0 0; font-size: 13px; }
+.yc-duty-meta em { font-style: normal; color: #ffc629; font-weight: 700; margin-left: 2px; }
+body.light-mode #page-student-files .yc-duty { color: #3b2e12; background: #fff4cf; border-color: #d9a40060; }
+body.light-mode .yc-duty-n b, body.light-mode .yc-duty-meta em { color: #b77900; }
+body.light-mode .yc-duty-n span, body.light-mode .yc-duty-meta small { color: #7a6640; }
+@media (max-width: 639px) { #page-student-files .yc-duty { margin-top: 12px; } }
+
+/* 黃單模式的儲存鈕是黃的 */
+#page-student-files.yc-mode .sf-commit-bar.has-pending .sf-commit-save {
+  color: #2b1d00; background: linear-gradient(170deg, #ffd84a, #ffb400); border-color: #ffe28a;
+  animation-name: ycCommitPulse;
+}
+@keyframes ycCommitPulse { 0% { box-shadow: 0 0 0 0 #ffc62966; } 70%, 100% { box-shadow: 0 0 0 12px #ffc62900; } }
+
+/* 沒有人有黃單 */
+.yc-empty-card {
+  width: 54px; height: 72px; margin: 0 auto 16px; border-radius: 6px; transform: rotate(-8deg);
+  background: linear-gradient(170deg, #ffe45c, #ffc21a); box-shadow: 0 10px 24px #ffb70033;
+  opacity: .55;
+}
+
+/* 搜尋泡泡與選取卡的小點也換成琥珀色 */
+#page-student-files.yc-mode .blob { background: linear-gradient(135deg, #ffb400, #ff8a00); }
+#page-student-files.yc-mode .blob-2 { background: linear-gradient(135deg, #ffd21f, #ff9f0a); }
+#page-student-files.yc-mode .blob-3 { background: linear-gradient(135deg, #ff9f0a, #e07800); }
+#page-student-files.yc-mode .blob-bridge { background: #f59e0b; }
+#page-student-files.yc-mode .sf-selection i { background: #d98a00; box-shadow: 0 0 0 6px #ffc62940; }
+.yc-sheet .yc-label b { color: var(--fd-sheet-text); font-weight: 700; }
+#page-student-files.yc-mode .sf-folder .fd-summary .fd-name { color: #3b2500; font-weight: 600; }

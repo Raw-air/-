@@ -236,7 +236,7 @@ function setup2DCarouselInteraction() {
     const summaryMeta = document.getElementById('sf-selection-meta');
     if (selected && summaryName) {
       const name = selected.name || '空床';
-      const meta = selected.room + ' 房 · ' + selected.bed + ' 床 · 點選查看';
+      const meta = window.yc?.active() ? window.yc.meta(selected) : selected.room + ' 房 · ' + selected.bed + ' 床 · 點選查看';
       if (summaryName.textContent !== name) summaryName.textContent = name;
       if (summaryMeta.textContent !== meta) summaryMeta.textContent = meta;
     }
@@ -529,9 +529,10 @@ function setup2DCarouselInteraction() {
       requestFrame();
     },
     // 刪除完、床位清空後，同一本資料夾重新「長回來」：短進場 + 小抽出。回傳抽出完成的 Promise
-    materialize(el) {   // 鄰居維持讓開的狀態 (part 保持 1)，只有這本從 0 重新抽出
+    materialize(el, opts = {}) {   // 鄰居維持讓開的狀態 (part 保持 1)，只有這本從 0 重新抽出
       const entry = _sfPool.find(x => x.el === el);
       state = 'idle';
+      if (opts.reopen === false) resumeEditor = false;   // 連續清理：長回來後停在軌道上，不自動打開紙
       if (!entry) { paint(); return Promise.resolve(); }
       return new Promise(resolve => {
         ext.done = resolve;

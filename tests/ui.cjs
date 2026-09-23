@@ -324,7 +324,7 @@ async function run(engine,viewport){
   await page.screenshot({path:path.join(out,engine.name()+'-cards.png')});
   // 刪除 = 燈滅 + 光線行進的引力透鏡黑洞 + 粉塵潮汐流 + 崩塌閃光：renderer (canvas / WebGL context /
   // shader / FBO / 粒子池) 在頁面載入就備妥，按下去 250ms 內就開始畫，DOM 用遮罩與粉塵同步消失；
-  // 黑洞崩塌後資料夾以「空床」長回來 (草稿，不打 API)，紙會再自動打開
+  // 黑洞崩塌後資料夾以「空床」長回來 (草稿，不打 API)，停在軌道上等下方的儲存鈕
   assert.equal(await page.locator('.sf-dissolve-canvas').count(),1,'particle canvas is created at page mount');
   assert.ok(await page.evaluate(()=>sfDissolve.max>=3000),'the particle pool is preallocated for a dense dust cloud');
   await page.evaluate(()=>{window.__delT0=performance.now();window.__bhDone=false;clearStudentData(document.querySelector('.sf-folder.active .sf-broom-btn')).then(()=>window.__bhDone=true);});
@@ -350,7 +350,13 @@ async function run(engine,viewport){
   assert.equal(await page.locator('.sf-folder.active .fd-name').innerText(),'空床');
   assert.equal(requests.filter(r=>r.path==='/api/attendance'&&r.method!=='GET').length,writesBeforeArchiveClear);
   await page.waitForFunction(()=>sfCarousel.state==='idle',null,{timeout:5000});
-  await page.waitForSelector('.sf-folder.active.is-open',{timeout:3000}).catch(()=>{throw new Error('sheet re-opens on the re-materialised folder');});
+  // 連續清理：長回來之後停在軌道上 (紙不自動打開)，下方的儲存鈕顯示 1 筆待儲存
+  await page.waitForTimeout(600);
+  assert.equal(await page.locator('.sf-folder.active.is-open').count(),0,'rail stays closed after the black hole so the next file can be cleared');
+  assert.equal(await page.locator('#sf-commit-bar .sf-commit-save').isDisabled(),false,'commit bar save is enabled after a clear');
+  assert.match(await page.locator('#sf-commit-bar .sf-commit-save').innerText(),/儲存 1 筆/);
+  await page.evaluate(()=>sfCarousel.openSheet());
+  await page.waitForSelector('.sf-folder.active.is-open',{timeout:3000});
   await page.screenshot({path:path.join(out,engine.name()+'-after-delete.png')});
   // A pending save must not overwrite text the user types after pressing Save.
   await page.evaluate(async()=>{

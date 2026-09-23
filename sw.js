@@ -1,10 +1,10 @@
 // Atomic shell cache: HTML and JS must always come from the same release.
-const CACHE_NAME = 'biyuan-v135';
-const ASSETS = ['./', './index.html', './style.css?v=172', './phonetic-search.js?v=172', './app.js?v=172', './import.js?v=172',
-  './api.js?v=172', './config.js?v=172', './theme.js?v=172',
-  './carousel.js?v=172', './navigation.js?v=172', './motion.css?v=172', './liquid-nav.css?v=172', './nav-adapt.css?v=172', './nav-adapt.js?v=172', './folder.css?v=172', './dissolve.js?v=172',
-  './quick-menu.css?v=172', './quick-menu.js?v=172', './boot-screen.css?v=172', './boot-screen.js?v=172', './tablet.css?v=172', './tablet.js?v=172', './tablet-transform.css?v=172', './tablet-transform.js?v=172', './color-mode.css?v=172', './color-mode.js?v=172', './phone-leave.css?v=172', './phone-leave.js?v=172', './role-claim.js?v=172',
-  './manifest.json?v=172', './icon-192.png?v=172',
+const CACHE_NAME = 'biyuan-v136';
+const ASSETS = ['./', './index.html', './style.css?v=173', './phonetic-search.js?v=173', './app.js?v=173', './import.js?v=173',
+  './api.js?v=173', './config.js?v=173', './theme.js?v=173',
+  './carousel.js?v=173', './navigation.js?v=173', './motion.css?v=173', './liquid-nav.css?v=173', './nav-adapt.css?v=173', './nav-adapt.js?v=173', './folder.css?v=173', './dissolve.js?v=173',
+  './quick-menu.css?v=173', './quick-menu.js?v=173', './boot-screen.css?v=173', './boot-screen.js?v=173', './tablet.css?v=173', './tablet.js?v=173', './tablet-transform.css?v=173', './tablet-transform.js?v=173', './color-mode.css?v=173', './color-mode.js?v=173', './phone-leave.css?v=173', './phone-leave.js?v=173', './role-claim.js?v=173', './yellow-card.css?v=173', './yellow-card.js?v=173',
+  './manifest.json?v=173', './icon-192.png?v=173',
   './Lp/ICON/COPY.svg', './Lp/ICON/HOME.svg', './Lp/ICON/NEW.svg', './Lp/ICON/RESET.svg', './Lp/ICON/SETTIN.svg'];
 self.addEventListener('install', event => {
   // cache:'reload' 繞過瀏覽器 HTTP 快取，避免裝新版 SW 時把舊的 index.html 誤存進去
