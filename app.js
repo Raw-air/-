@@ -772,7 +772,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // 1. 檢查確認回報狀態是否有更新
         // 新後端會帶 date：別天的回報不要套到今天 (date 可能是 ISO 或舊式「9月12日」，統一換成 ISO 比)
-        if (data.ts > _lastPollTs && (!data.date || dateColumnToISO(data.date) === localTodayISO())) {
+        // 舊後端沒帶 date，改看信號寫入時間 ts 是哪一天；不然昨天最後一次回報會一直被當成今天的「已回報」
+        const sigDay = data.date ? dateColumnToISO(data.date) : (data.ts ? localISOOf(new Date(data.ts)) : '');
+        if (data.ts > _lastPollTs && sigDay === localTodayISO()) {
           _lastPollTs = data.ts;
           const newConfirms = data.confirms ? data.confirms.split(',').filter(Boolean) : [];
           if (newConfirms.join(',') !== state.confirmedSquads.join(',') || state.confirmedDate !== localTodayISO()) {
@@ -4466,9 +4468,12 @@ function showToast(msg, type = 'info') {
 const EXPORT_START_KEY = 'export_start_date';
 const EXPORT_END_KEY = 'export_end_date';
 
+function localISOOf(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
 function localTodayISO() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  return localISOOf(new Date());
 }
 
 // 後端舊欄位只有月日；只在它真的對應到今天時才沿用，
