@@ -1,10 +1,10 @@
 // Atomic shell cache: HTML and JS must always come from the same release.
-const CACHE_NAME = 'biyuan-v143';
-const ASSETS = ['./', './index.html', './style.css?v=180', './phonetic-search.js?v=180', './app.js?v=180', './import.js?v=180',
-  './api.js?v=180', './config.js?v=180', './theme.js?v=180',
-  './carousel.js?v=180', './navigation.js?v=180', './motion.css?v=180', './liquid-nav.css?v=180', './nav-adapt.css?v=180', './nav-adapt.js?v=180', './folder.css?v=180', './dissolve.js?v=180',
-  './quick-menu.css?v=180', './quick-menu.js?v=180', './boot-screen.css?v=180', './boot-screen.js?v=180', './tablet.css?v=180', './tablet.js?v=180', './tablet-transform.css?v=180', './tablet-transform.js?v=180', './color-mode.css?v=180', './color-mode.js?v=180', './phone-leave.css?v=180', './phone-leave.js?v=180', './role-claim.js?v=180', './yellow-card.css?v=180', './yellow-card.js?v=180', './leave-all.css?v=180', './leave-all.js?v=180',
-  './manifest.json?v=180', './icon-192.png?v=180',
+const CACHE_NAME = 'biyuan-v144';
+const ASSETS = ['./', './index.html', './style.css?v=181', './phonetic-search.js?v=181', './app.js?v=181', './import.js?v=181',
+  './api.js?v=181', './config.js?v=181', './theme.js?v=181',
+  './carousel.js?v=181', './navigation.js?v=181', './motion.css?v=181', './liquid-nav.css?v=181', './nav-adapt.css?v=181', './nav-adapt.js?v=181', './folder.css?v=181', './dissolve.js?v=181',
+  './quick-menu.css?v=181', './quick-menu.js?v=181', './boot-screen.css?v=181', './boot-screen.js?v=181', './tablet.css?v=181', './tablet.js?v=181', './tablet-transform.css?v=181', './tablet-transform.js?v=181', './color-mode.css?v=181', './color-mode.js?v=181', './phone-leave.css?v=181', './phone-leave.js?v=181', './role-claim.js?v=181', './yellow-card.css?v=181', './yellow-card.js?v=181', './leave-all.css?v=181', './leave-all.js?v=181',
+  './manifest.json?v=181', './icon-192.png?v=181',
   './Lp/ICON/COPY.svg', './Lp/ICON/HOME.svg', './Lp/ICON/NEW.svg', './Lp/ICON/RESET.svg', './Lp/ICON/SETTIN.svg'];
 self.addEventListener('install', event => {
   // cache:'reload' 繞過瀏覽器 HTTP 快取，避免裝新版 SW 時把舊的 index.html 誤存進去
