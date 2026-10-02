@@ -795,12 +795,14 @@ function getDutySchedule(date) {
   };
 
   if (day === 0 || day === 6) {
-    find(main, '08:00').text = '櫃台桌子要整理 / 包裹牌子朝門口放 / 放假日的牌子（藏在房間號後面）';
+    main.splice(main.indexOf(find(main, '16:00')), 1); // 假日學校沒開，不用去拿包裹與綠本
+    find(main, '08:00').text = '櫃台桌子要整理 / 放假日的牌子（藏在房間號後面）';
     find(main, '08:05').text = '轉電話（原本轉學務處，假日上午 8:00~12:59 改轉給主值）';
     find(main, '12:00').text += ' / 去馨園拿便當（誰去拿都可以，喬好就好） / 送綠本（看晚上哪間宿舍值班，就送去給那間宿舍）';
     find(main, '13:00').text += day === 6
       ? ' / 中午值班節結束，轉電話（外線轉主值，內線不用轉）'
       : ' / 中午值班節結束，轉電話（外線轉副值，內線不用轉）';
+    [...main, ...sub].forEach(t => { t.text = t.text.replaceAll('包裹牌子', '假日牌子'); });
   }
 
   if (day === 5) {
