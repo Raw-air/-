@@ -781,7 +781,8 @@ const DUTY_TASKS = {
 };
 
 // 依日期組出當天班表
-// 週五、週六為宿舍假日（晚上不點名）；週日與週一到週四用平日班表，週六、週日中午另加拿便當
+// 週五、週六為宿舍假日（晚上不點名、送點名表跟筆）；週日晚上仍點名，與週一到週四相同
+// 週六、週日另有假日規則：牌子、電話轉接、便當、綠本
 function getDutySchedule(date) {
   const day = date.getDay();
   const isHoliday = day === 5 || day === 6;
@@ -794,7 +795,12 @@ function getDutySchedule(date) {
   };
 
   if (day === 0 || day === 6) {
-    find(main, '12:00').text += ' / 去馨園宿舍拿便當';
+    find(main, '08:00').text = '櫃台桌子要整理 / 包裹牌子朝門口放 / 放假日的牌子（藏在房間號後面）';
+    find(main, '08:05').text = '轉電話（原本轉學務處，假日上午 8:00~12:59 改轉給主值）';
+    find(main, '12:00').text += ' / 去馨園拿便當（誰去拿都可以，喬好就好） / 送綠本（看晚上哪間宿舍值班，就送去給那間宿舍）';
+    find(main, '13:00').text += day === 6
+      ? ' / 中午值班節結束，轉電話（外線轉主值，內線不用轉）'
+      : ' / 中午值班節結束，轉電話（外線轉副值，內線不用轉）';
   }
 
   if (day === 5) {
@@ -804,7 +810,7 @@ function getDutySchedule(date) {
   }
 
   if (isHoliday) {
-    add(main, { time: '22:25', text: '把點名表送到各樓層交誼廳' });
+    add(main, { time: '22:25', text: '把點名表跟筆送上去給各樓層交誼廳' });
     main.splice(main.indexOf(find(main, '23:00')), 1);
     find(main, '23:30').text = '去各樓層把點名表拿下來櫃檯 / 上保全';
 
@@ -814,7 +820,7 @@ function getDutySchedule(date) {
     t.text = announce('11:00') + ' / ' + t.text;
   }
 
-  return { title: isHoliday ? '假日勤務' : '平日勤務', main, sub };
+  return { title: (day === 0 || isHoliday) ? '假日勤務' : '平日勤務', main, sub };
 }
 
 function updateDutyManualPreview() {
