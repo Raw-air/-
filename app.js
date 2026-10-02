@@ -799,9 +799,7 @@ function getDutySchedule(date) {
     find(main, '08:00').text = '櫃台桌子要整理 / 放假日的牌子（藏在房間號後面）';
     find(main, '08:05').text = '轉電話（原本轉學務處，假日上午 8:00~12:59 改轉給主值）';
     find(main, '12:00').text += ' / 去馨園拿便當（誰去拿都可以，喬好就好） / 送綠本（看晚上哪間宿舍值班，就送去給那間宿舍）';
-    find(main, '13:00').text += day === 6
-      ? ' / 中午值班節結束，轉電話（外線轉主值，內線不用轉）'
-      : ' / 中午值班節結束，轉電話（外線轉副值，內線不用轉）';
+    find(main, '13:00').text += ' / 中午值班節結束，轉電話（下午 13:00~17:00 外線轉副值，內線不用轉）';
     [...main, ...sub].forEach(t => { t.text = t.text.replaceAll('包裹牌子', '假日牌子'); });
   }
 
@@ -820,6 +818,14 @@ function getDutySchedule(date) {
     add(sub, { time: '22:30', text: announce('10:30') });
     const t = find(sub, '23:00');
     t.text = announce('11:00') + ' / ' + t.text;
+  }
+
+  if (day === 0 || day === 6) {
+    const t = find(main, '23:00');
+    if (t) t.text = '放值星寢室的牌子 / ' + t.text;
+    else add(main, { time: '23:00', text: '放值星寢室的牌子' });
+    const last = find(main, '23:55');
+    last.text = last.text.replace('牌子掛值星寢室 / ', '');
   }
 
   return { title: (day === 0 || isHoliday) ? '假日勤務' : '平日勤務', main, sub };
