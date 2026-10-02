@@ -777,24 +777,45 @@ const DUTY_TASKS = {
       { time: "23:00", text: "關掉櫃台附近的電燈" },
       { time: "23:30", text: "倒櫃台底下的垃圾 / 上保全 (星形鑰匙、藍色門紐)" }
     ]
-  },
-  friday: {
-    main: [
-      { time: "06:00", text: "關宿舍電燈" },
-      { time: "07:50", text: "把碧院冷氣關掉 (按鈕從右下關到左上，另外三個撥扭要轉成關)" },
-      { time: "08:00", text: "櫃台桌子要整理 / 綠本交給學務處 / 包裹牌子朝門口放" },
-      { time: "08:05", text: "轉電話 (黃色: ** 77 2535644 #, 白色: *301 322)" },
-      { time: "12:00", text: "收包裹牌子" },
-      { time: "12:50", text: "廣播並全棟斷電 (只留1F跟3F走廊燈，其他冷氣電燈全關)" },
-      { time: "13:00", text: "管理室上鎖 / 白板寫上『如果回來打給值星』與電話" },
-      { time: "13:05", text: "管理室門口放紅龍 / 將黃綠紅三把鑰匙交給教官室" }
-    ],
-    sub: [
-      { time: "12:50", text: "協助主值廣播並確認各樓層人員清空" },
-      { time: "13:00", text: "協助檢查各寢室是否斷電與門窗關閉" }
-    ]
   }
 };
+
+// 依日期組出當天班表
+// 週五、週六為宿舍假日（晚上不點名）；週日與週一到週四用平日班表，週六、週日中午另加拿便當
+function getDutySchedule(date) {
+  const day = date.getDay();
+  const isHoliday = day === 5 || day === 6;
+  const main = DUTY_TASKS.regular.main.map(t => ({ ...t }));
+  const sub = DUTY_TASKS.regular.sub.map(t => ({ ...t }));
+  const find = (list, time) => list.find(t => t.time === time);
+  const add = (list, task) => {
+    list.push(task);
+    list.sort((x, y) => x.time.localeCompare(y.time));
+  };
+
+  if (day === 0 || day === 6) {
+    find(main, '12:00').text += ' / 去馨園宿舍拿便當';
+  }
+
+  if (day === 5) {
+    const t = find(main, '16:00');
+    t.time = '16:30';
+    t.text = '去中正大樓看有沒有碧苑的包裹（有才拿）、看信件 / 若今天教官值班，去學務處拿綠本，沒有就不用拿';
+  }
+
+  if (isHoliday) {
+    add(main, { time: '22:25', text: '把點名表送到各樓層交誼廳' });
+    main.splice(main.indexOf(find(main, '23:00')), 1);
+    find(main, '23:30').text = '去各樓層把點名表拿下來櫃檯 / 上保全';
+
+    const announce = (clock) => `管理室廣播（「管理室廣播 管理室廣播 現在時間為晚上 ${clock} 請有要提早休息的住宿生到各樓層進行簽到 管理室重複廣播」）`;
+    add(sub, { time: '22:30', text: announce('10:30') });
+    const t = find(sub, '23:00');
+    t.text = announce('11:00') + ' / ' + t.text;
+  }
+
+  return { title: isHoliday ? '假日勤務' : '平日勤務', main, sub };
+}
 
 function updateDutyManualPreview() {
   const previewEl = document.getElementById('current-task-preview');
@@ -802,8 +823,7 @@ function updateDutyManualPreview() {
   
   const now = new Date();
   const currentStr = now.getHours().toString().padStart(2, '0') + ":" + now.getMinutes().toString().padStart(2, '0');
-  const isFriday = now.getDay() === 5;
-  const tasksGroup = isFriday ? DUTY_TASKS.friday : DUTY_TASKS.regular;
+  const tasksGroup = getDutySchedule(now);
   
   // 尋找主值與副值即將或正在進行的任務
   let activeTask = "目前無待辦事項，請保持機動";
@@ -900,10 +920,8 @@ function openDutyManualModal() {
   
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const isFriday = now.getDay() === 5;
-  const tasksGroup = isFriday ? DUTY_TASKS.friday : DUTY_TASKS.regular;
-  
-  const scheduleTypeTitle = isFriday ? '禮拜五中午交接' : '平日勤務';
+  const tasksGroup = getDutySchedule(now);
+  const scheduleTypeTitle = tasksGroup.title;
   
   const renderTasks = (tasks, title, color) => {
     let html = `
