@@ -1164,6 +1164,7 @@ function getDutySchedule(date) {
     add(main, { time: '22:25', text: '把點名表跟筆送上去給各樓層交誼廳' });
     main.splice(main.indexOf(find(main, '23:00')), 1);
     find(main, '23:30').text = '去各樓層把點名表拿下來櫃檯 / 上保全';
+    add(main, { time: '23:40', text: '回報人數給值班宿舍' });
 
     const announce = (clock) => `管理室廣播（「管理室廣播 管理室廣播 現在時間為晚上 ${clock} 請有要提早休息的住宿生到各樓層進行簽到 管理室重複廣播」）`;
     add(sub, { time: '22:30', text: announce('10:30') });
