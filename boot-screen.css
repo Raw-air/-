@@ -23,7 +23,26 @@
 /* 開機期間把舊的終端機載入畫面藏起來 */
 body.rawair-booting #loading-overlay { opacity: 0 !important; }
 
-#rb-term > div { white-space: pre; overflow: hidden; text-overflow: clip; min-height: 1.35em; }
+/* 背景：ASCII 3D 錦鯉 (boot-fish.js 畫在這張 canvas 上)，底下是深青色的水，字永遠疊在它上面 */
+#rb-fish {
+  position: absolute;
+  top: 0;
+  left: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+  background:
+    radial-gradient(90% 60% at 70% -10%, rgba(18, 92, 104, .28), transparent 70%),
+    linear-gradient(#02121a, #000 75%);
+  animation: rb-fish-in .7s ease-out both;
+}
+@keyframes rb-fish-in { from { opacity: 0; } }
+#rb-term { position: relative; z-index: 1; }
+
+/* 字的周圍暈一圈黑，背景的魚經過時字還是清楚 */
+#rb-term > div { white-space: pre; overflow: hidden; text-overflow: clip; min-height: 1.35em; text-shadow: 0 0 2px #000, 0 0 4px #000, 0 0 8px #000; }
 
 /* 大字 RAWAIR：用字元拼出來的 ASCII 字，字級由 JS 依螢幕寬度算好 */
 #rb-term .rb-art {

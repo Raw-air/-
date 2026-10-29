@@ -26,6 +26,15 @@
 
   var term = document.getElementById('rb-term');
 
+  // 背景的 ASCII 3D 錦鯉：省電模式整張拿掉不跑；系統要求減少動態就只畫一張不動的；字底下的魚會壓暗
+  var fish = null, fishEl = document.getElementById('rb-fish');
+  if (fast || !window.RawairFish) { if (fishEl) fishEl.parentNode.removeChild(fishEl); }
+  else {
+    var still = false;
+    try { still = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (_) {}
+    try { fish = window.RawairFish.start(fishEl, { reduced: still, text: term }); } catch (_) {}
+  }
+
   // ANSI Shadow 字型的 RAWAIR
   var ART = [
     '██████╗  █████╗ ██╗    ██╗ █████╗ ██╗██████╗ ',
@@ -330,6 +339,7 @@
     finished = true;
     clearTimeout(maxTimer);
     clearInterval(spinTimer);
+    if (fish) { fish.stop(); fish = null; }   // 魚馬上停，主執行緒讓給 app.js 第一次畫面
     if (mo) mo.disconnect();
     if (wrappedFetch && window.fetch === wrappedFetch) window.fetch = origFetch;
     root.classList.add('rb-exit');
