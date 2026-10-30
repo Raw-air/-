@@ -44,15 +44,18 @@ body.rawair-booting #loading-overlay { opacity: 0 !important; }
 /* 字的周圍暈一圈黑，背景的魚經過時字還是清楚 */
 #rb-term > div { white-space: pre; overflow: hidden; text-overflow: clip; min-height: 1.35em; text-shadow: 0 0 2px #000, 0 0 4px #000, 0 0 8px #000; }
 
-/* 大字 RAWAIR：用字元拼出來的 ASCII 字，字級由 JS 依螢幕寬度算好 */
+/* 大字 RAWAIR：用字元拼出來的 ASCII 字，字級由 JS 依螢幕寬度算好
+   顏色是跟桌機版一樣的漸層 (青 → 綠 → 藍 → 紫)。不讓它流動：每幀重畫 276 格會拖慢慢手機的開機 (4 倍降速實測多 1.5～2 秒)。
+   不加光暈：每列各自的光暈會疊到上一列，列與列之間會出現一條條亮線 */
 #rb-term .rb-art {
   display: flex;
   height: 1.15em;
   min-height: 1.15em;
   line-height: 1.15em;
   color: #39ff9f;
-  text-shadow: 0 0 6px rgba(57, 255, 159, .55);
+  text-shadow: none;
   font-weight: 700;
+  overflow: visible;
 }
 /* 固定格子：每個字元剛好 0.6em 寬、1.15em 高，不管手機用哪個字型都對齊 */
 #rb-term .rb-art b {
@@ -62,10 +65,43 @@ body.rawair-booting #loading-overlay { opacity: 0 !important; }
   overflow: hidden;
   text-align: center;
   font-weight: 700;
+  /* 漸層寬 = 2 倍大字寬 (46 欄 × 0.6em × 2)，大字剛好是前半段的青 → 紫；每格只露出自己那一段 */
+  background-image: linear-gradient(90deg, #00ffcc 0%, #39ff9f 17%, #3d7bff 34%, #b05cff 50%, #ff5cd6 62%, #6a6cff 80%, #00ffcc 100%);
+  background-size: 55.2em 100%;
+  background-repeat: repeat-x;
+  background-position: calc(var(--c, 0) * -.6em) 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
 }
+/* 框線字 ╔ ╗ ╚ ╝ ═ ║ 不用字型畫 (字型的框線比行高短，上下兩列接不起來，會露出一條條黑線)：
+   整格塗漸層，再用遮罩只留下雙線的形狀，線一路畫到格子邊，跟上下左右接得起來 */
+#rb-term .rb-art b.rb-bx {
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  height: calc(1.15em + 1px);
+  position: relative;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+#rb-term .rb-art b.rb-bx-h { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 11.5' preserveAspectRatio='none'%3E%3Cpath d='M0 3.85h6v0.8h-6zM0 6.85h6v0.8h-6z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 11.5' preserveAspectRatio='none'%3E%3Cpath d='M0 3.85h6v0.8h-6zM0 6.85h6v0.8h-6z'/%3E%3C/svg%3E"); }
+#rb-term .rb-art b.rb-bx-v { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 11.5' preserveAspectRatio='none'%3E%3Cpath d='M1.2 0h0.8v11.5h-0.8zM4 0h0.8v11.5h-0.8z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 11.5' preserveAspectRatio='none'%3E%3Cpath d='M1.2 0h0.8v11.5h-0.8zM4 0h0.8v11.5h-0.8z'/%3E%3C/svg%3E"); }
+#rb-term .rb-art b.rb-bx-dr { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 11.5' preserveAspectRatio='none'%3E%3Cpath d='M1.2 3.85h4.8v0.8h-4.8zM1.2 3.85h0.8v7.65h-0.8zM4 6.85h2v0.8h-2zM4 6.85h0.8v4.65h-0.8z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 11.5' preserveAspectRatio='none'%3E%3Cpath d='M1.2 3.85h4.8v0.8h-4.8zM1.2 3.85h0.8v7.65h-0.8zM4 6.85h2v0.8h-2zM4 6.85h0.8v4.65h-0.8z'/%3E%3C/svg%3E"); }
+#rb-term .rb-art b.rb-bx-dl { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 11.5' preserveAspectRatio='none'%3E%3Cpath d='M0 3.85h4.8v0.8h-4.8zM4 3.85h0.8v7.65h-0.8zM0 6.85h2v0.8h-2zM1.2 6.85h0.8v4.65h-0.8z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 11.5' preserveAspectRatio='none'%3E%3Cpath d='M0 3.85h4.8v0.8h-4.8zM4 3.85h0.8v7.65h-0.8zM0 6.85h2v0.8h-2zM1.2 6.85h0.8v4.65h-0.8z'/%3E%3C/svg%3E"); }
+#rb-term .rb-art b.rb-bx-ur { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 11.5' preserveAspectRatio='none'%3E%3Cpath d='M1.2 0h0.8v7.65h-0.8zM1.2 6.85h4.8v0.8h-4.8zM4 0h0.8v4.65h-0.8zM4 3.85h2v0.8h-2z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 11.5' preserveAspectRatio='none'%3E%3Cpath d='M1.2 0h0.8v7.65h-0.8zM1.2 6.85h4.8v0.8h-4.8zM4 0h0.8v4.65h-0.8zM4 3.85h2v0.8h-2z'/%3E%3C/svg%3E"); }
+#rb-term .rb-art b.rb-bx-ul { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 11.5' preserveAspectRatio='none'%3E%3Cpath d='M4 0h0.8v7.65h-0.8zM0 6.85h4.8v0.8h-4.8zM1.2 0h0.8v4.65h-0.8zM0 3.85h2v0.8h-2z'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 11.5' preserveAspectRatio='none'%3E%3Cpath d='M4 0h0.8v7.65h-0.8zM0 6.85h4.8v0.8h-4.8zM1.2 0h0.8v4.65h-0.8zM0 3.85h2v0.8h-2z'/%3E%3C/svg%3E"); }
+/* 實心格往右、往下多蓋 1px：格子寬高不是整數像素，不多蓋一點格子之間會露出細縫 */
 #rb-term .rb-art b.rb-full {
-  background: #39ff9f;
-  box-shadow: 0 0 5px rgba(57, 255, 159, .45);
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  flex: 0 0 calc(.6em + 1px);
+  width: calc(.6em + 1px);
+  height: calc(1.15em + 1px);
+  margin-right: -1px;
+  position: relative;
 }
 #rb-term .rb-status { margin-top: .35em; color: #c9d1d9; }
 #rb-term .ok { color: #3fb950; }
