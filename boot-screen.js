@@ -44,6 +44,8 @@
     '██║  ██║██║  ██║╚███╔███╔╝██║  ██║██║██║  ██║',
     '╚═╝  ╚═╝╚═╝  ╚═╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝╚═╝  ╚═╝'
   ];
+  // 框線字改用 CSS 遮罩畫 (見 boot-screen.css 的 .rb-bx)
+  var BOX = { '═': 'h', '║': 'v', '╔': 'dr', '╗': 'dl', '╚': 'ur', '╝': 'ul' };
   // 大字的字級：盡量撐滿寬度 (等寬字大約 0.6em 寬)，最大 30px
   function artSize() {
     var w = (term && term.clientWidth) || window.innerWidth - 24;
@@ -82,10 +84,12 @@
       div.style.fontSize = artSize() + 'px';
       // 每個字元放進固定寬度的格子：手機字型的方塊字、框線字寬度不一，不固定格子就會跑版。
       // 「█」直接用底色填滿整格，不靠字型。
+      // 漸層：每格記住自己在第幾欄 (--c)，整個大字共用同一條青→綠→藍→紫的漸層
       var cells = '';
       for (var ci = 0; ci < text.length; ci++) {
         var ch = text[ci];
-        cells += ch === '█' ? '<b class="rb-full"></b>' : '<b>' + (ch === ' ' ? '&nbsp;' : ch) + '</b>';
+        var bx = BOX[ch];
+        cells += (ch === '█' ? '<b class="rb-full"' : bx ? '<b class="rb-bx rb-bx-' + bx + '"' : '<b') + ' style="--c:' + ci + '">' + (ch === '█' || bx ? '' : ch === ' ' ? '&nbsp;' : ch) + '</b>';
       }
       div.innerHTML = cells;
     } else if (TAGS[kind]) {

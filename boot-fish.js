@@ -1,16 +1,19 @@
 // RAWAIR 開機畫面背景：ASCII 3D 錦鯉 (近的一條繞 8 字、遠處一條反方向游)
 // 同 donut.c：取樣魚的曲面 → 透視投影 → z-buffer → 亮度換字元，從字元圖集貼到 canvas
 // RawairFish.start(canvas, { reduced, text }) → { stop() }；reduced 只畫一張；text = #rb-term，字底下的魚壓暗
+// 整片背景鋪滿暗暗的 ASCII 水紋 (水面折射的光網 + 斜斜的光束)，魚在水紋裡面游
 (function () {
   var M = Math, sin = M.sin, cos = M.cos, sqrt = M.sqrt, max = M.max, min = M.min, ceil = M.ceil, round = M.round, rnd = M.random, PI = M.PI;
   var RAMP = '.,-~:;=+*oxO#%@', NC = 8, TAU = PI * 2, SN = new Float32Array(512), i;
-  // 暗/中/亮：身、斑 (Logo 綠)、鰭、眼、泡泡、浮游、遠處的魚
+  // 暗/中/亮：身、斑 (Logo 綠)、鰭、眼、泡泡、浮游、遠處的魚、背景水紋
   var PAL = [[[8, 34, 48], [22, 94, 106], [68, 146, 140]], [[8, 40, 28], [26, 120, 80], [64, 180, 128]],
     [[6, 28, 48], [18, 78, 108], [52, 124, 152]], [[30, 64, 60], [90, 176, 154], [150, 255, 222]],
     [[6, 30, 44], [34, 100, 120], [100, 178, 190]], [[5, 16, 24], [14, 40, 52], [32, 70, 84]],
-    [[4, 16, 32], [14, 52, 88], [40, 100, 140]]];
+    [[4, 16, 32], [14, 52, 88], [40, 100, 140]], [[3, 18, 24], [8, 46, 56], [28, 96, 112]]];
   for (i = 0; i < 512; i++) SN[i] = sin(i / 512 * TAU);
   var LX = -0.35, LY = 0.55, LZ = -0.76, KW = 6.5;   // 光從鏡頭左上來
+  var BGF = 7, SK = 512 / TAU;   // 背景水紋用第 8 組顏色；SK：弧度 → 正弦表索引
+  function sn(x) { return SN[(x * SK) & 511]; }
 
   function prof(u) {   // 魚身半高：圓頭、收到尾柄 (尾柄留粗才接得上尾鰭)
     if (u < 0.3) { var a = (0.3 - u) / 0.32; return 0.18 * sqrt(1 - a * a); }
@@ -29,7 +32,7 @@
     var st = window.__bootFishStats = { frames: 0, avgMs: 0, maxMs: 0, cols: 0, rows: 0, running: false };
     if (!cv || !cv.getContext) return { stop: function () {} };
     var txt = opts.text, red = !!opts.reduced, ctx, W, H, IW, IH, DPR, cw, ch, cwd, chd, cols, rows, F, PX, PY, CT, ST, atlas;
-    var zb, kb, gb, rb, mk, om, drawn, nd = 0, tfs = 13, padT = 10, padL = 12, adv = 0.6, ff = 'monospace', MX = 0, MY = 0, MZ = 0;
+    var zb, kb, gb, rb, mk, om, sh, wb, wn = 0, nd = 0, tfs = 13, padT = 10, padL = 12, adv = 0.6, ff = 'monospace', MX = 0, MY = 0, MZ = 0;
     var raf = 0, alive = true, dirty = true, last = 0, t = 0, sum = 0, ema = 3, qual = 1, lastMask = -1e9, puff = 0.6, wt = 0, bend = 0, chk = 0, mo = null, remask = true, T0 = performance.now();
     // 兩條魚：[錨點 x, y (px), 深度, 左右幅度, 前後幅度, 角速度, 起始相位, 鏡像, 擺尾速度, 上下幅度]
     var FA = [[], []], BD = [0, 0], C = [0, 0, 0], P0 = [0, 0, 0], P1 = [0, 0, 0], P2 = [0, 0, 0];
@@ -48,8 +51,10 @@
       cols = ceil(W * dpr / cwd); rows = ceil(H * dpr / chd); cw = cwd / dpr; ch = chd / dpr;
       cv.width = round(W * dpr); cv.height = round(H * dpr);
       n = cols * rows;
-      if (!zb || zb.length < n) { zb = new Float32Array(n); kb = new Uint8Array(n); gb = new Uint8Array(n); rb = new Uint8Array(n); mk = new Uint8Array(n); om = new Uint8Array(n); drawn = new Int32Array(n); }
-      nd = 0; atlas = null;
+      if (!zb || zb.length < n) { zb = new Float32Array(n); kb = new Uint8Array(n); gb = new Uint8Array(n); rb = new Uint8Array(n); mk = new Uint8Array(n); om = new Uint8Array(n); sh = new Int16Array(n); wb = new Int16Array(n); }
+      for (k = 0; k < n; k++) sh[k] = -1;   // 畫布改尺寸會清空，全部重畫
+      wn = 0;
+      atlas = null;
       // 字型、字級、留白 (#rb-term 繼承 #rawair-boot；只讀樣式不讀位置)
       try { rs = getComputedStyle(cv.parentNode); ff = rs.fontFamily || ff; tfs = parseFloat(rs.fontSize) || 13; padT = parseFloat(rs.paddingTop) || 0; padL = parseFloat(rs.paddingLeft) || 0; } catch (_) {}
       // 桌機字在左 → 魚留在右半邊；手機字在上 → 魚放大、擺在進度條下面
@@ -260,28 +265,52 @@
         y += h;
       }
     }
-    function cell(i, c, r) {
-      var row = rb[i], m = mk[i];
-      if (m) { if (row >> 3 === 4 || row >> 3 === 5) return; row = (row & 0xf8) | ((row & 7) >> m); }
-      ctx.drawImage(atlas, gb[i] * cwd, row * chd, cwd, chd, c * cwd, r * chd, cwd, chd);
-      if (nd < drawn.length) drawn[nd++] = i;
+    // 背景水紋：兩組彎曲的波互相抵消的地方是亮線 (像泳池底的光網)，加上從左上斜下來的光束，越深越暗
+    function water(c, r) {
+      var X = c * cw, Y = r * ch, d = Y / H, v1, v2, l, g;
+      v1 = sn(X * 0.019 + t * 0.8 + 1.7 * sn(Y * 0.012 + t * 0.35));
+      v2 = sn(Y * 0.026 - t * 0.6 + 1.5 * sn(X * 0.015 - t * 0.45 + 1));
+      l = 1 - (v1 + v2 < 0 ? -(v1 + v2) : v1 + v2) * 0.5; l = l * l * l;
+      v1 = 0.5 + 0.5 * sn(X * 0.007 - Y * 0.0045 + t * 0.12);
+      l = (0.12 + 0.6 * l + 0.3 * v1 * v1 * (1 - d)) * (1 - 0.45 * d);
+      // 字元最多到「+」、顏色最多到中亮：水紋只當底，不能比魚搶眼
+      g = round(l * 8); c = round(l * 6);
+      return (g < 0 ? 0 : g > 7 ? 7 : g) * 64 + BGF * NC + (c > 5 ? 5 : c);
     }
-    // 只擦上一幀畫過的格子 (連續的一次擦)
-    function compose() {
-      var i, a, b, r, c;
-      for (i = 0; i < nd;) {
-        a = b = drawn[i];
-        while (++i < nd && drawn[i] === b + 1 && (b + 1) % cols) b++;
-        r = (a / cols) | 0; ctx.clearRect((a - r * cols) * cwd, r * chd, (b - a + 1) * cwd, chd);
+    // 這格要顯示什麼 (字元 × 64 + 顏色列)，-1 = 空白；字底下的魚壓暗、水紋和微粒不畫
+    function want(i, c, r) {
+      var row, m = mk[i];
+      if (zb[i]) {
+        row = rb[i];
+        if (!m) return gb[i] * 64 + row;
+        if (row >> 3 !== 4 && row >> 3 !== 5) return gb[i] * 64 + ((row & 0xf8) | ((row & 7) >> m));
       }
-      for (r = 0, i = 0, nd = 0; r < rows; r++) for (c = 0; c < cols; c++, i++) if (zb[i]) cell(i, c, r);
+      if (m > 1) return -1;
+      row = wb[i];
+      return m ? (row & ~7) | ((row & 7) >> 1) : row;
     }
-    function recolor() {   // 只有字變了：只重畫遮罩變了的格子
-      mask();
-      for (var i = 0, n = cols * rows, r; i < n; i++) if (zb[i] && mk[i] !== om[i]) {
-        r = (i / cols) | 0; ctx.clearRect((i - r * cols) * cwd, r * chd, cwd, chd); cell(i, i - r * cols, r);
+    // 只重畫跟上一幀不一樣的格子
+    // 水紋算好存起來，約每 3 幀才更新一次 (慢的手機更久)；魚和字照常每幀
+    function compose(fresh) {
+      var i = 0, r, c, w;
+      if (fresh && --wn <= 0) {
+        wn = ema > 8 ? 6 : 3;
+        for (r = 0; r < rows; r++) for (c = 0; c < cols; c++, i++) wb[i] = water(c, r);
+        i = 0;
+      } else if (wn <= 0) {
+        wn = 1; for (r = 0; r < rows; r++) for (c = 0; c < cols; c++, i++) wb[i] = water(c, r);
+        i = 0;
       }
+      for (r = 0, nd = 0; r < rows; r++) for (c = 0; c < cols; c++, i++) {
+        w = want(i, c, r);
+        if (w === sh[i]) continue;
+        ctx.clearRect(c * cwd, r * chd, cwd, chd);
+        if (w >= 0) ctx.drawImage(atlas, (w >> 6) * cwd, (w & 63) * chd, cwd, chd, c * cwd, r * chd, cwd, chd);
+        sh[i] = w; nd++;
+      }
+      st.drawn = nd;
     }
+    function recolor() { mask(); compose(); }   // 只有字變了：遮罩變了的格子會自己重畫
     function render(dt) {
       for (var i = 0, n = cols * rows; i < n; i++) zb[i] = 0;
       pose(1); fish(1); pose(0); fish(0); particles(dt);
@@ -315,13 +344,13 @@
         if (dirty) layout(); else glyphs();
         return acc(a);
       }
-      if (last && now - last < max(30, ema * 3.5)) {   // 上限約 30 fps；慢的手機自動降幀
+      if (last && now - last < max(30, ema * 5)) {   // 上限約 30 fps；慢的手機自動降幀 (畫一幀最多只佔 1/5 時間，留給資料載入)
         if (remask) { recolor(); acc(a); }   // 新印的字當幀壓暗
         return;
       }
       dt = last ? min(0.05, (now - last) / 1000) : 0.033; last = now; t += dt;
       if (remask || (!mo && now - lastMask > 140)) { lastMask = now; mask(); }
-      render(dt); compose();
+      render(dt); compose(1);
       st.frames++; ms = acc(a);
       if (st.frames > 3) ema += (ms - ema) * 0.1;
       qual = ema > 7 ? min(1.5, qual + 0.02) : ema < 4 ? max(1, qual - 0.01) : qual;   // 慢就疏一點，快了再變密
