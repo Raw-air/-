@@ -1,9 +1,14 @@
 /* 點名頁長按選取盤：跟介面一樣的擬物材質，背景不模糊不壓暗 */
-#rc-student-list .student-row {
+/* 點名頁本來就不需要選文字；按住期間連整頁都不准選 */
+#page-rollcall, #page-rollcall *,
+html.rct-no-select body, html.rct-no-select body * {
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
+#page-rollcall input, #page-rollcall textarea { -webkit-user-select: text; user-select: text; }
+html.rct-no-select ::selection { background: transparent; }
 .student-row.rct-holding { box-shadow: 0 0 0 2px rgba(10, 132, 255, .6); will-change: transform; }
 body.rct-locked { touch-action: none; overscroll-behavior: none; }
 
@@ -59,7 +64,7 @@ body.light-mode #rc-tray {
 }
 .rct-wheel { position: absolute; inset: 0; overflow: visible; }
 
-.rct-face { transition: transform .32s cubic-bezier(.3, 1.9, .5, 1); }
+.rct-face { transition: transform .22s cubic-bezier(.25, 1.12, .4, 1); }
 .rct-face-base { fill: url(#rct-raised); stroke: var(--wheel-groove); stroke-width: 1.5; }
 .rct-face-edge { fill: none; stroke: url(#rct-edge); stroke-width: 1.5; }
 .rct-slot text { fill: var(--text); font-size: 13px; font-weight: 800; text-anchor: middle; pointer-events: none; }
@@ -68,7 +73,7 @@ body.light-mode #rc-tray {
 .rct-outer, .rct-outer-shadow { opacity: 0; }
 #rc-tray.rct-outer-open .rct-outer, #rc-tray.rct-outer-open .rct-outer-shadow { opacity: 1; }
 
-/* 選中：像按鍵被壓下去又往外彈，亮藍色 */
+/* 選中：穩穩地往外推一點，亮藍色 */
 .rct-slot.rct-hover .rct-face { transform: translate(var(--dx), var(--dy)); }
 .rct-slot.rct-hover .rct-face-base { fill: url(#rct-pressed); stroke: #0758b5; }
 .rct-slot.rct-hover .rct-face-edge { stroke: rgba(255, 255, 255, .55); }
@@ -83,6 +88,15 @@ body.light-mode #rc-tray {
 /* 放開後的小視窗也不模糊背景 */
 .modal-overlay.rct-dialog.visible { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(0, 0, 0, .25); }
 .rct-dialog .modal-card { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--bg2); box-shadow: var(--neu-out); }
+
+.rct-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 10px; }
+.rct-chip {
+  padding: 6px 12px; border-radius: 999px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  color: var(--text); background: var(--card); border: 1px solid var(--border2); box-shadow: var(--neu-out);
+}
+.rct-chip.rct-chip-on { background: #ffd60a; color: #3d3200; border-color: #a88a00; box-shadow: var(--neu-in); }
+.rct-yellow-date { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; white-space: nowrap; }
+.rct-yellow-date .rct-remark-input { flex: 1; min-width: 0; }
 
 .rct-call { display: block; width: 100%; box-sizing: border-box; text-align: center; text-decoration: none; }
 .rct-remark-input {

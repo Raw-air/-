@@ -2,7 +2,9 @@
 // 晚歸：狀態維持「在場」(總表算到)，另外記一個標記，存在設定表 late_<日期>_<中隊>
 // 備註：直接寫進住宿生的備註文字，住宿生檔案頁也看得到，換床時會跟著人走；外圈四個選項在點名列顯示成圖案
 (function () {
-  const HOLD_STEPS_MS = [170, 120, 95, 75, 60, 50, 40, 30, 25]; // 每次震動的間隔，越來越短，加起來就是要按多久
+  // 每一下的間隔，由慢到快，加起來就是要按多久 (約 0.85 秒)。第一段不震，輕點不會有感
+  const HOLD_STEPS_MS = [140, 170, 125, 95, 72, 56, 44, 35, 28, 23, 19, 16, 14, 12];
+  const PULSE_MS = [24, 40];     // Android 每一下震多久：由短到長。低於 15 毫秒馬達轉不起來，手上感覺不到
   const MOVE_CANCEL_PX = 10;     // 選單出來前手指移動超過這個距離，當作在捲動
   const TAP_MAX_MS = 300;        // 按超過這麼久才放開，就不算點一下
   const DEAD_ZONE = 26;          // 手指離按下去的點太近 = 還沒選
@@ -16,15 +18,17 @@
     late: '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
     phone: '<path d="M6.6 3.5 9.5 3l1.6 4.2-2 1.5a11 11 0 0 0 6.2 6.2l1.5-2 4.2 1.6-.5 2.9c-.2 1-1 1.6-2 1.6C10.700 19 5 13.300 5 5.500c0-1 .6-1.800 1.600-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
     remark: '<path d="M5 3.500h10l4 4V20.500H5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8.500 11h7M8.500 15h7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+    yellow: '<path d="M6 2.500h12V21.500l-2-1.400-2 1.400-2-1.400-2 1.400-2-1.400-2 1.400z" fill="#ffd60a" stroke="#a88a00" stroke-width="1.400" stroke-linejoin="round"/><path d="M12 7v6" stroke="#5c4a00" stroke-width="2.200" stroke-linecap="round"/><circle cx="12" cy="16.300" r="1.300" fill="#5c4a00"/>',
     ceramic: '<circle cx="12" cy="12" r="10" fill="#f6f2e7" stroke="#8d8a7c" stroke-width="1.500"/><circle cx="12" cy="12" r="6.500" fill="none" stroke="#2f6fb5" stroke-width="1.700"/><circle cx="12" cy="12" r="2.300" fill="#2f6fb5"/><path d="M5.500 7.500A8 8 0 0 1 10 4.300" fill="none" stroke="#fff" stroke-width="1.500" stroke-linecap="round"/>',
     consent: '<path d="M5 2.500h10.500L19.500 6.500V21.500H5z" fill="#fbfbf7" stroke="#8b8f98" stroke-width="1.400" stroke-linejoin="round"/><path d="M8 9h8M8 12.500h8M8 16h4" stroke="#8b8f98" stroke-width="1.500" stroke-linecap="round"/><circle cx="17.500" cy="18" r="4.500" fill="#ef4444"/><path d="m15.700 16.200 3.600 3.600m0-3.600-3.600 3.600" stroke="#fff" stroke-width="1.500" stroke-linecap="round"/>',
     officer: '<path d="M3 9.500 12 5l9 4.500-2.500 2.200h-13z" fill="#27406f" stroke="#172845" stroke-width="1.200" stroke-linejoin="round"/><circle cx="12" cy="8.700" r="1.500" fill="#f2c94c"/><path d="M6.500 12.500h11V14a5.500 5.500 0 0 1-11 0z" fill="#f2c6a0" stroke="#b98b66" stroke-width="1.100"/><path d="M5 22c.5-3.500 3.300-5 7-5s6.500 1.500 7 5z" fill="#27406f"/>',
     issue: '<path d="M12 2.800 22.500 21h-21z" fill="#f59e0b" stroke="#a65f00" stroke-width="1.300" stroke-linejoin="round"/><path d="M12 9v6" stroke="#fff" stroke-width="2.500" stroke-linecap="round"/><circle cx="12" cy="18" r="1.500" fill="#fff"/>',
   };
   const INNER = [
-    { id: 'remark', label: '備註', angle: -90, span: 120 },
-    { id: 'phone', label: '電話', angle: 30, span: 120 },
-    { id: 'late', label: '晚歸', angle: 150, span: 120 },
+    { id: 'remark', label: '備註', angle: -90, span: 90 },
+    { id: 'phone', label: '電話', angle: 0, span: 90 },
+    { id: 'yellow', label: '開黃單', angle: 90, span: 90 },
+    { id: 'late', label: '晚歸', angle: 180, span: 90 },
   ];
   const TAGS = [
     { id: 'ceramic', label: '沒繳回瓷扣', angle: -157.5, span: 45 },
@@ -111,6 +115,16 @@
     if (s && isLate(s, state.currentDate)) setLate(s, false);
   }
 
+  // ── 長按不能選到網頁文字：iPhone 會去抓手指附近任何能選的字，所以按住期間整頁都不准選 ──
+  function clearSelection() {
+    const sel = window.getSelection && window.getSelection();
+    if (sel && sel.rangeCount && !sel.isCollapsed) sel.removeAllRanges();
+  }
+  function allowSelection() {
+    // 手指放開的瞬間瀏覽器還可能補一次選取，晚一點才恢復
+    setTimeout(() => { if (!hold && !menu) document.documentElement.classList.remove('rct-no-select'); }, 400);
+  }
+
   // ── 鎖定畫面：選單開著時不能捲動，不然選到一半背景會跑掉 ──
   // iPhone 不一定理會 preventDefault，所以把頁面整個固定住，連捲動能力都拿掉
   function lockScroll(row) {
@@ -148,8 +162,8 @@
     window.scrollTo(0, y);
   }
 
-  // ── Q 彈動畫：阻尼彈簧取樣成關鍵影格，只動 transform，手機跑得動 ──
-  function springFrames(from, stiffness = 11, damping = 5.2, samples = 18) {
+  // ── 穩重的回彈：阻尼彈簧取樣成關鍵影格，只回彈約 4%，有重量不亂跳；只動 transform，手機跑得動 ──
+  function springFrames(from, stiffness = 7, damping = 7, samples = 18) {
     const frames = [];
     for (let i = 0; i <= samples; i++) {
       const t = i / samples;
@@ -166,15 +180,15 @@
     return el._rctAnim;
   }
   const popIn = (el, delay) => animate(el, springFrames(v => ({
-    transform: `scale(${(0.15 + 0.85 * v).toFixed(3)})`, opacity: Math.min(1, v * 2.5).toFixed(3),
-  })), 480, delay);
+    transform: `scale(${(0.82 + 0.18 * v).toFixed(3)})`, opacity: Math.min(1, v * 2.5).toFixed(3),
+  })), 420, delay);
   // 外環從備註那格「甩」出去展開：旋轉 + 放大都帶回彈
   const fanOut = (el, fromDeg, delay) => animate(el, springFrames(v => ({
-    transform: `rotate(${(fromDeg * (1 - v)).toFixed(2)}deg) scale(${(0.72 + 0.28 * v).toFixed(3)})`, opacity: Math.min(1, v * 3).toFixed(3),
-  }), 12, 5), 460, delay);
+    transform: `rotate(${(fromDeg * (1 - v)).toFixed(2)}deg) scale(${(0.9 + 0.1 * v).toFixed(3)})`, opacity: Math.min(1, v * 3).toFixed(3),
+  })), 420, delay);
   const fanIn = (el, toDeg) => animate(el, [
     { transform: 'rotate(0deg) scale(1)', opacity: 1 },
-    { transform: `rotate(${toDeg}deg) scale(.72)`, opacity: 0 },
+    { transform: `rotate(${toDeg}deg) scale(.9)`, opacity: 0 },
   ], 130);
 
   // ── 選取盤：像遊戲的圓形快捷盤，手指往哪個方向拖就選哪一格 ──
@@ -205,7 +219,7 @@
     const iconY = ly - (outer ? 22 : 20);
     const labelY = ly + (outer ? 14 : 13);
     const rad = item.angle * Math.PI / 180;
-    const style = `--dx:${(Math.cos(rad) * 5).toFixed(1)}px;--dy:${(Math.sin(rad) * 5).toFixed(1)}px;transform-origin:${g.cx}px ${g.cy}px`;
+    const style = `--dx:${(Math.cos(rad) * 3).toFixed(1)}px;--dy:${(Math.sin(rad) * 3).toFixed(1)}px;transform-origin:${g.cx}px ${g.cy}px`;
     return `<g class="rct-slot${outer ? ' rct-outer' : ''}${on ? ' rct-on' : ''}" data-id="${item.id}" data-x="${lx}" data-y="${ly}" style="transform-origin:${g.cx}px ${g.cy}px">
       <g class="rct-face" style="${style}">
         <path class="rct-face-base" d="${wedgePath(g, r0, r1, item.angle, item.span)}"/>
@@ -261,7 +275,7 @@
     // 中心先彈出來，三格接著一格一格彈開
     popIn(root.querySelector('.rct-base'), 0);
     popIn(root.querySelector('.rct-hub-group'), 0);
-    slots.filter(i => !i.outer).forEach((slot, i) => popIn(slot.el, 40 + i * 45));
+    slots.filter(i => !i.outer).forEach((slot, i) => popIn(slot.el, 30 + i * 30));
     popIn(menu.caption, 60);
     haptic('heavy');
   }
@@ -274,7 +288,7 @@
     // 從備註那格 (正上方) 往左右甩出去，離得遠的晚一點到
     tags.forEach(slot => {
       const fromDeg = -90 - slot.angle;
-      if (open) fanOut(slot.el, fromDeg, Math.abs(fromDeg) * 1.1);
+      if (open) fanOut(slot.el, fromDeg, Math.abs(fromDeg) * 0.5);
       else fanIn(slot.el, fromDeg);
     });
     if (open) fanOut(menu.outerShadow, 0, 0);
@@ -288,10 +302,11 @@
       if (a.id === 'phone') text = s.phone ? `${s.name}：${s.phone}` : `${s.name}：沒有電話資料`;
       else if (a.id === 'late') text = a.el.classList.contains('rct-on') ? '放開取消晚歸' : '放開標記晚歸 (總表算在場)';
       else if (a.id === 'remark') text = '放開寫備註，或繼續往外選';
+      else if (a.id === 'yellow') text = `放開替 ${s.name} 開黃單`;
       else text = (a.el.classList.contains('rct-on') ? '放開取消：' : '放開標記：') + a.label;
     }
     menu.caption.textContent = text;
-    menu.hubText.textContent = a ? (a.id === 'phone' && s.phone ? '看電話' : a.label).slice(0, 4) : String(s.name || '').slice(0, 4);
+    menu.hubText.textContent = a ? (a.outer ? '放開' : a.id === 'phone' && s.phone ? '看電話' : a.label) : String(s.name || '').slice(0, 4);
   }
 
   const inSector = (deg, center, span) => Math.abs(((deg - center + 540) % 360) - 180) <= span / 2;
@@ -337,6 +352,7 @@
     const { root } = menu;
     menu = null;
     unlockScroll();
+    allowSelection();
     root.classList.remove('rct-show');
     setTimeout(() => root.remove(), 170);
   }
@@ -356,6 +372,8 @@
       showContact(s);
     } else if (active.id === 'remark') {
       editRemark(s);
+    } else if (active.id === 'yellow') {
+      issueYellow(s);
     } else {
       const tokens = remarkTokens(s.remarks);
       const next = tokens.includes(active.label) ? tokens.filter(t => t !== active.label) : [...tokens, active.label];
@@ -408,6 +426,74 @@
     });
   }
 
+  function issueYellow(s) {
+    if (!window.yc || !window.yc.issue) { showToast('黃單功能還沒載入好', 'error'); return; }
+    const date = dateColumnToISO(state.currentDate) || localTodayISO();
+    const count = window.yc.openCount(s);
+    const chips = window.yc.reasons().map(r => `<button type="button" class="rct-chip" data-reason="${escHtml(r)}">${escHtml(r)}</button>`).join('');
+    const { overlay, close } = dialog(`
+      <h3 style="margin:0 0 4px">替 ${escHtml(s.name)} 開黃單</h3>
+      <p style="margin:0 0 12px;font-size:13px;opacity:.75">目前待執行 ${count} 張</p>
+      <div class="rct-chips">${chips}</div>
+      <input class="rct-remark-input rct-yellow-reason" type="text" maxlength="100" placeholder="犯規事由 (點上面或自己打)">
+      <label class="rct-yellow-date">開單日期 <input type="date" class="rct-remark-input" value="${escHtml(date)}"></label>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button type="button" class="modal-btn cancel" style="flex:1">取消</button>
+        <button type="button" class="modal-btn confirm rct-yellow-submit" style="flex:1">開單</button>
+      </div>`);
+    const reasonInput = overlay.querySelector('.rct-yellow-reason');
+    overlay.querySelector('.rct-chips').addEventListener('click', e => {
+      const chip = e.target.closest('.rct-chip');
+      if (!chip) return;
+      reasonInput.value = chip.dataset.reason;
+      for (const c of overlay.querySelectorAll('.rct-chip')) c.classList.toggle('rct-chip-on', c === chip);
+    });
+    overlay.querySelector('.cancel').addEventListener('click', close);
+    const submit = overlay.querySelector('.rct-yellow-submit');
+    submit.addEventListener('click', async () => {
+      const reason = reasonInput.value.trim();
+      if (!reason) { showToast('先寫犯規事由（或點上面的快速選項）', 'error'); reasonInput.focus(); return; }
+      if (submit.disabled) return;
+      submit.disabled = true;
+      submit.textContent = '開單中…';
+      try {
+        const total = await window.yc.issue(s, reason, overlay.querySelector('input[type="date"]').value);
+        close();
+        haptic('heavy');
+        showToast(`${escHtml(s.name)} 開了黃單，待執行 ${total} 張`, 'success');
+      } catch (err) {
+        submit.disabled = false;
+        submit.textContent = '開單';
+        showToast('開單失敗：' + escHtml(err.message || err), 'error');
+      }
+    });
+  }
+
+  // ── 馬達由慢到快 ──
+  // Android 一次把整段節奏交給系統，比一下一下用計時器準；放開時 vibrate(0) 立刻停
+  function startMotorRamp() {
+    if (hapticMuted() || !hasVibrate()) return;
+    const beats = HOLD_STEPS_MS.slice(1);
+    const pattern = [0, HOLD_STEPS_MS[0]];
+    beats.forEach((gap, i) => {
+      const t = i / (beats.length - 1);
+      const on = Math.min(gap - 2, Math.round(PULSE_MS[0] + (PULSE_MS[1] - PULSE_MS[0]) * t));
+      pattern.push(Math.max(on, 8), Math.max(gap - on, 2));
+    });
+    try { navigator.vibrate(pattern); } catch (_) {}
+  }
+  function stopMotorRamp() {
+    if (hasVibrate()) { try { navigator.vibrate(0); } catch (_) {} }
+  }
+  // iPhone 沒有震動 API：每一下敲 Taptic Engine，加上越來越重的低頻波形
+  function iosRampBeat(step) {
+    if (hapticMuted() || !IS_IOS) return;
+    const t = step / (HOLD_STEPS_MS.length - 1);
+    if (HOLD_STEPS_MS[step] >= 28 || step % 2 === 0) iosSwitchHaptic(1); // 太密的就隔一下敲，Safari 會把連點吃掉
+    const peak = 0.04 + 0.2 * t;
+    playHapticCurve([peak, peak * 0.3, 0.001], 26 + 20 * t, 'sine', 150 - 60 * t);
+  }
+
   // ── 按住的流程：格子越抖越快、馬達越震越快，到底就彈出選單 ──
   function shakeLoop(h) {
     const total = HOLD_STEPS_MS.reduce((a, b) => a + b, 0);
@@ -432,7 +518,7 @@
     h.row.classList.remove('rct-holding');
     h.row.style.transform = '';
     h.row.style.transition = h.savedTransition;
-    if (bounce) animate(h.row, springFrames(v => ({ transform: `scale(${(0.97 + 0.03 * v).toFixed(3)})` }), 14, 6), 320, 0, 'none');
+    if (bounce) animate(h.row, springFrames(v => ({ transform: `scale(${(0.97 + 0.03 * v).toFixed(3)})` })), 300, 0, 'none');
   }
   function startHold(row, x, y) {
     if (hold || menu || !row) return;
@@ -441,7 +527,10 @@
     hold = { row, s, x, y, lastX: x, lastY: y, step: 0, timer: null, raf: 0, startedAt: performance.now(), savedTransition: row.style.transition };
     row.style.transition = 'none'; // .student-row 有 transition，會把抖動抹平
     row.classList.add('rct-holding');
+    document.documentElement.classList.add('rct-no-select');
+    clearSelection();
     shakeLoop(hold);
+    startMotorRamp();
     const tick = () => {
       if (!hold) return;
       if (hold.step >= HOLD_STEPS_MS.length) {
@@ -452,8 +541,7 @@
         openMenu(h.s, h.lastX, h.lastY);
         return;
       }
-      // 第一下等一小段才震，輕點不會有感；越後面震得越重
-      if (hold.step > 0) haptic(hold.step > HOLD_STEPS_MS.length / 2 ? 'medium' : 'light');
+      if (hold.step > 0) iosRampBeat(hold.step);
       hold.timer = setTimeout(tick, HOLD_STEPS_MS[hold.step++]);
     };
     tick();
@@ -464,6 +552,8 @@
     hold = null;
     clearTimeout(h.timer);
     stopShake(h, false);
+    stopMotorRamp();
+    allowSelection();
   }
   function pointerMove(x, y) {
     if (menu) { moveMenu(x, y); return true; }
@@ -523,15 +613,21 @@
     list.addEventListener('click', e => {
       if (Date.now() < suppressClickUntil) { e.stopPropagation(); e.preventDefault(); }
     }, true);
-    list.addEventListener('contextmenu', e => {
+    document.addEventListener('contextmenu', e => {
       if (hold || menu) e.preventDefault();
+    }, true);
+    document.addEventListener('selectstart', e => {
+      if (hold || menu) e.preventDefault();
+    }, true);
+    document.addEventListener('selectionchange', () => {
+      if (hold || menu) clearSelection();
     });
     const markSuppress = () => { if (menu) suppressClickUntil = Date.now() + 500; };
     document.addEventListener('touchend', markSuppress, true);
     document.addEventListener('mouseup', markSuppress, true);
   }
 
-  window._rcTray = { rowExtras, nameIcons, refreshRow, signature, clearLate };
+  window._rcTray = { rowExtras, nameIcons, refreshRow, signature, clearLate, swallowingClick: () => Date.now() < suppressClickUntil };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
   else install();
 })();

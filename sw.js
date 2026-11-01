@@ -1,10 +1,10 @@
 // Atomic shell cache: HTML and JS must always come from the same release.
-const CACHE_NAME = 'biyuan-v153';
-const ASSETS = ['./', './index.html', './style.css?v=190', './phonetic-search.js?v=190', './app.js?v=190', './import.js?v=190',
-  './api.js?v=190', './config.js?v=190', './theme.js?v=190',
-  './carousel.js?v=190', './navigation.js?v=190', './motion.css?v=190', './liquid-nav.css?v=190', './nav-adapt.css?v=190', './nav-adapt.js?v=190', './folder.css?v=190', './dissolve.js?v=190',
-  './quick-menu.css?v=190', './quick-menu.js?v=190', './boot-screen.css?v=190', './boot-fish.js?v=190', './boot-screen.js?v=190', './tablet.css?v=190', './tablet.js?v=190', './tablet-transform.css?v=190', './tablet-transform.js?v=190', './color-mode.css?v=190', './color-mode.js?v=190', './phone-leave.css?v=190', './phone-leave.js?v=190', './role-claim.js?v=190', './yellow-card.css?v=190', './yellow-card.js?v=190', './leave-all.css?v=190', './leave-all.js?v=190',
-  './vendor/firebase/firebase-app-compat.js?v=190', './vendor/firebase/firebase-auth-compat.js?v=190', './vendor/firebase/firebase-firestore-compat.js?v=190', './firebase-backend.js?v=190', './release-notice.js?v=190', './rollcall-tray.css?v=190', './rollcall-tray.js?v=190', './manifest.json?v=190', './icon-192.png?v=190',
+const CACHE_NAME = 'biyuan-v154';
+const ASSETS = ['./', './index.html', './style.css?v=191', './phonetic-search.js?v=191', './app.js?v=191', './import.js?v=191',
+  './api.js?v=191', './config.js?v=191', './theme.js?v=191',
+  './carousel.js?v=191', './navigation.js?v=191', './motion.css?v=191', './liquid-nav.css?v=191', './nav-adapt.css?v=191', './nav-adapt.js?v=191', './folder.css?v=191', './dissolve.js?v=191',
+  './quick-menu.css?v=191', './quick-menu.js?v=191', './boot-screen.css?v=191', './boot-fish.js?v=191', './boot-screen.js?v=191', './tablet.css?v=191', './tablet.js?v=191', './tablet-transform.css?v=191', './tablet-transform.js?v=191', './color-mode.css?v=191', './color-mode.js?v=191', './phone-leave.css?v=191', './phone-leave.js?v=191', './role-claim.js?v=191', './yellow-card.css?v=191', './yellow-card.js?v=191', './leave-all.css?v=191', './leave-all.js?v=191',
+  './vendor/firebase/firebase-app-compat.js?v=191', './vendor/firebase/firebase-auth-compat.js?v=191', './vendor/firebase/firebase-firestore-compat.js?v=191', './firebase-backend.js?v=191', './release-notice.js?v=191', './rollcall-tray.css?v=191', './rollcall-tray.js?v=191', './manifest.json?v=191', './icon-192.png?v=191',
   './Lp/ICON/COPY.svg', './Lp/ICON/HOME.svg', './Lp/ICON/NEW.svg', './Lp/ICON/RESET.svg', './Lp/ICON/SETTIN.svg'];
 self.addEventListener('install', event => {
   // cache:'reload' 繞過瀏覽器 HTTP 快取，避免裝新版 SW 時把舊的 index.html 誤存進去

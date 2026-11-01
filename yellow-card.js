@@ -223,6 +223,15 @@
       if (btn) { btn.disabled = false; btn.textContent = '開黃單'; }
     }
   }
+  // 點名頁選取盤直接開單：寫法跟 add() 一樣，只是不經過資料夾畫面
+  async function issue(s, reason, d) {
+    if (isEmptyBed(s)) throw new Error('空床不能開單');
+    const next = list(s).concat([{ d: isISO(d) ? d : today(), r: reason, n: s.name, t: Date.now() }]);
+    await write({ [keyOf(s.id)]: JSON.stringify(others(s).concat(next)) });
+    pending.delete(s.id);
+    refreshStudent(s);
+    return next.filter(isActive).length;
+  }
   function stampPop(folder) {
     const st = folder.querySelector('.yc-stamp');
     if (!st || !st.animate || (window.sfReduceMotion && sfReduceMotion())) return;
@@ -436,6 +445,9 @@
   }
 
   window.yc = {
+    issue,
+    openCount: s => open(s).length,
+    reasons: () => REASONS.slice(),
     active: () => mode === 'yellow',
     setMode, roster, list, open, cardHTML, sheetHTML, markCleared, execOne, undoOne, removeOne, add, pick, saveAll, pendingCount,
     openLog, closeLog, logTab(k) { logFilter = k; renderLog(); },

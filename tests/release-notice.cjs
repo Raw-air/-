@@ -39,7 +39,7 @@ const out = path.join(root, 'test-results'); fs.mkdirSync(out, { recursive: true
     // 真的點得到 (沒有被別的東西蓋住)
     await page.click('#release-notice button', { timeout: 3000 });
     await page.waitForSelector('#release-notice', { state: 'detached' });
-    assert.equal(await page.evaluate(() => localStorage.getItem('biyuan_release_notice_seen')), 'v33-tray-2');
+    assert.equal(await page.evaluate(() => localStorage.getItem('biyuan_release_notice_seen')), 'v33-tray-3');
 
     // 重開不再跳
     await page.reload();

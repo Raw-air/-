@@ -573,6 +573,7 @@ function playClickSound(type = 'default') {
 }
 
 window.addEventListener('click', (e) => {
+  if (window._rcTray && window._rcTray.swallowingClick()) return; // 長按放開後瀏覽器補的 click，不是真的點擊
   const target = e.target.closest('button, .duty-manual-widget, #duty-roster-widget, .nav-item, .sq-card, .rc-date-clickable, .date-item, .student-row, .dev-trigger, .changelog-btn, .action-btn, .modal-overlay, .setting-row label');
   if (target) {
     if (target.id === 'back-btn' || target.classList.contains('cancel') || target.id === 'pin-cancel') {
