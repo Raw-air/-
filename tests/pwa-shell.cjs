@@ -131,25 +131,36 @@ async function swUpdateToast() {
     let navigations = 0;
     page.on('framenavigated', f => { if (f === page.mainFrame()) navigations++; });
 
-    const toast = page.locator('#sw-update-toast');
-    await toast.waitFor({ state: 'attached', timeout: 2000 });
-    assert.equal(await toast.isVisible(), false, '一開始不該顯示更新提示');
+    const modal = page.locator('#sw-update-modal');
+    await modal.waitFor({ state: 'attached', timeout: 2000 });
+    assert.equal(await modal.isVisible(), false, '一開始不該顯示更新彈窗');
 
     // 第一次安裝 (之前沒有 SW 在控制) 的 controllerchange 不該提示
     await page.evaluate(() => navigator.serviceWorker.dispatchEvent(new Event('controllerchange')));
     await page.waitForTimeout(400);
-    assert.equal(await toast.isVisible(), false, '第一次安裝的 controllerchange 不該顯示更新提示');
+    assert.equal(await modal.isVisible(), false, '第一次安裝的 controllerchange 不該顯示更新彈窗');
 
-    // 之前已有 SW 在控制 → 新 SW 接手才提示，而且不能自動 reload
-    await page.evaluate(() => { document.documentElement.dataset.swControlled = '1'; navigator.serviceWorker.dispatchEvent(new Event('controllerchange')); });
-    await page.waitForFunction(() => document.getElementById('sw-update-toast').classList.contains('show'));
+    // 之前已有 SW 在控制 → 新 SW 接手才跳彈窗，而且不能自動 reload
+    const newVersion = () => page.evaluate(() => { document.documentElement.dataset.swControlled = '1'; navigator.serviceWorker.dispatchEvent(new Event('controllerchange')); });
+    await newVersion();
+    await page.waitForSelector('#sw-update-modal.visible');
     await page.waitForTimeout(600);
     assert.equal(navigations, 0, 'controllerchange 後不能自動 reload');
 
-    await Promise.all([page.waitForNavigation({ timeout: 10000 }), toast.click()]);
-    assert.ok(navigations >= 1, '點了提示條才 reload');
+    // 按稍後：關掉、不重新整理
+    await page.click('#sw-update-later');
+    await page.waitForTimeout(350);
+    assert.equal(await modal.isVisible(), false, '按稍後要關掉');
+    assert.equal(navigations, 0, '按稍後不能 reload');
+
+    // 再有新版又跳，按立即更新才重新整理
+    await newVersion();
+    await page.waitForSelector('#sw-update-modal.visible');
+    await page.waitForTimeout(350);
+    await Promise.all([page.waitForNavigation({ timeout: 10000 }), page.click('#sw-update-now')]);
+    assert.ok(navigations >= 1, '按了立即更新才 reload');
     assert.deepEqual(errors, []);
-    console.log('pwa-shell: SW 更新提示條只在點擊後才 reload PASS');
+    console.log('pwa-shell: SW 更新彈窗只在按了之後才 reload PASS');
   } finally { await browser.close(); }
 }
 

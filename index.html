@@ -23,20 +23,20 @@
   <meta name="theme-color" content="#151518">
   <meta name="description" content="碧苑宿舍人性化點名管理系統">
   <title>碧苑宿舍點名系統</title>
-  <link rel="stylesheet" href="style.css?v=191">
-  <link rel="stylesheet" href="motion.css?v=191">
-  <link rel="stylesheet" href="folder.css?v=191">
-  <link rel="stylesheet" href="liquid-nav.css?v=191">
-  <link rel="stylesheet" href="quick-menu.css?v=191">
-  <link rel="stylesheet" href="boot-screen.css?v=191">
-  <link rel="stylesheet" href="tablet.css?v=191">
-  <link rel="stylesheet" href="tablet-transform.css?v=191">
-  <link rel="stylesheet" href="nav-adapt.css?v=191">
-  <link rel="stylesheet" href="color-mode.css?v=191">
-  <link rel="stylesheet" href="phone-leave.css?v=191">
-  <link rel="stylesheet" href="yellow-card.css?v=191">
-  <link rel="stylesheet" href="leave-all.css?v=191">
-  <link rel="stylesheet" href="rollcall-tray.css?v=191">
+  <link rel="stylesheet" href="style.css?v=192">
+  <link rel="stylesheet" href="motion.css?v=192">
+  <link rel="stylesheet" href="folder.css?v=192">
+  <link rel="stylesheet" href="liquid-nav.css?v=192">
+  <link rel="stylesheet" href="quick-menu.css?v=192">
+  <link rel="stylesheet" href="boot-screen.css?v=192">
+  <link rel="stylesheet" href="tablet.css?v=192">
+  <link rel="stylesheet" href="tablet-transform.css?v=192">
+  <link rel="stylesheet" href="nav-adapt.css?v=192">
+  <link rel="stylesheet" href="color-mode.css?v=192">
+  <link rel="stylesheet" href="phone-leave.css?v=192">
+  <link rel="stylesheet" href="yellow-card.css?v=192">
+  <link rel="stylesheet" href="leave-all.css?v=192">
+  <link rel="stylesheet" href="rollcall-tray.css?v=192">
   <script>
     /* 統一色系模式：用上次存的改色版樣式直接蓋上，避免開 App 先閃一次彩色 (細節見 color-mode.js) */
     try {
@@ -58,26 +58,26 @@
     /* 平板模式在畫面出來前就套上，避免先閃一次手機版排版 */
     try { if (localStorage.getItem('tablet_mode') === 'true') document.documentElement.classList.add('tablet-mode'); } catch (_) {}
   </script>
-  <link rel="manifest" href="manifest.json?v=191">
-  <link rel="apple-touch-icon" href="icon-192.png?v=191">
+  <link rel="manifest" href="manifest.json?v=192">
+  <link rel="apple-touch-icon" href="icon-192.png?v=192">
   <!-- xlsx-js-style 與 marked 改由 app.js 的 window.ensureXLSX() / window.ensureMarked() 需要時才載入，不再拖住啟動 -->
   <script>
     if ('serviceWorker' in navigator) {
       let _swReg = null;
-      // 不擋操作的小提示條：新 SW 接手後才顯示，一律等使用者自己點了才 reload，
-      // 絕不自動重新整理 (尤其點名頁可能還有 state.changes 未送出的變更，蓋掉就回不來了)
-      function _showSwUpdateToast() {
-        const el = document.getElementById('sw-update-toast');
-        if (!el || el.classList.contains('show')) return;
-        el.hidden = false;
-        requestAnimationFrame(() => el.classList.add('show'));
+      // 新 SW 接手後跳彈窗問要不要更新，一律等使用者自己按了才 reload，
+      // 絕不自動重新整理 (點名頁可能還有 state.changes 未送出的變更)
+      function _showSwUpdatePrompt() {
+        const el = document.getElementById('sw-update-modal');
+        if (!el || el.classList.contains('visible')) return;
+        el.style.display = 'flex';
+        requestAnimationFrame(() => el.classList.add('visible'));
       }
       // 第一次安裝 (之前沒有 SW 在控制) 的 controllerchange 不算新版本，不提示
       if (navigator.serviceWorker.controller) document.documentElement.dataset.swControlled = '1';
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         const had = document.documentElement.dataset.swControlled === '1';
         document.documentElement.dataset.swControlled = '1';
-        if (had) _showSwUpdateToast();
+        if (had) _showSwUpdatePrompt();
       });
       navigator.serviceWorker.register('./sw.js').then(reg => {
         _swReg = reg;
@@ -86,7 +86,7 @@
           if (!nw) return;
           nw.addEventListener('statechange', () => {
             // 裝好且已經有舊 SW 在控制頁面，才是真的有新版本；第一次安裝不用提示
-            if (nw.state === 'installed' && navigator.serviceWorker.controller) _showSwUpdateToast();
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) _showSwUpdatePrompt();
           });
         });
         // Do not reload a form while the user is editing; the next navigation/reload
@@ -98,7 +98,12 @@
         if (document.visibilityState === 'visible' && _swReg) _swReg.update().catch(() => {});
       });
       document.addEventListener('DOMContentLoaded', () => {
-        document.getElementById('sw-update-toast')?.addEventListener('click', () => location.reload());
+        document.getElementById('sw-update-now')?.addEventListener('click', () => location.reload());
+        document.getElementById('sw-update-later')?.addEventListener('click', () => {
+          const el = document.getElementById('sw-update-modal');
+          el.classList.remove('visible');
+          setTimeout(() => { if (!el.classList.contains('visible')) el.style.display = 'none'; }, 260);
+        });
       });
     }
   </script>
@@ -207,22 +212,21 @@
 
   <!-- RAWAIR OS 開機畫面 (只在第一次打開 App 時出現) -->
   <div id="rawair-boot" role="status" aria-label="系統啟動中"><canvas id="rb-fish" aria-hidden="true"></canvas><div id="rb-term"></div></div>
-  <script src="boot-fish.js?v=191"></script>
-  <script src="boot-screen.js?v=191"></script>
+  <script src="boot-fish.js?v=192"></script>
+  <script src="boot-screen.js?v=192"></script>
   <div id="toast-container" class="toast-container"></div>
 
-  <!-- SW 有新版本：不擋操作的小提示，點了才重新整理 -->
-  <button type="button" id="sw-update-toast" class="sw-update-toast" hidden>有新版本，點一下更新</button>
-  <style>
-    .sw-update-toast {
-      position: fixed; left: 50%; bottom: calc(var(--nav-h) + var(--safe-b) + 16px); z-index: 9998;
-      transform: translate(-50%, 12px); background: #2b2b30; color: #fff; font: inherit; font-size: 13px; line-height: 1;
-      padding: 11px 18px; border: none; border-radius: 999px; box-shadow: 0 6px 20px rgba(0, 0, 0, .35);
-      opacity: 0; pointer-events: none; transition: opacity .25s ease, transform .25s ease; cursor: pointer;
-    }
-    .sw-update-toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
-    body.light-mode .sw-update-toast { background: #fff; color: #151518; box-shadow: 0 6px 20px rgba(0, 0, 0, .18); }
-  </style>
+  <!-- SW 有新版本：跳彈窗問，按了才重新整理 -->
+  <div id="sw-update-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="sw-update-title" style="display:none">
+    <div class="modal-card" style="max-width:340px">
+      <h3 id="sw-update-title" style="margin:0 0 8px">系統有新版本</h3>
+      <p style="margin:0 0 16px;line-height:1.6;font-size:14px">更新後就能用到最新功能。還沒送出的點名會保留，更新完自動補送。</p>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="sw-update-later" class="modal-btn cancel" style="flex:1">稍後</button>
+        <button type="button" id="sw-update-now" class="modal-btn confirm" style="flex:1">立即更新</button>
+      </div>
+    </div>
+  </div>
 
   <!-- 返回 -->
   <button id="back-btn" class="back-btn" style="display:none" onclick="navigateTo('home')">
@@ -1798,30 +1802,30 @@
     <button type="button" class="nav-item" data-page="settings"><span class="nav-icon"><svg class="ui-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-label">設定</span></button>
   </nav>
 
-  <script src="config.js?v=191"></script>
-  <script src="vendor/firebase/firebase-app-compat.js?v=191"></script>
-  <script src="vendor/firebase/firebase-auth-compat.js?v=191"></script>
-  <script src="vendor/firebase/firebase-firestore-compat.js?v=191"></script>
-  <script src="firebase-backend.js?v=191"></script>
-  <script src="api.js?v=191"></script>
-  <script src="phonetic-search.js?v=191"></script>
-  <script src="app.js?v=191"></script>
-  <script src="import.js?v=191"></script>
-  <script src="theme.js?v=191"></script>
-  <script src="carousel.js?v=191"></script>
-  <script src="dissolve.js?v=191"></script>
-  <script src="navigation.js?v=191"></script>
-  <script src="nav-adapt.js?v=191"></script>
-  <script src="quick-menu.js?v=191"></script>
-  <script src="tablet.js?v=191"></script>
-  <script src="color-mode.js?v=191"></script>
-  <script src="tablet-transform.js?v=191"></script>
-  <script src="phone-leave.js?v=191"></script>
-  <script src="role-claim.js?v=191"></script>
-  <script src="release-notice.js?v=191"></script>
-  <script src="yellow-card.js?v=191"></script>
-  <script src="leave-all.js?v=191"></script>
-  <script src="rollcall-tray.js?v=191"></script>
+  <script src="config.js?v=192"></script>
+  <script src="vendor/firebase/firebase-app-compat.js?v=192"></script>
+  <script src="vendor/firebase/firebase-auth-compat.js?v=192"></script>
+  <script src="vendor/firebase/firebase-firestore-compat.js?v=192"></script>
+  <script src="firebase-backend.js?v=192"></script>
+  <script src="api.js?v=192"></script>
+  <script src="phonetic-search.js?v=192"></script>
+  <script src="app.js?v=192"></script>
+  <script src="import.js?v=192"></script>
+  <script src="theme.js?v=192"></script>
+  <script src="carousel.js?v=192"></script>
+  <script src="dissolve.js?v=192"></script>
+  <script src="navigation.js?v=192"></script>
+  <script src="nav-adapt.js?v=192"></script>
+  <script src="quick-menu.js?v=192"></script>
+  <script src="tablet.js?v=192"></script>
+  <script src="color-mode.js?v=192"></script>
+  <script src="tablet-transform.js?v=192"></script>
+  <script src="phone-leave.js?v=192"></script>
+  <script src="role-claim.js?v=192"></script>
+  <script src="release-notice.js?v=192"></script>
+  <script src="yellow-card.js?v=192"></script>
+  <script src="leave-all.js?v=192"></script>
+  <script src="rollcall-tray.js?v=192"></script>
 
   <!-- 幹部工作手冊 Modal -->
   <div id="duty-manual-modal" class="modal-overlay">

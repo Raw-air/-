@@ -53,15 +53,6 @@ body.light-mode #rc-tray {
 .rct-stop-dark { stop-color: var(--wheel-dark); }
 .rct-stop-shadow { stop-color: var(--wheel-shadow); }
 
-.rct-caption {
-  position: absolute; left: 0; right: 0; width: fit-content; margin: 0 auto;
-  top: calc(env(safe-area-inset-top, 0px) + 18px);
-  max-width: 88vw; padding: 9px 18px; border-radius: 999px;
-  background: linear-gradient(180deg, var(--wheel-top), var(--wheel-bot));
-  color: var(--text); font-size: 15px; font-weight: 700; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; border: 1px solid var(--border2);
-  box-shadow: var(--neu-out);
-}
 .rct-wheel { position: absolute; inset: 0; overflow: visible; }
 
 .rct-face { transition: transform .22s cubic-bezier(.25, 1.12, .4, 1); }
@@ -85,9 +76,9 @@ body.light-mode #rc-tray {
 .rct-hub-text { fill: var(--text); font-size: 13px; font-weight: 800; text-anchor: middle; }
 .rct-cursor { fill: #fff; fill-opacity: .95; stroke: #0a84ff; stroke-width: 3; transition: opacity .1s; }
 
-/* 放開後的小視窗也不模糊背景 */
-.modal-overlay.rct-dialog.visible { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(0, 0, 0, .25); }
-.rct-dialog .modal-card { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--bg2); box-shadow: var(--neu-out); }
+/* 放開後的小視窗和新版彈窗也不模糊背景 */
+.modal-overlay.rct-dialog.visible, #sw-update-modal.visible { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(0, 0, 0, .25); }
+.rct-dialog .modal-card, #sw-update-modal .modal-card { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--bg2); box-shadow: var(--neu-out); }
 
 .rct-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 10px; }
 .rct-chip {

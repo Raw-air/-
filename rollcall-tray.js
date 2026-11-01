@@ -241,7 +241,7 @@
     root.dataset.cy = g.cy;
     root.dataset.ox = x;
     root.dataset.oy = y;
-    root.innerHTML = `<div class="rct-caption"></div>
+    root.innerHTML = `
       <svg class="rct-wheel" width="100%" height="100%">
         <defs>
           <linearGradient id="rct-raised" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="rct-stop-top"/><stop offset="1" class="rct-stop-bot"/></linearGradient>
@@ -265,18 +265,16 @@
       .map(item => ({ ...item, el: root.querySelector(`.rct-slot[data-id="${item.id}"]`) }));
     menu = {
       root, s, g, slots, active: null, outerOpen: false, originX: x, originY: y,
-      caption: root.querySelector('.rct-caption'),
       hubText: root.querySelector('.rct-hub-text'),
       cursor: root.querySelector('.rct-cursor'),
       outerShadow: root.querySelector('.rct-outer-shadow'),
     };
-    setCaption();
+    setHubText();
     root.classList.add('rct-show');
     // 中心先彈出來，三格接著一格一格彈開
     popIn(root.querySelector('.rct-base'), 0);
     popIn(root.querySelector('.rct-hub-group'), 0);
     slots.filter(i => !i.outer).forEach((slot, i) => popIn(slot.el, 30 + i * 30));
-    popIn(menu.caption, 60);
     haptic('heavy');
   }
 
@@ -295,18 +293,19 @@
     else fanIn(menu.outerShadow, 0);
   }
 
-  function setCaption() {
+  // 中心顯示目前選到什麼；電話直接顯示號碼
+  function setHubText() {
     const a = menu.active, s = menu.s;
-    let text = s.name;
-    if (a) {
-      if (a.id === 'phone') text = s.phone ? `${s.name}：${s.phone}` : `${s.name}：沒有電話資料`;
-      else if (a.id === 'late') text = a.el.classList.contains('rct-on') ? '放開取消晚歸' : '放開標記晚歸 (總表算在場)';
-      else if (a.id === 'remark') text = '放開寫備註，或繼續往外選';
-      else if (a.id === 'yellow') text = `放開替 ${s.name} 開黃單`;
-      else text = (a.el.classList.contains('rct-on') ? '放開取消：' : '放開標記：') + a.label;
+    let lines;
+    if (!a) lines = [String(s.name || '').slice(0, 4)];
+    else if (a.id === 'phone' && s.phone) {
+      const phone = String(s.phone).trim();
+      lines = [phone.slice(0, 4), phone.slice(4, 14)];
     }
-    menu.caption.textContent = text;
-    menu.hubText.textContent = a ? (a.outer ? '放開' : a.id === 'phone' && s.phone ? '看電話' : a.label) : String(s.name || '').slice(0, 4);
+    else if (a.outer || a.id === 'late') lines = [a.el.classList.contains('rct-on') ? '取消' : '放開'];
+    else lines = [a.label];
+    const { cx, cy } = menu.g;
+    menu.hubText.innerHTML = lines.map((line, i) => `<tspan x="${cx}" y="${cy + (i - (lines.length - 1) / 2) * 15}" dy=".35em">${escHtml(line)}</tspan>`).join('');
   }
 
   const inSector = (deg, center, span) => Math.abs(((deg - center + 540) % 360) - 180) <= span / 2;
@@ -344,7 +343,7 @@
     } else {
       setOuterOpen(false);
     }
-    setCaption();
+    setHubText();
   }
 
   function closeMenu() {

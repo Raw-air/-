@@ -141,7 +141,8 @@ const SQUAD = '一單';
     assert.equal(await status('s0'), '◎');
     p = await open('s0');
     await dragTo(p, 'late');
-    assert.match(await page.locator('.rct-caption').innerText(), /標記晚歸/);
+    assert.equal(await page.locator('.rct-caption').count(), 0, '上方不能跳文字提示');
+    assert.equal(await page.locator('.rct-hub-text').textContent(), '放開', '中心顯示放開');
     await touch('touchEnd'); await settle();
     assert.equal(await status('s0'), '✓', '晚歸算在場');
     assert.match(await page.locator(rowOf('s0')).innerText(), /晚歸/);
@@ -167,7 +168,7 @@ const SQUAD = '一單';
     // 4. 電話：拖過去上方就看得到號碼，放開跳聯絡資料
     p = await open('s2');
     await dragTo(p, 'phone');
-    assert.match(await page.locator('.rct-caption').innerText(), /0900000002/);
+    assert.equal(await page.locator('.rct-hub-text').textContent(), '0900000002', '中心顯示電話');
     await touch('touchEnd'); await settle();
     const dlg = page.locator('.rct-dialog');
     assert.match(await dlg.innerText(), /0900000002/);
@@ -210,7 +211,7 @@ const SQUAD = '一單';
     // 5-2. 開黃單：放開選事由，存進黃單同一份資料，也寫回設定
     p = await open('s8');
     await dragTo(p, 'yellow');
-    assert.match(await page.locator('.rct-caption').innerText(), /開黃單/);
+    assert.equal(await page.locator('.rct-hub-text').textContent(), '開黃單');
     await touch('touchEnd'); await settle();
     const yd = page.locator('.rct-dialog');
     await yd.locator('.rct-yellow-submit').click();
