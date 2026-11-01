@@ -78,6 +78,17 @@ const SQUAD = '一單';
 
     // 2. 按住：震動間隔越來越短，選單跳出；不移動放開 = 取消，狀態不變
     await page.evaluate(() => { window.__vib.length = 0; });
+    await page.locator(rowOf('s1')).scrollIntoViewIfNeeded();
+    const shakeAt = await center(rowOf('s1'));
+    await touch('touchStart', shakeAt.x, shakeAt.y);
+    await page.waitForTimeout(450);
+    const shaking = await page.locator(rowOf('s1')).evaluate(el => el.style.transform);
+    assert.match(shaking, /translateX/, '按住時格子要抖');
+    await touch('touchEnd');
+    await page.waitForTimeout(100);
+    assert.equal(await page.locator(rowOf('s1')).evaluate(el => el.style.transform), '', '提早放開要停止抖動');
+    assert.equal(await page.locator('#rc-tray').count(), 0);
+    await page.evaluate(() => { window.__vib.length = 0; });
     p = await open('s1');
     const gaps = await page.evaluate(() => window.__vib.slice(1).map((t, i) => t - window.__vib[i]));
     assert.ok(gaps.length >= 4, '要震好幾下 ' + gaps.length);
@@ -88,6 +99,28 @@ const SQUAD = '一單';
     assert.equal(await status('s1'), '✓', '放開取消不能切換狀態');
     assert.equal(await page.locator('#rc-tray').count(), 0);
     pass('按住越震越快、放開取消 ' + holdGaps.map(Math.round).join('>'));
+
+    // 2-2. 選單開著時畫面完全鎖定：上下拖不會跑，關掉後回到原本位置
+    await page.evaluate(() => window.scrollTo(0, 120));
+    await page.waitForTimeout(150);
+    const lockTop = await page.evaluate(() => window.scrollY);
+    const rowBefore = await page.locator(rowOf('s5')).evaluate(el => el.getBoundingClientRect().top);
+    const lockAt = await center(rowOf('s5'));
+    await touch('touchStart', lockAt.x, lockAt.y);
+    await page.waitForSelector('#rc-tray.rct-show', { timeout: 2000 });
+    assert.equal(await page.evaluate(() => getComputedStyle(document.body).position), 'fixed', '頁面要固定住');
+    for (let i = 1; i <= 10; i++) { await touch('touchMove', lockAt.x, lockAt.y + i * 40); await page.waitForTimeout(16); }
+    for (let i = 10; i >= -10; i--) { await touch('touchMove', lockAt.x, lockAt.y + i * 40); await page.waitForTimeout(16); }
+    const rowDuring = await page.locator(rowOf('s5')).evaluate(el => el.getBoundingClientRect().top);
+    assert.ok(Math.abs(rowDuring - rowBefore) < 1, `選單開著時背景不能動：${rowBefore} → ${rowDuring}`);
+    await touch('touchMove', lockAt.x, lockAt.y); await touch('touchEnd');
+    await page.waitForTimeout(300);
+    assert.equal(await page.evaluate(() => getComputedStyle(document.body).position), 'static', '關掉要解鎖');
+    assert.equal(await page.evaluate(() => window.scrollY), lockTop, '要回到原本的捲動位置');
+    assert.ok(Math.abs(await page.locator(rowOf('s5')).evaluate(el => el.getBoundingClientRect().top) - rowBefore) < 1);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(100);
+    pass('選單開著時畫面鎖定，關掉回原位');
 
     // 3. 晚歸：請假的人拖到晚歸 → 在場 + 標記 + 總表算到 + 寫回設定
     assert.equal(await status('s0'), '◎');
@@ -133,12 +166,13 @@ const SQUAD = '一單';
     let at = await dragTo(p, 'remark');
     await page.waitForTimeout(220);
     assert.equal(await page.locator('#rc-tray.rct-outer-open').count(), 1, '要展開外圈');
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll('#rc-tray .rct-outer')].every(el => getComputedStyle(el).opacity === '1')), '外圈展開完要全顯示');
     await page.screenshot({ path: path.join(out, 'tray-outer.png') });
     await dragTo(at, 'ceramic');
     await touch('touchEnd'); await settle();
     assert.equal(writes.filter(w => w.path === '/api/remarks').at(-1).body.remark, '沒繳回瓷扣');
-    assert.equal(await page.locator(`${rowOf('s3')} .rct-ceramic`).count(), 1, '要有瓷扣圖示');
-    assert.match(await page.locator(rowOf('s3')).innerText(), /沒繳回瓷扣/);
+    assert.equal(await page.locator(`${rowOf('s3')} [data-tag="ceramic"]`).count(), 1, '要有瓷扣圖案');
+    assert.doesNotMatch(await page.locator(rowOf('s3')).innerText(), /沒繳回瓷扣/, '瓷扣要用圖案，不是文字');
     // 再加一個，不會蓋掉前一個
     p = await open('s3');
     at = await dragTo(p, 'remark'); await page.waitForTimeout(220);
@@ -146,15 +180,16 @@ const SQUAD = '一單';
     assert.equal(writes.filter(w => w.path === '/api/remarks').at(-1).body.remark, '沒繳回瓷扣、有狀況!');
     // 重畫整張還在
     await page.evaluate(() => renderRollCall(true)); await settle();
-    assert.match(await page.locator(rowOf('s3')).innerText(), /有狀況!/);
-    assert.equal(await page.locator(`${rowOf('s3')} .rct-ceramic`).count(), 1);
+    assert.equal(await page.locator(`${rowOf('s3')} [data-tag="issue"]`).count(), 1, '有狀況也要圖案');
+    assert.equal(await page.locator(`${rowOf('s3')} [data-tag="ceramic"]`).count(), 1);
+    assert.doesNotMatch(await page.locator(rowOf('s3')).innerText(), /有狀況/);
     await page.screenshot({ path: path.join(out, 'tray-row.png') });
     // 再選一次瓷扣 = 取消
     p = await open('s3');
     at = await dragTo(p, 'remark'); await page.waitForTimeout(220);
     await dragTo(at, 'ceramic'); await touch('touchEnd'); await settle();
     assert.equal(writes.filter(w => w.path === '/api/remarks').at(-1).body.remark, '有狀況!');
-    assert.equal(await page.locator(`${rowOf('s3')} .rct-ceramic`).count(), 0);
+    assert.equal(await page.locator(`${rowOf('s3')} [data-tag="ceramic"]`).count(), 0);
     pass('外圈備註、瓷扣圖示、可疊加可取消');
 
     // 6. 備註本身放開：自由輸入

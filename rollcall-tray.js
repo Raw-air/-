@@ -1,27 +1,42 @@
-// ─── 點名頁長按選取盤：按住越震越快 → 跳出圓形選取盤 → 不放手往選項方向拖再放開 ───
+// ─── 點名頁長按選取盤：按住格子會抖、馬達越震越快 → 彈出圓形選取盤 → 不放手往選項方向拖再放開 ───
 // 晚歸：狀態維持「在場」(總表算到)，另外記一個標記，存在設定表 late_<日期>_<中隊>
-// 備註：直接寫進住宿生的備註文字，住宿生檔案頁也看得到，換床時會跟著人走
+// 備註：直接寫進住宿生的備註文字，住宿生檔案頁也看得到，換床時會跟著人走；外圈四個選項在點名列顯示成圖案
 (function () {
-  const HOLD_STEPS_MS = [150, 110, 90, 70, 55, 45, 30]; // 每次震動的間隔，越來越短，加起來就是要按多久
+  const HOLD_STEPS_MS = [170, 120, 95, 75, 60, 50, 40, 30, 25]; // 每次震動的間隔，越來越短，加起來就是要按多久
   const MOVE_CANCEL_PX = 10;     // 選單出來前手指移動超過這個距離，當作在捲動
+  const TAP_MAX_MS = 300;        // 按超過這麼久才放開，就不算點一下
   const DEAD_ZONE = 26;          // 手指離按下去的點太近 = 還沒選
   const WHEEL_RADIUS = 168;
+  const SHAKE_HZ = [7, 26];      // 格子抖動頻率：從慢到快
+  const SHAKE_PX = [0.8, 3.2];   // 格子抖動幅度：從小到大
+  const REDUCED_MOTION = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // 24×24 的圖案。stroke 用目前文字色，外圈四個有自己的材質色
+  const GLYPH = {
+    late: '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+    phone: '<path d="M6.6 3.5 9.5 3l1.6 4.2-2 1.5a11 11 0 0 0 6.2 6.2l1.5-2 4.2 1.6-.5 2.9c-.2 1-1 1.6-2 1.6C10.700 19 5 13.300 5 5.500c0-1 .6-1.800 1.600-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+    remark: '<path d="M5 3.500h10l4 4V20.500H5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8.500 11h7M8.500 15h7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+    ceramic: '<circle cx="12" cy="12" r="10" fill="#f6f2e7" stroke="#8d8a7c" stroke-width="1.500"/><circle cx="12" cy="12" r="6.500" fill="none" stroke="#2f6fb5" stroke-width="1.700"/><circle cx="12" cy="12" r="2.300" fill="#2f6fb5"/><path d="M5.500 7.500A8 8 0 0 1 10 4.300" fill="none" stroke="#fff" stroke-width="1.500" stroke-linecap="round"/>',
+    consent: '<path d="M5 2.500h10.500L19.500 6.500V21.500H5z" fill="#fbfbf7" stroke="#8b8f98" stroke-width="1.400" stroke-linejoin="round"/><path d="M8 9h8M8 12.500h8M8 16h4" stroke="#8b8f98" stroke-width="1.500" stroke-linecap="round"/><circle cx="17.500" cy="18" r="4.500" fill="#ef4444"/><path d="m15.700 16.200 3.600 3.600m0-3.600-3.600 3.600" stroke="#fff" stroke-width="1.500" stroke-linecap="round"/>',
+    officer: '<path d="M3 9.500 12 5l9 4.500-2.500 2.200h-13z" fill="#27406f" stroke="#172845" stroke-width="1.200" stroke-linejoin="round"/><circle cx="12" cy="8.700" r="1.500" fill="#f2c94c"/><path d="M6.500 12.500h11V14a5.500 5.500 0 0 1-11 0z" fill="#f2c6a0" stroke="#b98b66" stroke-width="1.100"/><path d="M5 22c.5-3.500 3.300-5 7-5s6.500 1.500 7 5z" fill="#27406f"/>',
+    issue: '<path d="M12 2.800 22.500 21h-21z" fill="#f59e0b" stroke="#a65f00" stroke-width="1.300" stroke-linejoin="round"/><path d="M12 9v6" stroke="#fff" stroke-width="2.500" stroke-linecap="round"/><circle cx="12" cy="18" r="1.500" fill="#fff"/>',
+  };
   const INNER = [
     { id: 'remark', label: '備註', angle: -90, span: 120 },
     { id: 'phone', label: '電話', angle: 30, span: 120 },
     { id: 'late', label: '晚歸', angle: 150, span: 120 },
   ];
   const TAGS = [
-    { id: 'ceramic', label: '沒繳回瓷扣', lines: ['沒繳回', '瓷扣'], angle: -157.5, span: 45 },
-    { id: 'consent', label: '沒住宿同意書', lines: ['沒住宿', '同意書'], angle: -112.5, span: 45 },
-    { id: 'officer', label: '找教官', lines: ['找教官'], angle: -67.5, span: 45 },
-    { id: 'issue', label: '有狀況!', lines: ['有狀況!'], angle: -22.5, span: 45 },
+    { id: 'ceramic', label: '沒繳回瓷扣', angle: -157.5, span: 45 },
+    { id: 'consent', label: '沒住宿同意書', angle: -112.5, span: 45 },
+    { id: 'officer', label: '找教官', angle: -67.5, span: 45 },
+    { id: 'issue', label: '有狀況!', angle: -22.5, span: 45 },
   ];
-  const CERAMIC = TAGS[0].label;
-  const CERAMIC_ICON = '<svg class="rct-ceramic" viewBox="0 0 24 24" width="18" height="18" role="img" aria-label="沒繳回瓷扣"><circle cx="12" cy="12" r="10" fill="#f4f1e8" stroke="#8d8a7c" stroke-width="1.5"/><circle cx="12" cy="12" r="6" fill="none" stroke="#2f6fb5" stroke-width="1.5"/><circle cx="12" cy="12" r="2" fill="#2f6fb5"/></svg>';
+  const TAG_LABELS = TAGS.map(t => t.label);
 
   let hold = null;   // 正在按住
   let menu = null;   // 選單開著
+  let scrollLock = null;
   let suppressClickUntil = 0;
   let lastTouchAt = 0;
 
@@ -63,15 +78,17 @@
     }
   }
 
-  // ── 點名列上顯示的東西 ──
+  // ── 點名列上顯示的東西：外圈四個選項用圖案，自己打的備註才用文字 ──
   function nameIcons(s) {
-    return !s.isEmpty && hasTag(s, CERAMIC) ? CERAMIC_ICON : '';
+    if (s.isEmpty) return '';
+    return TAGS.filter(t => hasTag(s, t.label)).map(t =>
+      `<svg class="rct-tag-icon" data-tag="${t.id}" viewBox="0 0 24 24" width="20" height="20" role="img" aria-label="${t.label}"><title>${t.label}</title>${GLYPH[t.id]}</svg>`).join('');
   }
   function rowExtras(s) {
     if (s.isEmpty) return '<div class="rct-extras"></div>';
     const status = s.attendance[state.currentDate] || '✓';
     const late = status === '✓' && isLate(s, state.currentDate);
-    const remark = String(s.remarks || '').trim();
+    const remark = remarkTokens(s.remarks).filter(t => !TAG_LABELS.includes(t)).join('、');
     return `<div class="rct-extras">${late ? '<span class="rct-late">晚歸</span>' : ''}${remark ? `<span class="rct-remark">${escHtml(remark)}</span>` : ''}</div>`;
   }
   function refreshRow(id) {
@@ -94,14 +111,80 @@
     if (s && isLate(s, state.currentDate)) setLate(s, false);
   }
 
+  // ── 鎖定畫面：選單開著時不能捲動，不然選到一半背景會跑掉 ──
+  // iPhone 不一定理會 preventDefault，所以把頁面整個固定住，連捲動能力都拿掉
+  function lockScroll(row) {
+    if (scrollLock) return;
+    const body = document.body;
+    const inner = [];
+    for (let el = row && row.parentElement; el && el !== body && el !== document.documentElement; el = el.parentElement) {
+      if (/(auto|scroll)/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight) {
+        inner.push({ el, top: el.scrollTop, overflow: el.style.overflow });
+        el.style.overflow = 'hidden';
+      }
+    }
+    const y = window.scrollY;
+    const saved = { position: body.style.position, top: body.style.top, left: body.style.left, right: body.style.right, width: body.style.width };
+    body.style.position = 'fixed';
+    body.style.top = -y + 'px';
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
+    body.classList.add('rct-locked');
+    // 手指放開前還在滑的慣性也要擋掉
+    const guard = () => { for (const i of inner) if (i.el.scrollTop !== i.top) i.el.scrollTop = i.top; };
+    window.addEventListener('scroll', guard, true);
+    scrollLock = { y, saved, inner, guard };
+  }
+  function unlockScroll() {
+    if (!scrollLock) return;
+    const { y, saved, inner, guard } = scrollLock;
+    scrollLock = null;
+    window.removeEventListener('scroll', guard, true);
+    const body = document.body;
+    Object.assign(body.style, saved);
+    body.classList.remove('rct-locked');
+    for (const i of inner) { i.el.style.overflow = i.overflow; i.el.scrollTop = i.top; }
+    window.scrollTo(0, y);
+  }
+
+  // ── Q 彈動畫：阻尼彈簧取樣成關鍵影格，只動 transform，手機跑得動 ──
+  function springFrames(from, stiffness = 11, damping = 5.2, samples = 18) {
+    const frames = [];
+    for (let i = 0; i <= samples; i++) {
+      const t = i / samples;
+      const v = 1 - Math.exp(-damping * t) * Math.cos(stiffness * t);
+      frames.push({ offset: t, ...from(v, t) });
+    }
+    frames[samples] = { offset: 1, ...from(1, 1) };
+    return frames;
+  }
+  function animate(el, frames, duration, delay = 0, fill = 'both') {
+    if (REDUCED_MOTION || !el.animate) return null;
+    if (el._rctAnim) el._rctAnim.cancel();
+    el._rctAnim = el.animate(frames, { duration, delay, fill, easing: 'linear' });
+    return el._rctAnim;
+  }
+  const popIn = (el, delay) => animate(el, springFrames(v => ({
+    transform: `scale(${(0.15 + 0.85 * v).toFixed(3)})`, opacity: Math.min(1, v * 2.5).toFixed(3),
+  })), 480, delay);
+  // 外環從備註那格「甩」出去展開：旋轉 + 放大都帶回彈
+  const fanOut = (el, fromDeg, delay) => animate(el, springFrames(v => ({
+    transform: `rotate(${(fromDeg * (1 - v)).toFixed(2)}deg) scale(${(0.72 + 0.28 * v).toFixed(3)})`, opacity: Math.min(1, v * 3).toFixed(3),
+  }), 12, 5), 460, delay);
+  const fanIn = (el, toDeg) => animate(el, [
+    { transform: 'rotate(0deg) scale(1)', opacity: 1 },
+    { transform: `rotate(${toDeg}deg) scale(.72)`, opacity: 0 },
+  ], 130);
+
   // ── 選取盤：像遊戲的圓形快捷盤，手指往哪個方向拖就選哪一格 ──
   function layout(x, y) {
     const w = window.innerWidth, h = window.innerHeight;
-    const outer = Math.min(WHEEL_RADIUS, w / 2 - 8);
-    const inner = outer * 0.62;      // 內圈外緣；再往外就是外圈
-    const hub = outer * 0.25;
-    const cx = Math.min(Math.max(x, outer + 8), w - outer - 8);
-    const cy = Math.min(Math.max(y, outer + 66), h - inner - 16);
+    const outer = Math.min(WHEEL_RADIUS, w / 2 - 12);
+    const inner = outer * 0.56;      // 內圈外緣；再往外就是外圈
+    const hub = outer * 0.22;
+    const cx = Math.min(Math.max(x, outer + 12), w - outer - 12);
+    const cy = Math.min(Math.max(y, outer + 70), h - inner - 20);
     return { cx, cy, inner, outer, hub };
   }
   const polar = (g, r, deg) => {
@@ -109,27 +192,35 @@
     return [g.cx + Math.cos(rad) * r, g.cy + Math.sin(rad) * r];
   };
   function wedgePath(g, r0, r1, center, span) {
-    const gap = 1.5; // 扇形之間留一點縫
+    const gap = 1.6; // 扇形之間留一點溝，看起來像一塊一塊的實體按鍵
     const a0 = center - span / 2 + gap, a1 = center + span / 2 - gap;
     const large = a1 - a0 > 180 ? 1 : 0;
     const [x0, y0] = polar(g, r1, a0), [x1, y1] = polar(g, r1, a1), [x2, y2] = polar(g, r0, a1), [x3, y3] = polar(g, r0, a0);
     return `M${x0} ${y0}A${r1} ${r1} 0 ${large} 1 ${x1} ${y1}L${x2} ${y2}A${r0} ${r0} 0 ${large} 0 ${x3} ${y3}Z`;
   }
   function slotSvg(g, item, r0, r1, outer, on) {
-    const mid = (r0 + r1) / 2;
+    const mid = (r0 + r1) / 2 + (outer ? 3 : 0);
     const [lx, ly] = polar(g, mid, item.angle);
-    const lines = item.lines || [item.label];
-    const lineH = outer ? 15 : 18;
-    const text = lines.map((line, i) => `<text x="${lx}" y="${ly + (i - (lines.length - 1) / 2) * lineH}" dy=".35em">${line}</text>`).join('');
-    return `<g class="rct-slot${outer ? ' rct-outer' : ''}${on ? ' rct-on' : ''}" data-id="${item.id}" data-x="${lx}" data-y="${ly}"><path d="${wedgePath(g, r0, r1, item.angle, item.span)}"/>${text}</g>`;
+    const size = outer ? 28 : 24;
+    const iconY = ly - (outer ? 22 : 20);
+    const labelY = ly + (outer ? 14 : 13);
+    const rad = item.angle * Math.PI / 180;
+    const style = `--dx:${(Math.cos(rad) * 5).toFixed(1)}px;--dy:${(Math.sin(rad) * 5).toFixed(1)}px;transform-origin:${g.cx}px ${g.cy}px`;
+    return `<g class="rct-slot${outer ? ' rct-outer' : ''}${on ? ' rct-on' : ''}" data-id="${item.id}" data-x="${lx}" data-y="${ly}" style="transform-origin:${g.cx}px ${g.cy}px">
+      <g class="rct-face" style="${style}">
+        <path class="rct-face-base" d="${wedgePath(g, r0, r1, item.angle, item.span)}"/>
+        <path class="rct-face-edge" d="${wedgePath(g, r0 + 1, r1 - 1, item.angle, item.span - 1)}"/>
+        <svg x="${lx - size / 2}" y="${iconY}" width="${size}" height="${size}" viewBox="0 0 24 24" class="rct-glyph">${GLYPH[item.id]}</svg>
+        <text x="${lx}" y="${labelY}" dy=".35em">${item.label}</text>
+      </g></g>`;
   }
 
   function openMenu(s, x, y) {
     const g = layout(x, y);
     const present = (s.attendance[state.currentDate] || '✓') === '✓';
     const lateOn = present && isLate(s, state.currentDate);
-    const inner = INNER.map(i => slotSvg(g, i, g.hub, g.inner, false, i.id === 'late' && lateOn)).join('');
-    const outer = TAGS.map(t => slotSvg(g, t, g.inner + 2, g.outer, true, hasTag(s, t.label))).join('');
+    const innerSvg = INNER.map(i => slotSvg(g, i, g.hub + 3, g.inner, false, i.id === 'late' && lateOn)).join('');
+    const outerSvg = TAGS.map(t => slotSvg(g, t, g.inner + 3, g.outer, true, hasTag(s, t.label))).join('');
     const root = document.createElement('div');
     root.id = 'rc-tray';
     root.dataset.cx = g.cx;
@@ -137,11 +228,22 @@
     root.dataset.ox = x;
     root.dataset.oy = y;
     root.innerHTML = `<div class="rct-caption"></div>
-      <svg class="rct-wheel" width="100%" height="100%" style="transform-origin:${g.cx}px ${g.cy}px">
-        <circle class="rct-rim" cx="${g.cx}" cy="${g.cy}" r="${g.inner + 1}"/>
-        ${outer}${inner}
-        <circle class="rct-hub" cx="${g.cx}" cy="${g.cy}" r="${g.hub - 2}"/>
-        <text class="rct-hub-text" x="${g.cx}" y="${g.cy}" dy=".35em"></text>
+      <svg class="rct-wheel" width="100%" height="100%">
+        <defs>
+          <linearGradient id="rct-raised" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="rct-stop-top"/><stop offset="1" class="rct-stop-bot"/></linearGradient>
+          <linearGradient id="rct-pressed" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0a6fe0"/><stop offset="1" stop-color="#3aa0ff"/></linearGradient>
+          <linearGradient id="rct-edge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="rct-stop-light"/><stop offset="1" class="rct-stop-dark"/></linearGradient>
+          <linearGradient id="rct-hub-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="rct-stop-bot"/><stop offset="1" class="rct-stop-top"/></linearGradient>
+          <radialGradient id="rct-shadow"><stop offset=".72" class="rct-stop-shadow"/><stop offset="1" stop-opacity="0" class="rct-stop-shadow"/></radialGradient>
+        </defs>
+        <g class="rct-group rct-outer-shadow" style="transform-origin:${g.cx}px ${g.cy}px"><path d="${wedgePath(g, g.inner, g.outer + 10, -90, 184)}" fill="url(#rct-shadow)"/></g>
+        ${outerSvg}
+        <g class="rct-base" style="transform-origin:${g.cx}px ${g.cy}px"><circle cx="${g.cx}" cy="${g.cy + 4}" r="${g.inner + 12}" fill="url(#rct-shadow)"/></g>
+        ${innerSvg}
+        <g class="rct-hub-group" style="transform-origin:${g.cx}px ${g.cy}px">
+          <circle class="rct-hub" cx="${g.cx}" cy="${g.cy}" r="${g.hub}"/>
+          <text class="rct-hub-text" x="${g.cx}" y="${g.cy}" dy=".35em"></text>
+        </g>
         <circle class="rct-cursor" r="6" cx="${g.cx}" cy="${g.cy}" style="opacity:0"/>
       </svg>`;
     document.body.appendChild(root);
@@ -152,10 +254,31 @@
       caption: root.querySelector('.rct-caption'),
       hubText: root.querySelector('.rct-hub-text'),
       cursor: root.querySelector('.rct-cursor'),
+      outerShadow: root.querySelector('.rct-outer-shadow'),
     };
     setCaption();
-    requestAnimationFrame(() => root.classList.add('rct-show'));
-    haptic('medium');
+    root.classList.add('rct-show');
+    // 中心先彈出來，三格接著一格一格彈開
+    popIn(root.querySelector('.rct-base'), 0);
+    popIn(root.querySelector('.rct-hub-group'), 0);
+    slots.filter(i => !i.outer).forEach((slot, i) => popIn(slot.el, 40 + i * 45));
+    popIn(menu.caption, 60);
+    haptic('heavy');
+  }
+
+  function setOuterOpen(open) {
+    if (menu.outerOpen === open) return;
+    menu.outerOpen = open;
+    menu.root.classList.toggle('rct-outer-open', open);
+    const tags = menu.slots.filter(i => i.outer);
+    // 從備註那格 (正上方) 往左右甩出去，離得遠的晚一點到
+    tags.forEach(slot => {
+      const fromDeg = -90 - slot.angle;
+      if (open) fanOut(slot.el, fromDeg, Math.abs(fromDeg) * 1.1);
+      else fanIn(slot.el, fromDeg);
+    });
+    if (open) fanOut(menu.outerShadow, 0, 0);
+    else fanIn(menu.outerShadow, 0);
   }
 
   function setCaption() {
@@ -168,7 +291,7 @@
       else text = (a.el.classList.contains('rct-on') ? '放開取消：' : '放開標記：') + a.label;
     }
     menu.caption.textContent = text;
-    menu.hubText.textContent = a ? (a.id === 'phone' && s.phone ? '放開看電話' : a.label).slice(0, 6) : String(s.name || '').slice(0, 4);
+    menu.hubText.textContent = a ? (a.id === 'phone' && s.phone ? '看電話' : a.label).slice(0, 4) : String(s.name || '').slice(0, 4);
   }
 
   const inSector = (deg, center, span) => Math.abs(((deg - center + 540) % 360) - 180) <= span / 2;
@@ -201,21 +324,21 @@
     if (hit) {
       hit.el.classList.add('rct-hover');
       haptic('light');
-      if (hit.id === 'remark') menu.outerOpen = true;
-      else if (!hit.outer) menu.outerOpen = false;
+      if (hit.id === 'remark') setOuterOpen(true);
+      else if (!hit.outer) setOuterOpen(false);
     } else {
-      menu.outerOpen = false;
+      setOuterOpen(false);
     }
-    menu.root.classList.toggle('rct-outer-open', menu.outerOpen);
     setCaption();
   }
 
   function closeMenu() {
     if (!menu) return;
-    const root = menu.root;
+    const { root } = menu;
     menu = null;
+    unlockScroll();
     root.classList.remove('rct-show');
-    setTimeout(() => root.remove(), 160);
+    setTimeout(() => root.remove(), 170);
   }
 
   function releaseMenu() {
@@ -248,7 +371,10 @@
     const close = () => { overlay.classList.remove('visible'); setTimeout(() => overlay.remove(), 260); };
     overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
     document.body.appendChild(overlay);
-    requestAnimationFrame(() => overlay.classList.add('visible'));
+    requestAnimationFrame(() => {
+      overlay.classList.add('visible');
+      popIn(overlay.querySelector('.modal-card'), 0);
+    });
     return { overlay, close };
   }
 
@@ -282,32 +408,62 @@
     });
   }
 
-  // ── 按住的流程 ──
+  // ── 按住的流程：格子越抖越快、馬達越震越快，到底就彈出選單 ──
+  function shakeLoop(h) {
+    const total = HOLD_STEPS_MS.reduce((a, b) => a + b, 0);
+    const startAt = HOLD_STEPS_MS[0]; // 第一段不抖，輕點不會有感
+    let phase = 0, last = performance.now();
+    const began = last;
+    const frame = now => {
+      if (hold !== h) return;
+      const t = Math.min(1, Math.max(0, (now - began - startAt) / (total - startAt)));
+      phase += 2 * Math.PI * (SHAKE_HZ[0] + (SHAKE_HZ[1] - SHAKE_HZ[0]) * t) * (now - last) / 1000;
+      last = now;
+      if (now - began > startAt && !REDUCED_MOTION) {
+        const amp = SHAKE_PX[0] + (SHAKE_PX[1] - SHAKE_PX[0]) * t;
+        h.row.style.transform = `translateX(${(Math.sin(phase) * amp).toFixed(2)}px) rotate(${(Math.cos(phase * 0.9) * amp * 0.12).toFixed(3)}deg) scale(${(1 - 0.03 * t).toFixed(3)})`;
+      }
+      h.raf = requestAnimationFrame(frame);
+    };
+    h.raf = requestAnimationFrame(frame);
+  }
+  function stopShake(h, bounce) {
+    cancelAnimationFrame(h.raf);
+    h.row.classList.remove('rct-holding');
+    h.row.style.transform = '';
+    h.row.style.transition = h.savedTransition;
+    if (bounce) animate(h.row, springFrames(v => ({ transform: `scale(${(0.97 + 0.03 * v).toFixed(3)})` }), 14, 6), 320, 0, 'none');
+  }
   function startHold(row, x, y) {
     if (hold || menu || !row) return;
     const s = findStudent(row.dataset.pid);
     if (!s || s.isEmpty || state.viewSemester) return;
-    hold = { row, s, x, y, lastX: x, lastY: y, step: 0, timer: null };
+    hold = { row, s, x, y, lastX: x, lastY: y, step: 0, timer: null, raf: 0, startedAt: performance.now(), savedTransition: row.style.transition };
+    row.style.transition = 'none'; // .student-row 有 transition，會把抖動抹平
     row.classList.add('rct-holding');
+    shakeLoop(hold);
     const tick = () => {
       if (!hold) return;
       if (hold.step >= HOLD_STEPS_MS.length) {
         const h = hold;
         hold = null;
-        h.row.classList.remove('rct-holding');
+        stopShake(h, true);
+        lockScroll(h.row);
         openMenu(h.s, h.lastX, h.lastY);
         return;
       }
-      if (hold.step > 0) haptic('light'); // 第一下等一小段才震，輕點不會有感
+      // 第一下等一小段才震，輕點不會有感；越後面震得越重
+      if (hold.step > 0) haptic(hold.step > HOLD_STEPS_MS.length / 2 ? 'medium' : 'light');
       hold.timer = setTimeout(tick, HOLD_STEPS_MS[hold.step++]);
     };
     tick();
   }
   function cancelHold() {
     if (!hold) return;
-    clearTimeout(hold.timer);
-    hold.row.classList.remove('rct-holding');
+    const h = hold;
     hold = null;
+    clearTimeout(h.timer);
+    stopShake(h, false);
   }
   function pointerMove(x, y) {
     if (menu) { moveMenu(x, y); return true; }
@@ -318,15 +474,17 @@
     return false;
   }
   function pointerEnd() {
-    if (menu) releaseMenu();
-    else cancelHold();
+    if (menu) { releaseMenu(); return; }
+    // 已經按到在抖了才放開 = 想長按又反悔，不能算成點一下換狀態
+    if (hold && performance.now() - hold.startedAt > TAP_MAX_MS) suppressClickUntil = Date.now() + 500;
+    cancelHold();
   }
 
   function install() {
     const list = document.getElementById('rc-student-list');
     if (!list) return;
-    // 選單開著時不准捲動。一定要事先掛好且不是 passive，手勢開始後才掛瀏覽器不理
-    list.addEventListener('touchmove', e => { if (menu && e.cancelable) e.preventDefault(); }, { passive: false });
+    // 選單開著時整頁不准捲動。一定要事先掛好且不是 passive，手勢開始後才掛瀏覽器不理
+    document.addEventListener('touchmove', e => { if (menu && e.cancelable) e.preventDefault(); }, { passive: false, capture: true });
     list.addEventListener('touchstart', e => {
       lastTouchAt = Date.now();
       if (e.touches.length !== 1) { cancelHold(); return; }
@@ -360,6 +518,7 @@
     document.addEventListener('mouseup', () => { if (Date.now() - lastTouchAt >= 800) pointerEnd(); });
 
     list.addEventListener('scroll', cancelHold, { passive: true });
+    window.addEventListener('scroll', () => { if (hold) cancelHold(); }, { passive: true });
     // 長按放開後瀏覽器還會補一個 click，不能算成點一下切換狀態
     list.addEventListener('click', e => {
       if (Date.now() < suppressClickUntil) { e.stopPropagation(); e.preventDefault(); }
@@ -367,8 +526,7 @@
     list.addEventListener('contextmenu', e => {
       if (hold || menu) e.preventDefault();
     });
-    // 長按期間如果有選單已跳出，手指還沒移動就放開也要擋 click
-    const markSuppress = () => { if (hold === null && menu) suppressClickUntil = Date.now() + 500; };
+    const markSuppress = () => { if (menu) suppressClickUntil = Date.now() + 500; };
     document.addEventListener('touchend', markSuppress, true);
     document.addEventListener('mouseup', markSuppress, true);
   }

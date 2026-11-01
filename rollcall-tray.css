@@ -1,16 +1,15 @@
-/* 點名頁長按托盤 */
+/* 點名頁長按選取盤：跟介面一樣的擬物材質，背景不模糊不壓暗 */
 #rc-student-list .student-row {
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
 }
-.student-row.rct-holding {
-  transform: scale(.97);
-  box-shadow: 0 0 0 2px rgba(10, 132, 255, .65);
-  transition: transform .5s ease-out, box-shadow .5s ease-out;
-}
-.rct-name-icons { display: inline-flex; vertical-align: -3px; margin-left: 4px; }
-.rct-ceramic { display: block; }
+.student-row.rct-holding { box-shadow: 0 0 0 2px rgba(10, 132, 255, .6); will-change: transform; }
+body.rct-locked { touch-action: none; overscroll-behavior: none; }
+
+.rct-name-icons { display: inline-flex; gap: 3px; vertical-align: -4px; margin-left: 5px; }
+.rct-name-icons:empty { display: none; }
+.rct-tag-icon { display: block; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .35)); }
 .rct-extras { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .rct-extras:empty { display: none; }
 .rct-late, .rct-remark {
@@ -23,37 +22,71 @@ body.light-mode .rct-late { color: #6d3fd6; }
 body.light-mode .rct-remark { color: #a86400; }
 
 #rc-tray {
-  position: fixed; inset: 0; z-index: 2000; touch-action: none;
-  background: rgba(0, 0, 0, .5); opacity: 0; transition: opacity .12s ease;
+  --wheel-top: #3b3b44;
+  --wheel-bot: #26262c;
+  --wheel-light: rgba(255, 255, 255, .22);
+  --wheel-dark: rgba(0, 0, 0, .55);
+  --wheel-shadow: rgba(0, 0, 0, .5);
+  --wheel-groove: #121216;
+  position: fixed; inset: 0; z-index: 2000; touch-action: none; background: transparent;
   -webkit-user-select: none; user-select: none;
+  opacity: 0; transition: opacity .15s ease;
+}
+body.light-mode #rc-tray {
+  --wheel-top: #ffffff;
+  --wheel-bot: #dfe2e9;
+  --wheel-light: rgba(255, 255, 255, .95);
+  --wheel-dark: rgba(150, 160, 180, .6);
+  --wheel-shadow: rgba(120, 132, 155, .5);
+  --wheel-groove: #b9bfcc;
 }
 #rc-tray.rct-show { opacity: 1; }
+
+.rct-stop-top { stop-color: var(--wheel-top); }
+.rct-stop-bot { stop-color: var(--wheel-bot); }
+.rct-stop-light { stop-color: var(--wheel-light); }
+.rct-stop-dark { stop-color: var(--wheel-dark); }
+.rct-stop-shadow { stop-color: var(--wheel-shadow); }
+
 .rct-caption {
-  position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 18px); transform: translateX(-50%);
-  max-width: 88vw; padding: 8px 16px; border-radius: 999px;
-  background: rgba(20, 20, 28, .92); color: #fff; font-size: 15px; font-weight: 700; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; border: 1px solid rgba(255, 255, 255, .18);
+  position: absolute; left: 0; right: 0; width: fit-content; margin: 0 auto;
+  top: calc(env(safe-area-inset-top, 0px) + 18px);
+  max-width: 88vw; padding: 9px 18px; border-radius: 999px;
+  background: linear-gradient(180deg, var(--wheel-top), var(--wheel-bot));
+  color: var(--text); font-size: 15px; font-weight: 700; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; border: 1px solid var(--border2);
+  box-shadow: var(--neu-out);
 }
-.rct-wheel {
-  position: absolute; inset: 0; transform: scale(.72); opacity: 0;
-  transition: transform .17s cubic-bezier(.2, 1.35, .4, 1), opacity .1s ease;
-}
-#rc-tray.rct-show .rct-wheel { transform: scale(1); opacity: 1; }
-.rct-rim { fill: rgba(12, 12, 18, .94); stroke: #c9a24f; stroke-width: 3; }
-.rct-slot path { fill: #24252e; stroke: rgba(201, 162, 79, .55); stroke-width: 1; transition: fill .08s ease; }
-.rct-slot text { fill: #fff; font-size: 17px; font-weight: 800; text-anchor: middle; pointer-events: none; }
-.rct-outer { opacity: 0; transition: opacity .12s ease; }
-.rct-outer path { fill: #33270f; stroke: #c9a24f; }
-.rct-outer text { font-size: 13px; }
-#rc-tray.rct-outer-open .rct-outer { opacity: 1; }
-.rct-slot.rct-on path { fill: #14532d; stroke: #22c55e; stroke-width: 2; }
-.rct-slot.rct-hover path { fill: #0a84ff; stroke: #fff; stroke-width: 2; }
-.rct-hub { fill: #0c0c12; stroke: #c9a24f; stroke-width: 2; }
-.rct-hub-text { fill: #fff; font-size: 13px; font-weight: 800; text-anchor: middle; }
-.rct-cursor { fill: #fff; fill-opacity: .9; stroke: #0a84ff; stroke-width: 3; }
+.rct-wheel { position: absolute; inset: 0; overflow: visible; }
+
+.rct-face { transition: transform .32s cubic-bezier(.3, 1.9, .5, 1); }
+.rct-face-base { fill: url(#rct-raised); stroke: var(--wheel-groove); stroke-width: 1.5; }
+.rct-face-edge { fill: none; stroke: url(#rct-edge); stroke-width: 1.5; }
+.rct-slot text { fill: var(--text); font-size: 13px; font-weight: 800; text-anchor: middle; pointer-events: none; }
+.rct-glyph { color: var(--text); overflow: visible; pointer-events: none; }
+.rct-outer text { font-size: 10px; }
+.rct-outer, .rct-outer-shadow { opacity: 0; }
+#rc-tray.rct-outer-open .rct-outer, #rc-tray.rct-outer-open .rct-outer-shadow { opacity: 1; }
+
+/* 選中：像按鍵被壓下去又往外彈，亮藍色 */
+.rct-slot.rct-hover .rct-face { transform: translate(var(--dx), var(--dy)); }
+.rct-slot.rct-hover .rct-face-base { fill: url(#rct-pressed); stroke: #0758b5; }
+.rct-slot.rct-hover .rct-face-edge { stroke: rgba(255, 255, 255, .55); }
+.rct-slot.rct-hover text, .rct-slot.rct-hover .rct-glyph { fill: #fff; color: #fff; }
+/* 已標記：綠色光圈 */
+.rct-slot.rct-on .rct-face-edge { stroke: #30d158; stroke-width: 3; }
+
+.rct-hub { fill: url(#rct-hub-fill); stroke: var(--wheel-groove); stroke-width: 1.5; }
+.rct-hub-text { fill: var(--text); font-size: 13px; font-weight: 800; text-anchor: middle; }
+.rct-cursor { fill: #fff; fill-opacity: .95; stroke: #0a84ff; stroke-width: 3; transition: opacity .1s; }
+
+/* 放開後的小視窗也不模糊背景 */
+.modal-overlay.rct-dialog.visible { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(0, 0, 0, .25); }
+.rct-dialog .modal-card { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--bg2); box-shadow: var(--neu-out); }
 
 .rct-call { display: block; width: 100%; box-sizing: border-box; text-align: center; text-decoration: none; }
 .rct-remark-input {
   width: 100%; box-sizing: border-box; padding: 10px; border-radius: 10px; font: inherit; font-size: 15px;
   background: rgba(127, 127, 127, .12); color: inherit; border: 1px solid rgba(127, 127, 127, .35); resize: vertical;
+  box-shadow: var(--neu-in);
 }
