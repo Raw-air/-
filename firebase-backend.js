@@ -29,7 +29,6 @@
   firebase.initializeApp(CONFIG.FIREBASE);
   const db = firebase.firestore();
   db.settings({ ignoreUndefinedProperties: true });
-  db.enablePersistence({ synchronizeTabs: true }).catch(() => {}); // 無痕模式等不支援就只用記憶體
   const { FieldPath, FieldValue } = firebase.firestore;
 
   // ── 狀態 ──
@@ -156,7 +155,16 @@
       if (Date.now() > until) throw new Error('第一次讀取逾時');
       await sleep(30);
     }
-  })().catch(err => failover(err.message));
+  })().catch(err => {
+    failover(err.message);
+    if (err.message !== '第一次讀取逾時') return;
+    const timer = setInterval(() => {
+      if (!(live.bedsReady && live.configReady && live.remarksReady && live.semesterMeta)) return;
+      clearInterval(timer);
+      live.failover = false;
+      console.warn('[firebase] 資料到齊，切回 Firebase');
+    }, 500);
+  });
 
   // ── 組回原後端的回應格式 ──
   function bedToStudent(doc) {
@@ -204,6 +212,7 @@
   const readQueue = () => { try { return JSON.parse(localStorage.getItem(MIRROR_KEY) || '[]'); } catch { return []; } };
   const saveQueue = q => { try { localStorage.setItem(MIRROR_KEY, JSON.stringify(q)); return true; } catch { return false; } };
   function enqueueMirror(item) {
+    if (live.failover) return; // 這次開啟直接寫原後端，不用再寫回一次
     item.qid = Date.now() + '_' + Math.random().toString(36).slice(2, 8);
     item.tries = 0;
     const q = readQueue();
@@ -516,7 +525,12 @@
     const request = new Request(href, init);
 
     await ready;
-    if (live.failover) return realFetch(input, init);
+    if (live.failover) {
+      const res = await realFetch(input, init);
+      // 改走原後端時也盡量寫一份到 Firebase，別台才看得到；失敗就算了，Notion 已經有了
+      if (res.ok && request.method !== 'GET' && live.semester && !ADMIN_PATHS.includes(url.pathname)) handle(request, url).catch(() => {});
+      return res;
+    }
 
     if (ADMIN_PATHS.includes(url.pathname)) {
       await flushMirror(60000); // 先把排隊的寫回 Notion，複製回來才不會蓋掉新資料

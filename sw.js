@@ -1,10 +1,10 @@
 // Atomic shell cache: HTML and JS must always come from the same release.
-const CACHE_NAME = 'biyuan-v147';
-const ASSETS = ['./', './index.html', './style.css?v=184', './phonetic-search.js?v=184', './app.js?v=184', './import.js?v=184',
-  './api.js?v=184', './config.js?v=184', './theme.js?v=184',
-  './carousel.js?v=184', './navigation.js?v=184', './motion.css?v=184', './liquid-nav.css?v=184', './nav-adapt.css?v=184', './nav-adapt.js?v=184', './folder.css?v=184', './dissolve.js?v=184',
-  './quick-menu.css?v=184', './quick-menu.js?v=184', './boot-screen.css?v=184', './boot-fish.js?v=184', './boot-screen.js?v=184', './tablet.css?v=184', './tablet.js?v=184', './tablet-transform.css?v=184', './tablet-transform.js?v=184', './color-mode.css?v=184', './color-mode.js?v=184', './phone-leave.css?v=184', './phone-leave.js?v=184', './role-claim.js?v=184', './yellow-card.css?v=184', './yellow-card.js?v=184', './leave-all.css?v=184', './leave-all.js?v=184',
-  './vendor/firebase/firebase-app-compat.js?v=184', './vendor/firebase/firebase-auth-compat.js?v=184', './vendor/firebase/firebase-firestore-compat.js?v=184', './firebase-backend.js?v=184', './release-notice.js?v=184', './manifest.json?v=184', './icon-192.png?v=184',
+const CACHE_NAME = 'biyuan-v148';
+const ASSETS = ['./', './index.html', './style.css?v=185', './phonetic-search.js?v=185', './app.js?v=185', './import.js?v=185',
+  './api.js?v=185', './config.js?v=185', './theme.js?v=185',
+  './carousel.js?v=185', './navigation.js?v=185', './motion.css?v=185', './liquid-nav.css?v=185', './nav-adapt.css?v=185', './nav-adapt.js?v=185', './folder.css?v=185', './dissolve.js?v=185',
+  './quick-menu.css?v=185', './quick-menu.js?v=185', './boot-screen.css?v=185', './boot-fish.js?v=185', './boot-screen.js?v=185', './tablet.css?v=185', './tablet.js?v=185', './tablet-transform.css?v=185', './tablet-transform.js?v=185', './color-mode.css?v=185', './color-mode.js?v=185', './phone-leave.css?v=185', './phone-leave.js?v=185', './role-claim.js?v=185', './yellow-card.css?v=185', './yellow-card.js?v=185', './leave-all.css?v=185', './leave-all.js?v=185',
+  './vendor/firebase/firebase-app-compat.js?v=185', './vendor/firebase/firebase-auth-compat.js?v=185', './vendor/firebase/firebase-firestore-compat.js?v=185', './firebase-backend.js?v=185', './release-notice.js?v=185', './manifest.json?v=185', './icon-192.png?v=185',
   './Lp/ICON/COPY.svg', './Lp/ICON/HOME.svg', './Lp/ICON/NEW.svg', './Lp/ICON/RESET.svg', './Lp/ICON/SETTIN.svg'];
 self.addEventListener('install', event => {
   // cache:'reload' 繞過瀏覽器 HTTP 快取，避免裝新版 SW 時把舊的 index.html 誤存進去
