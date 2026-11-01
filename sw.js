@@ -1,10 +1,10 @@
 // Atomic shell cache: HTML and JS must always come from the same release.
-const CACHE_NAME = 'biyuan-v146';
-const ASSETS = ['./', './index.html', './style.css?v=183', './phonetic-search.js?v=183', './app.js?v=183', './import.js?v=183',
-  './api.js?v=183', './config.js?v=183', './theme.js?v=183',
-  './carousel.js?v=183', './navigation.js?v=183', './motion.css?v=183', './liquid-nav.css?v=183', './nav-adapt.css?v=183', './nav-adapt.js?v=183', './folder.css?v=183', './dissolve.js?v=183',
-  './quick-menu.css?v=183', './quick-menu.js?v=183', './boot-screen.css?v=183', './boot-fish.js?v=183', './boot-screen.js?v=183', './tablet.css?v=183', './tablet.js?v=183', './tablet-transform.css?v=183', './tablet-transform.js?v=183', './color-mode.css?v=183', './color-mode.js?v=183', './phone-leave.css?v=183', './phone-leave.js?v=183', './role-claim.js?v=183', './yellow-card.css?v=183', './yellow-card.js?v=183', './leave-all.css?v=183', './leave-all.js?v=183',
-  './manifest.json?v=183', './icon-192.png?v=183',
+const CACHE_NAME = 'biyuan-v147';
+const ASSETS = ['./', './index.html', './style.css?v=184', './phonetic-search.js?v=184', './app.js?v=184', './import.js?v=184',
+  './api.js?v=184', './config.js?v=184', './theme.js?v=184',
+  './carousel.js?v=184', './navigation.js?v=184', './motion.css?v=184', './liquid-nav.css?v=184', './nav-adapt.css?v=184', './nav-adapt.js?v=184', './folder.css?v=184', './dissolve.js?v=184',
+  './quick-menu.css?v=184', './quick-menu.js?v=184', './boot-screen.css?v=184', './boot-fish.js?v=184', './boot-screen.js?v=184', './tablet.css?v=184', './tablet.js?v=184', './tablet-transform.css?v=184', './tablet-transform.js?v=184', './color-mode.css?v=184', './color-mode.js?v=184', './phone-leave.css?v=184', './phone-leave.js?v=184', './role-claim.js?v=184', './yellow-card.css?v=184', './yellow-card.js?v=184', './leave-all.css?v=184', './leave-all.js?v=184',
+  './vendor/firebase/firebase-app-compat.js?v=184', './vendor/firebase/firebase-auth-compat.js?v=184', './vendor/firebase/firebase-firestore-compat.js?v=184', './firebase-backend.js?v=184', './release-notice.js?v=184', './manifest.json?v=184', './icon-192.png?v=184',
   './Lp/ICON/COPY.svg', './Lp/ICON/HOME.svg', './Lp/ICON/NEW.svg', './Lp/ICON/RESET.svg', './Lp/ICON/SETTIN.svg'];
 self.addEventListener('install', event => {
   // cache:'reload' 繞過瀏覽器 HTTP 快取，避免裝新版 SW 時把舊的 index.html 誤存進去

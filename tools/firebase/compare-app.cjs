@@ -8,26 +8,41 @@ const API_FILES = { '/api/roster': 'roster', '/api/config': 'config', '/api/seme
 const SQUADS = ['一單', '一雙', '二單', '二雙', '三單', '三雙'];
 const PAGES = ['home', 'summary', 'student-files', 'leave-records', 'repair-review', 'feedback-review'];
 
-async function capture(browser, source) {
+// firebase 有給設定 = 用真的 SDK 讀 Firestore (測試專案)，原後端只要被讀到就算錯
+async function capture(browser, source, firebase) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block', acceptDownloads: true });
+  if (firebase) await ctx.addInitScript(() => { window.__FIREBASE_TEST__ = true; });
   const page = await ctx.newPage();
-  const errors = [], writes = [];
+  const errors = [], writes = [], workerReads = [];
   page.on('pageerror', e => errors.push(e.message));
-  await page.route('**/*', route => {
+  await page.route('https://compare.test/**', route => {
+    const u = new URL(route.request().url());
+    if (u.pathname === '/config.js' && firebase) {
+      const src = fs.readFileSync(path.join(root, 'config.js'), 'utf8').replace(/FIREBASE: \{[\s\S]*?\n  \},/, 'FIREBASE: ' + JSON.stringify(firebase) + ',');
+      return route.fulfill({ contentType: 'application/javascript', body: src });
+    }
+    const file = path.join(root, u.pathname === '/' ? 'index.html' : decodeURIComponent(u.pathname));
+    return fs.existsSync(file) ? route.fulfill({ path: file }) : route.fulfill({ status: 404, body: '' });
+  });
+  await page.route('**/*.workers.dev/**', route => {
     const req = route.request(), u = new URL(req.url());
-    if (u.hostname === 'compare.test') {
-      const file = path.join(root, u.pathname === '/' ? 'index.html' : decodeURIComponent(u.pathname));
-      return fs.existsSync(file) ? route.fulfill({ path: file }) : route.fulfill({ status: 404, body: '' });
+    const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': '*' };
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+    if (req.method() !== 'GET') { writes.push(req.method() + ' ' + u.pathname); return route.fulfill({ headers, json: { success: true } }); }
+    workerReads.push(u.pathname);
+    // 舊後端的回報信號沒帶日期，會把昨天的回報當成今天；比對時兩邊都以設定表的回報為準
+    if (u.pathname === '/api/poll') return route.fulfill({ headers, json: { ts: 0, confirms: '', att_ts: 0 } });
+    // 原後端會照 from/to/name 篩請假紀錄，模擬時也要篩
+    if (u.pathname === '/api/leave-records') {
+      const from = u.searchParams.get('from'), to = u.searchParams.get('to'), who = u.searchParams.get('name') || '';
+      let rows = JSON.parse(source('leave_records'));
+      if (from && to) { const a = Date.parse(from + 'T00:00:00+08:00'), b = Date.parse(to + 'T00:00:00+08:00') + 86400000; rows = rows.filter(r => { const t = Date.parse(r.createdAt); return t >= a && t < b; }); }
+      if (who) rows = rows.filter(r => r.name.includes(who));
+      return route.fulfill({ headers, json: rows });
     }
-    if (u.hostname.endsWith('workers.dev')) {
-      if (req.method() !== 'GET') { writes.push(req.method() + ' ' + u.pathname); return route.fulfill({ json: { success: true } }); }
-      const name = API_FILES[u.pathname];
-      if (name) return route.fulfill({ contentType: 'application/json', body: source(name) });
-      return route.fulfill({ json: {} });
-    }
-    if (u.hostname.includes('jsdelivr') || u.hostname.includes('cdnjs')) return route.continue();
-    if (u.hostname.includes('fonts.g')) return route.continue();
-    return route.abort();
+    const name = API_FILES[u.pathname];
+    if (name) return route.fulfill({ headers, contentType: 'application/json', body: source(name) });
+    return route.fulfill({ headers, json: {} });
   });
 
   await page.goto('https://compare.test/');
@@ -86,7 +101,7 @@ async function capture(browser, source) {
   }
   const exports = await page.evaluate(() => window.__exports);
   await ctx.close();
-  return { text, data, exports, errors, writes };
+  return { text, data, exports, errors, writes, workerReads };
 }
 
 function countCellDiffs(a, b) {
@@ -105,7 +120,9 @@ function countCellDiffs(a, b) {
   const browser = await chromium.launch();
   try {
     const notion = await capture(browser, reader(backup));
-    const firebase = await capture(browser, reader(rebuilt));
+    const TEST_FIREBASE = process.env.FIREBASE_TEST ? { apiKey: 'AIzaSyBPD5-joLY5BNyAPoKOSQOy_B1unENVgT4', authDomain: 'biyuan-dorm-test.firebaseapp.com', projectId: 'biyuan-dorm-test', appId: '1:96781388012:web:1a46247626e979d5c47dc9' } : null;
+    const firebase = await capture(browser, reader(rebuilt), TEST_FIREBASE);
+    if (TEST_FIREBASE) assert.deepEqual(firebase.workerReads, [], '真的 SDK 模式不該去讀原後端');
     assert.deepEqual(notion.errors, [], '備份版畫面有錯誤');
     assert.deepEqual(firebase.errors, [], 'Firebase 版畫面有錯誤');
     assert.deepEqual(firebase.writes, notion.writes, '兩邊送出的寫入要一樣');

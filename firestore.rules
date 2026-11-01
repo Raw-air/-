@@ -1,9 +1,22 @@
 rules_version = '2';
-// 搬資料階段：所有手機和網頁一律不能讀寫。等登入做好才開放。
+// 目前用匿名登入，開放程度跟原本公開的後端 API 一樣；之後改幹部帳號只要把 signedIn() 改嚴。
+// 床位、學期、設定一律不准刪，就算有人亂打也不會整批消失。
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if false;
+    function signedIn() { return request.auth != null; }
+
+    match /system/semester { allow read, create, update: if signedIn(); }
+    match /system/{doc} { allow read: if signedIn(); }
+    match /semesters/{name} {
+      allow read, create, update: if signedIn();
+      match /beds/{bed} { allow read, create, update: if signedIn(); }
     }
+    match /config/{bucket} { allow read, create, update: if signedIn(); }
+    match /remarks/{id} { allow read, create, update, delete: if signedIn(); }
+    match /changelog/{id} { allow read, create: if signedIn(); }
+    match /leave_records/{id} { allow read, create: if signedIn(); }
+    match /repair_records/{id} { allow read, create, delete: if signedIn(); }
+    match /feedback_records/{id} { allow read, create, delete: if signedIn(); }
+    match /mirror_failures/{id} { allow create: if signedIn(); }
   }
 }

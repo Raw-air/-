@@ -8,6 +8,15 @@ const CONFIG = {
   // Cloudflare Worker 網址 (附加功能與 AI 後端)
   KV_API_URL: 'https://dorm-api.s010828.workers.dev',
 
+  // 資料來源：'firebase' = 前端直連並靜默寫回 Notion；出事改成 'notion' 就退回舊版
+  BACKEND: 'firebase',
+  FIREBASE: {
+    apiKey: 'AIzaSyDBRl9FlKxqHzSz9OmkT1yTN4_hr5YTLNk',
+    authDomain: 'biyuan-dorm.firebaseapp.com',
+    projectId: 'biyuan-dorm',
+    appId: '1:548950769936:web:9d309b7fdee8735780e595',
+  },
+
   // 當前學期
   SEMESTER: '114-2',
 

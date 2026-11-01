@@ -11,4 +11,4 @@ function accessToken() {
   if (!t.access_token) throw new Error('拿不到 firebase 登入權杖');
   return t.access_token;
 }
-module.exports = { accessToken, PROJECT: 'biyuan-dorm' };
+module.exports = { accessToken, PROJECT: process.env.FIREBASE_PROJECT || 'biyuan-dorm' };
