@@ -1,0 +1,9 @@
+rules_version = '2';
+// 搬資料階段：所有手機和網頁一律不能讀寫。等登入做好才開放。
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
