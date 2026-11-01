@@ -886,6 +886,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       _pollTimer = setInterval(doPoll, getPollInterval());
     }
 
+    // Firebase 收到別台的變動就馬上更新畫面，不等輪詢
+    window.addEventListener('biyuan-remote-change', () => {
+      if (_pollBusy) setTimeout(doPoll, 150); else doPoll();
+    });
+
     // 頁面可見性監聽：最小化/切到背景時暫停輪詢，回來時立即觸發
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
@@ -2077,7 +2082,7 @@ function toggleStatus(pageId) {
   }
   updateRollCallStats();
 
-  // 立即同步到 Notion（debounce 800ms 防止快速連點重複 API）
+  // 立即同步（等一下再送，快速連點只送最後一次）
   const timerKey = pageId + '_' + change.date;
   clearTimeout(_syncTimers[timerKey]);
   _syncTimers[timerKey] = setTimeout(async () => {
@@ -2100,7 +2105,7 @@ function toggleStatus(pageId) {
       console.warn('auto-sync failed:', err.message);
       notifySyncFailure();
     }
-  }, 800);
+  }, CONFIG.BACKEND === 'firebase' ? 250 : 800); // Firebase 寫得快，縮短等待讓別台更快看到
 }
 
 // ─── 未同步變更：存 localStorage、畫面小標示、失敗只提示一次 ───────────────

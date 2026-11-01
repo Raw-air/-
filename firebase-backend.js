@@ -6,6 +6,13 @@
  * CONFIG.BACKEND 改成 'notion' 就完全不會接手，等於退回舊版。
  */
 (function () {
+  // 新版 SW 用這個認出已經是新版的畫面；沒回應的舊畫面會被自動重新載入 (見 sw.js)
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.addEventListener('message', e => {
+      if (e.data === 'biyuan-ping' && e.ports[0]) e.ports[0].postMessage('biyuan-pong');
+    });
+  }
+
   const CONFIG = window.CONFIG || {};
   if (CONFIG.BACKEND !== 'firebase' || !window.firebase || !CONFIG.FIREBASE) return;
   if (navigator.webdriver && !window.__FIREBASE_TEST__) return; // 其他自動化測試不准碰到正式 Firebase
@@ -52,6 +59,8 @@
   };
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
+  // 別台一改就叫 app.js 馬上更新，不用等下一輪輪詢 (閒置時輪詢要 30 秒)
+  const notifyRemoteChange = () => window.dispatchEvent(new Event('biyuan-remote-change'));
   const withTimeout = (promise, ms, label) => Promise.race([
     promise,
     new Promise((_, reject) => setTimeout(() => reject(new Error(label + ' 逾時')), ms)),
@@ -116,7 +125,9 @@
         live.attTs = Date.now();
       }
       if (live.changes.length > CHANGE_LOG_MAX) live.changes.splice(0, live.changes.length - CHANGE_LOG_MAX);
+      const wasReady = live.bedsReady;
       live.bedsReady = true;
+      if (wasReady) notifyRemoteChange();
     }, err => failover('總表 ' + err.code));
   }
 
@@ -127,7 +138,7 @@
       const merged = {};
       snap.forEach(doc => Object.assign(merged, doc.data().entries || {}));
       live.config = merged;
-      if (live.configReady && before !== merged[today]) live.confirmTs = Date.now();
+      if (live.configReady && before !== merged[today]) { live.confirmTs = Date.now(); notifyRemoteChange(); }
       live.configReady = true;
     }, err => failover('設定 ' + err.code));
     db.collection('remarks').onSnapshot(snap => {

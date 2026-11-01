@@ -23,7 +23,7 @@ async function list(coll) {
     const res = await fetch(`${API}${ROOT}/${coll}?pageSize=300${token ? '&pageToken=' + encodeURIComponent(token) : ''}`, { headers: headers() });
     if (!res.ok) throw new Error(`${coll} ${res.status}`);
     const j = await res.json();
-    for (const d of j.documents || []) out.push({ id: d.name.split('/').pop(), ...Object.fromEntries(Object.entries(d.fields || {}).map(([k, v]) => [k, fromValue(v)])) });
+    for (const d of j.documents || []) out.push({ id: d.name.split('/').pop(), _updateTime: d.updateTime, ...Object.fromEntries(Object.entries(d.fields || {}).map(([k, v]) => [k, fromValue(v)])) });
     token = j.nextPageToken || '';
   } while (token);
   return out;
@@ -41,6 +41,7 @@ function configBucket(key) {
   const name = encodeURIComponent(roster.semester.name);
   const beds = new Map((await list(`semesters/${name}/beds`)).map(b => [b.id, b]));
   const diffs = [], writes = [];
+  let skipped = 0;
   for (const s of roster.students) {
     const b = beds.get(s.id);
     if (!b) { diffs.push(`床位 ${s.room}${s.bed} Firestore 沒有`); continue; }
@@ -54,6 +55,8 @@ function configBucket(key) {
       if (a[d]) fields.attendance.mapValue.fields[d] = { stringValue: a[d] };
       paths.push(`attendance.\`${d}\``);
     }
+    // 最近 10 分鐘改過的床位可能是 Firebase 比較新 (寫回還在排隊)，不准用 Notion 蓋掉
+    if (paths.length && Date.now() - Date.parse(b._updateTime) < 600000) { skipped++; continue; }
     if (paths.length) writes.push({ update: { name: `${ROOT}/semesters/${name}/beds/${s.id}`, fields }, updateMask: { fieldPaths: paths } });
   }
   const nc = await notion('/api/config');
@@ -62,6 +65,7 @@ function configBucket(key) {
   for (const k of new Set([...Object.keys(nc), ...Object.keys(fc)])) {
     if (nc[k] === fc[k] || nc[k] === undefined) { if (nc[k] === undefined) diffs.push(`設定 ${k}: 只有 Firebase 有`); continue; }
     diffs.push(`設定 ${k}: 內容不同 (Notion ${String(nc[k]).length} 字 / Firebase ${String(fc[k] ?? '').length} 字)`);
+    if (fc[k] !== undefined) continue; // 兩邊都有就不知道誰新，只列出來不覆蓋
     writes.push({ update: { name: `${ROOT}/config/${configBucket(k)}`, fields: { entries: { mapValue: { fields: { [k]: { stringValue: nc[k] } } } } } }, updateMask: { fieldPaths: [`entries.\`${k}\``] } });
   }
   const nr = await notion('/api/remarks');
@@ -72,7 +76,7 @@ function configBucket(key) {
     if (n !== f) diffs.push(`${coll}: Notion ${n} 筆 / Firebase ${f} 筆`);
   }
   const failures = await fetch(`${API}${ROOT}/mirror_failures?pageSize=5`, { headers: headers() }).then(r => r.ok ? r.json() : {});
-  console.log(`差異 ${diffs.length} 處；可自動套用 ${writes.length} 筆；寫回放棄紀錄 ${(failures.documents || []).length} 筆`);
+  console.log(`差異 ${diffs.length} 處；可自動套用 ${writes.length} 筆；太新不套用 ${skipped} 床；寫回放棄紀錄 ${(failures.documents || []).length} 筆`);
   for (const d of diffs.slice(0, 40)) console.log(' -', d);
   if (apply && writes.length) {
     for (let i = 0; i < writes.length; i += 200) {

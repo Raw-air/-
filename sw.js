@@ -1,10 +1,10 @@
 // Atomic shell cache: HTML and JS must always come from the same release.
-const CACHE_NAME = 'biyuan-v148';
-const ASSETS = ['./', './index.html', './style.css?v=185', './phonetic-search.js?v=185', './app.js?v=185', './import.js?v=185',
-  './api.js?v=185', './config.js?v=185', './theme.js?v=185',
-  './carousel.js?v=185', './navigation.js?v=185', './motion.css?v=185', './liquid-nav.css?v=185', './nav-adapt.css?v=185', './nav-adapt.js?v=185', './folder.css?v=185', './dissolve.js?v=185',
-  './quick-menu.css?v=185', './quick-menu.js?v=185', './boot-screen.css?v=185', './boot-fish.js?v=185', './boot-screen.js?v=185', './tablet.css?v=185', './tablet.js?v=185', './tablet-transform.css?v=185', './tablet-transform.js?v=185', './color-mode.css?v=185', './color-mode.js?v=185', './phone-leave.css?v=185', './phone-leave.js?v=185', './role-claim.js?v=185', './yellow-card.css?v=185', './yellow-card.js?v=185', './leave-all.css?v=185', './leave-all.js?v=185',
-  './vendor/firebase/firebase-app-compat.js?v=185', './vendor/firebase/firebase-auth-compat.js?v=185', './vendor/firebase/firebase-firestore-compat.js?v=185', './firebase-backend.js?v=185', './release-notice.js?v=185', './manifest.json?v=185', './icon-192.png?v=185',
+const CACHE_NAME = 'biyuan-v149';
+const ASSETS = ['./', './index.html', './style.css?v=186', './phonetic-search.js?v=186', './app.js?v=186', './import.js?v=186',
+  './api.js?v=186', './config.js?v=186', './theme.js?v=186',
+  './carousel.js?v=186', './navigation.js?v=186', './motion.css?v=186', './liquid-nav.css?v=186', './nav-adapt.css?v=186', './nav-adapt.js?v=186', './folder.css?v=186', './dissolve.js?v=186',
+  './quick-menu.css?v=186', './quick-menu.js?v=186', './boot-screen.css?v=186', './boot-fish.js?v=186', './boot-screen.js?v=186', './tablet.css?v=186', './tablet.js?v=186', './tablet-transform.css?v=186', './tablet-transform.js?v=186', './color-mode.css?v=186', './color-mode.js?v=186', './phone-leave.css?v=186', './phone-leave.js?v=186', './role-claim.js?v=186', './yellow-card.css?v=186', './yellow-card.js?v=186', './leave-all.css?v=186', './leave-all.js?v=186',
+  './vendor/firebase/firebase-app-compat.js?v=186', './vendor/firebase/firebase-auth-compat.js?v=186', './vendor/firebase/firebase-firestore-compat.js?v=186', './firebase-backend.js?v=186', './release-notice.js?v=186', './manifest.json?v=186', './icon-192.png?v=186',
   './Lp/ICON/COPY.svg', './Lp/ICON/HOME.svg', './Lp/ICON/NEW.svg', './Lp/ICON/RESET.svg', './Lp/ICON/SETTIN.svg'];
 self.addEventListener('install', event => {
   // cache:'reload' 繞過瀏覽器 HTTP 快取，避免裝新版 SW 時把舊的 index.html 誤存進去
@@ -13,8 +13,24 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil(caches.keys().then(keys => Promise.all(keys
     .filter(k => k.startsWith('biyuan-') && k !== CACHE_NAME).map(k => caches.delete(k))))
-    .then(() => self.clients.claim()));
+    .then(() => self.clients.claim())
+    // 不能放進 waitUntil：換頁請求要等 SW 啟動完，SW 又在等換頁，會互相卡死
+    .then(() => { reloadOldPages().catch(() => {}); }));
 });
+// 切到 Firebase 之前的舊畫面只會寫 Notion，別台看不到，所以換版時要自動重新載入。
+// 新畫面會回 pong，不會被重新載入；舊畫面沒送出的點名存在本機，載入後會自動重送。
+async function reloadOldPages() {
+  const pages = await self.clients.matchAll({ type: 'window' });
+  await Promise.all(pages.map(async page => {
+    const isNew = await new Promise(resolve => {
+      const channel = new MessageChannel();
+      channel.port1.onmessage = () => resolve(true);
+      page.postMessage('biyuan-ping', [channel.port2]);
+      setTimeout(() => resolve(false), 1500);
+    });
+    if (!isNew) await page.navigate(page.url).catch(() => {});
+  }));
+}
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.includes('/api/')) return;
