@@ -162,7 +162,7 @@
     window.scrollTo(0, y);
   }
 
-  // ── 穩重的回彈：阻尼彈簧取樣成關鍵影格，只回彈約 4%，有重量不亂跳；只動 transform，手機跑得動 ──
+  // ── 穩重的回彈：阻尼彈簧取樣成關鍵影格，只回彈約 7%，有重量不亂跳；只動 transform，手機跑得動 ──
   function springFrames(from, stiffness = 7, damping = 7, samples = 18) {
     const frames = [];
     for (let i = 0; i <= samples; i++) {
