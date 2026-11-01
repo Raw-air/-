@@ -51,7 +51,8 @@ const SQUAD = '一單';
     const status = id => page.evaluate(i => state.students.find(s => s.id === i).attendance[state.currentDate] || '✓', id);
     const rowOf = id => `.student-row[data-pid="${id}"]`;
     const open = async id => {
-      await page.locator(rowOf(id)).scrollIntoViewIfNeeded();
+      await page.locator(rowOf(id)).evaluate(el => el.scrollIntoView({ block: 'center' }));
+      await page.waitForTimeout(120);
       const p = await center(rowOf(id));
       await touch('touchStart', p.x, p.y);
       await page.waitForSelector('#rc-tray.rct-show .rct-wheel', { timeout: 2000 });
@@ -174,8 +175,48 @@ const SQUAD = '一單';
     assert.match(await dlg.innerText(), /0900000002/);
     assert.match(await dlg.innerText(), /台中市2/);
     assert.equal(await dlg.locator('a.rct-call').getAttribute('href'), 'tel:0900000002');
-    await dlg.locator('button').click(); await page.waitForTimeout(350);
+    await dlg.locator('.rct-close').click(); await page.waitForTimeout(350);
     pass('電話顯示與撥打連結');
+
+    // 4-2. 電話請假：從選取盤進去，住宿生已帶好，送出後總表變請假、也留電話請假紀錄
+    p = await open('s2');
+    await dragTo(p, 'phone');
+    await touch('touchEnd'); await settle();
+    await page.locator('.rct-dialog .rct-phone-leave').click();
+    await page.waitForSelector('#counter-leave-modal.visible');
+    await page.waitForTimeout(350);
+    assert.equal(await page.locator('.rct-dialog').count(), 0, '聯絡資料視窗要關掉');
+    assert.equal(await page.locator('#cl-target').inputValue(), 's2', '住宿生要帶好');
+    assert.equal(await page.locator('#cl-start-date').inputValue(), todayISO);
+    await page.screenshot({ path: path.join(out, 'tray-phone-leave.png') });
+    await page.locator('#cl-caller-note').fill('媽媽代打');
+    const beforeLeave = writes.length;
+    await page.locator('#counter-leave-modal .modal-btn:last-child').click();
+    await page.waitForFunction(() => !document.getElementById('counter-leave-modal').classList.contains('visible'), null, { timeout: 8000 });
+    await page.waitForTimeout(300);
+    const leaveWrites = writes.slice(beforeLeave);
+    const leaveRecord = leaveWrites.find(w => w.path === '/api/leave-records');
+    assert.ok(leaveRecord, '要留電話請假紀錄');
+    assert.equal(leaveRecord.body.name, '住宿生2');
+    assert.equal(leaveRecord.body.callerNote, '媽媽代打');
+    assert.ok(leaveWrites.some(w => w.path === '/api/attendance'), '總表要寫入');
+    assert.equal(await status('s2'), '◎', '狀態要變請假');
+    await page.evaluate(() => toggleStatus('s2', '✓'));
+    await settle();
+    pass('選取盤電話請假');
+    {
+      const blockers = [];
+      const t0 = Date.now();
+      await page.waitForFunction(() => {
+        const c = document.querySelector('.student-row[data-pid="s3"]');
+        c.scrollIntoView({ block: 'center' });
+        const r = c.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        window.__blocker = hit ? ((hit.id || '') + '.' + String(hit.className || hit.tagName)) : 'none';
+        return !!(hit && hit.closest('.student-row'));
+      }, null, { timeout: 8000 }).catch(async () => { throw new Error('s3 一直被擋住：' + await page.evaluate(() => window.__blocker)); });
+      console.log('rollcall-wheel: 請假後點名列可點，等了', Date.now() - t0, 'ms');
+    }
 
     // 5. 備註：拖到備註展開外圈，再拖到沒繳回瓷扣 → 文字 + 瓷扣圖示一直顯示
     p = await open('s3');

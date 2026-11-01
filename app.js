@@ -5794,8 +5794,9 @@ window.rejectResidentAddReq = rejectResidentAddReq;
 // ═════════════════════════════════════════════════════════════════════════════
 // 櫃台請假與電話請假紀錄
 // ═════════════════════════════════════════════════════════════════════════════
-function openCounterLeaveModal() {
-  document.getElementById('cl-search').value = '';
+// student：從點名頁選取盤進來時直接帶好住宿生，不用再搜尋
+function openCounterLeaveModal(student) {
+  document.getElementById('cl-search').value = student ? `${student.room} ${student.bed} ${student.name}` : '';
   document.getElementById('cl-handler').value = '';
   const phoneInput = document.getElementById('cl-caller-phone');
   const noteInput = document.getElementById('cl-caller-note');
@@ -5806,7 +5807,9 @@ function openCounterLeaveModal() {
   document.getElementById('cl-start-date').value = today;
   document.getElementById('cl-end-date').value = today;
 
-  document.getElementById('cl-target').innerHTML = '<option value="">請先搜尋上方欄位...</option>';
+  document.getElementById('cl-target').innerHTML = student
+    ? `<option value="${escHtml(student.id)}">${escHtml(student.room)} ${escHtml(student.bed)} - ${escHtml(student.name)}</option>`
+    : '<option value="">請先搜尋上方欄位...</option>';
   document.getElementById('counter-leave-modal').classList.add('visible');
 }
 

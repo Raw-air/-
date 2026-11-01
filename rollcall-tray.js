@@ -403,8 +403,13 @@
       <p style="margin:0 0 6px;font-size:20px;font-weight:700">${phone ? escHtml(phone) : '沒有電話資料'}</p>
       <p style="margin:0 0 14px;font-size:13px;opacity:.75;word-break:break-all">${s.address ? escHtml(s.address) : '沒有住址資料'}</p>
       ${dial ? `<a class="modal-btn confirm rct-call" href="tel:${escHtml(dial)}">撥打電話</a>` : ''}
-      <button type="button" class="modal-btn cancel" style="width:100%;margin-top:8px">關閉</button>`);
-    overlay.querySelector('button').addEventListener('click', close);
+      <button type="button" class="modal-btn rct-phone-leave">電話請假</button>
+      <button type="button" class="modal-btn cancel rct-close" style="width:100%;margin-top:8px">關閉</button>`);
+    overlay.querySelector('.rct-close').addEventListener('click', close);
+    overlay.querySelector('.rct-phone-leave').addEventListener('click', () => {
+      close();
+      openCounterLeaveModal(s);
+    });
   }
 
   function editRemark(s) {

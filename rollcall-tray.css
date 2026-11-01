@@ -89,6 +89,7 @@ body.light-mode #rc-tray {
 .rct-yellow-date { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; white-space: nowrap; }
 .rct-yellow-date .rct-remark-input { flex: 1; min-width: 0; }
 
+.rct-phone-leave { display: block; width: 100%; margin-top: 8px; background: var(--orange); color: #fff; border: none; }
 .rct-call { display: block; width: 100%; box-sizing: border-box; text-align: center; text-decoration: none; }
 .rct-remark-input {
   width: 100%; box-sizing: border-box; padding: 10px; border-radius: 10px; font: inherit; font-size: 15px;
