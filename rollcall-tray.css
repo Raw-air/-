@@ -1,0 +1,59 @@
+/* 點名頁長按托盤 */
+#rc-student-list .student-row {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.student-row.rct-holding {
+  transform: scale(.97);
+  box-shadow: 0 0 0 2px rgba(10, 132, 255, .65);
+  transition: transform .5s ease-out, box-shadow .5s ease-out;
+}
+.rct-name-icons { display: inline-flex; vertical-align: -3px; margin-left: 4px; }
+.rct-ceramic { display: block; }
+.rct-extras { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.rct-extras:empty { display: none; }
+.rct-late, .rct-remark {
+  display: inline-block; margin-top: 3px; padding: 1px 7px; border-radius: 999px;
+  font-size: 11px; line-height: 1.5; font-weight: 600;
+}
+.rct-late { background: rgba(139, 92, 246, .18); color: #a78bfa; }
+.rct-remark { background: rgba(245, 158, 11, .16); color: #f5b342; white-space: normal; word-break: break-word; }
+body.light-mode .rct-late { color: #6d3fd6; }
+body.light-mode .rct-remark { color: #a86400; }
+
+#rc-tray {
+  position: fixed; inset: 0; z-index: 2000; touch-action: none;
+  background: rgba(0, 0, 0, .5); opacity: 0; transition: opacity .12s ease;
+  -webkit-user-select: none; user-select: none;
+}
+#rc-tray.rct-show { opacity: 1; }
+.rct-caption {
+  position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 18px); transform: translateX(-50%);
+  max-width: 88vw; padding: 8px 16px; border-radius: 999px;
+  background: rgba(20, 20, 28, .92); color: #fff; font-size: 15px; font-weight: 700; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; border: 1px solid rgba(255, 255, 255, .18);
+}
+.rct-wheel {
+  position: absolute; inset: 0; transform: scale(.72); opacity: 0;
+  transition: transform .17s cubic-bezier(.2, 1.35, .4, 1), opacity .1s ease;
+}
+#rc-tray.rct-show .rct-wheel { transform: scale(1); opacity: 1; }
+.rct-rim { fill: rgba(12, 12, 18, .94); stroke: #c9a24f; stroke-width: 3; }
+.rct-slot path { fill: #24252e; stroke: rgba(201, 162, 79, .55); stroke-width: 1; transition: fill .08s ease; }
+.rct-slot text { fill: #fff; font-size: 17px; font-weight: 800; text-anchor: middle; pointer-events: none; }
+.rct-outer { opacity: 0; transition: opacity .12s ease; }
+.rct-outer path { fill: #33270f; stroke: #c9a24f; }
+.rct-outer text { font-size: 13px; }
+#rc-tray.rct-outer-open .rct-outer { opacity: 1; }
+.rct-slot.rct-on path { fill: #14532d; stroke: #22c55e; stroke-width: 2; }
+.rct-slot.rct-hover path { fill: #0a84ff; stroke: #fff; stroke-width: 2; }
+.rct-hub { fill: #0c0c12; stroke: #c9a24f; stroke-width: 2; }
+.rct-hub-text { fill: #fff; font-size: 13px; font-weight: 800; text-anchor: middle; }
+.rct-cursor { fill: #fff; fill-opacity: .9; stroke: #0a84ff; stroke-width: 3; }
+
+.rct-call { display: block; width: 100%; box-sizing: border-box; text-align: center; text-decoration: none; }
+.rct-remark-input {
+  width: 100%; box-sizing: border-box; padding: 10px; border-radius: 10px; font: inherit; font-size: 15px;
+  background: rgba(127, 127, 127, .12); color: inherit; border: 1px solid rgba(127, 127, 127, .35); resize: vertical;
+}

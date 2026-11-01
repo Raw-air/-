@@ -31,14 +31,15 @@ const out = path.join(root, 'test-results'); fs.mkdirSync(out, { recursive: true
     assert.equal(await page.evaluate(() => document.body.classList.contains('rawair-booting')), false, '通知不可比開機畫面早跳');
     assert.match(await page.textContent('#release-notice'), /系統大改版/);
     assert.match(await page.textContent('#release-notice'), /資料庫搬家/);
-    assert.equal(await page.locator('#release-notice svg').count(), 1, '要有搬家小圖');
+    assert.equal(await page.locator('#release-notice svg').count(), 2, '要有搬家小圖和長按教學動畫');
+    assert.match(await page.textContent('#release-notice'), /長按住宿生/);
     await page.waitForTimeout(350);
     await page.screenshot({ path: path.join(out, 'release-notice.png') });
 
     // 真的點得到 (沒有被別的東西蓋住)
     await page.click('#release-notice button', { timeout: 3000 });
     await page.waitForSelector('#release-notice', { state: 'detached' });
-    assert.equal(await page.evaluate(() => localStorage.getItem('biyuan_release_notice_seen')), 'v33-moving-day');
+    assert.equal(await page.evaluate(() => localStorage.getItem('biyuan_release_notice_seen')), 'v33-tray');
 
     // 重開不再跳
     await page.reload();

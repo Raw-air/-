@@ -271,6 +271,12 @@ const mirrorDrained = dev => until(() => api(dev, () => window._firebaseBackend.
 
     // WebKit 重新整理時中斷連線會多一則錯誤訊息，不影響功能
     const realErrors = list => list.filter(m => !m.includes('/Listen/channel') && !m.includes('/Write/channel'));
+    // 12. 系統狀態看得到的額度估算：有讀有寫就會累計，不是 0
+    const usage = await api(A, () => window._firebaseBackend.getUsage());
+    assert.ok(usage.reads > 0 && usage.writes > 0, JSON.stringify(usage));
+    assert.match(usage.resetAt, /^\d{2}:\d{2}$/);
+    ok('額度估算有累計', `讀 ${usage.reads}、寫 ${usage.writes}、刪 ${usage.deletes}，${usage.resetAt} 歸零`);
+
     assert.deepEqual(realErrors(A.errors), [], 'A 畫面錯誤');
     assert.deepEqual(realErrors(B.errors), [], 'B 畫面錯誤');
     console.log(`firebase-backend 全部通過：${results.length} 項`);

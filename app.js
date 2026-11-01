@@ -809,18 +809,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     let _lastRenderSig = '';
 
     function rosterSignature() {
-      const parts = [state.confirmedSquads.join(','), (state.dateColumns || []).length];
+      const parts = [state.confirmedSquads.join(','), (state.dateColumns || []).length, window._rcTray ? window._rcTray.signature() : ''];
       for (const s of state.students) {
         parts.push(s.id, s.name, s.isEmpty ? 1 : 0, s.squad, s.room, s.bed, s.class, s.studentId, s.phone, s.address, s.isForeign ? 1 : 0, s.remarks, JSON.stringify(s.attendance || {}));
       }
       return parts.join('|');
     }
 
+    function isFirebaseLive() {
+      return !!(window._firebaseBackend && !window._firebaseBackend.live.failover);
+    }
+
     function scheduleBackgroundRefresh() {
       if (_bgRefreshBusy) { _bgRefreshAgain = true; return; }
       if (_bgRefreshTimer) return;
-      const minGap = 8000 - (Date.now() - _lastBgRefreshAt);
-      const delay = Math.max(minGap, 1500 + Math.random() * 2500);
+      const fromMemory = isFirebaseLive();
+      const minGap = (fromMemory ? 1500 : 8000) - (Date.now() - _lastBgRefreshAt);
+      const delay = Math.max(minGap, fromMemory ? 200 : 1500 + Math.random() * 2500);
       _bgRefreshTimer = setTimeout(runBackgroundRefresh, delay);
     }
 
@@ -829,8 +834,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       _bgRefreshBusy = true;
       _lastBgRefreshAt = Date.now();
       try {
-        const wantConfig = Date.now() - _lastBgConfigAt > 60000;
-        const wantRemarks = Date.now() - _lastRemarksFetchAt > REMARKS_REFRESH_MS;
+        const fromMemory = isFirebaseLive();
+        const wantConfig = fromMemory || Date.now() - _lastBgConfigAt > 60000;
+        const wantRemarks = fromMemory || Date.now() - _lastRemarksFetchAt > REMARKS_REFRESH_MS;
         // 記下出發時的載入代號與學期：中途若 loadData / 切換學期，這次回來的舊資料就整包丟掉
         const token = state.loadToken;
         const semesterAtStart = state.viewSemester;
@@ -2007,8 +2013,9 @@ function renderRollCall(skipAnimation = false) {
         <div class="student-info">
           <div class="student-bed" style="background:${getSquadColor(state.currentSquad)}">${escHtml(s.bed)}</div>
           <div>
-            <div class="student-name">${s.isEmpty ? '（空床）' : escHtml(s.name)}${!s.isEmpty && s.isForeign ? ' <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>' : ''}</div>
+            <div class="student-name">${s.isEmpty ? '（空床）' : escHtml(s.name)}${!s.isEmpty && s.isForeign ? ' <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>' : ''}<span class="rct-name-icons">${window._rcTray ? window._rcTray.nameIcons(s) : ''}</span></div>
             <div class="student-meta">${s.isEmpty ? '' : `${escHtml(s.class || '')} ${escHtml(s.studentId || '')}`}</div>
+            ${window._rcTray ? window._rcTray.rowExtras(s) : ''}
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:6px">
@@ -2029,14 +2036,18 @@ function renderRollCall(skipAnimation = false) {
 // 每位學生的 debounce timer
 const _syncTimers = {};
 
-function toggleStatus(pageId) {
+function toggleStatus(pageId, forcedNext) {
   if (state.viewSemester) { showToast(`正在查看封存學期 ${state.viewSemester}，不能修改點名`, 'error'); return; }
   const s = state.students.find(x => x.id === pageId);
   if (!s || s.isEmpty) return;
 
   const cur = s.attendance[state.currentDate] || '✓';
-  const next = { '✓': '◎', '◎': '✘', '✘': '✓', '△': '✓' }[cur] || '✓';
+  const next = forcedNext || { '✓': '◎', '◎': '✘', '✘': '✓', '△': '✓' }[cur] || '✓';
   s.attendance[state.currentDate] = next;
+  if (window._rcTray) {
+    if (next !== '✓') window._rcTray.clearLate(pageId);
+    window._rcTray.refreshRow(pageId);
+  }
 
   // 點名按鈕音效：切換到「請假」是黄色音，「缺席」是紅色队音，「到」是清脆白色音
   if (next === '✓') playClickSound('roll_in');
@@ -3754,6 +3765,25 @@ async function collectSystemHealth() {
     status: state.viewSemester ? 'warn' : 'ok',
     hint: state.viewSemester ? '正在看舊學期，所有寫入動作都會被擋下來' : '正在使用本學期的資料，可以正常點名'
   });
+
+  // ── Firebase 額度 (免費方案每天的上限) ──
+  if (window._firebaseBackend) {
+    try {
+      const u = await window._firebaseBackend.getUsage();
+      const reset = `下次歸零約 ${u.resetAt}`;
+      for (const [label, used, limit] of [['今日讀取', u.reads, 50000], ['今日寫入', u.writes, 20000], ['今日刪除', u.deletes, 20000]]) {
+        const pct = Math.round(used / limit * 100);
+        add({
+          group: 'Firebase 額度', label,
+          value: `${used.toLocaleString()} / ${limit.toLocaleString()}（${pct}%）`,
+          status: pct >= 90 ? 'bad' : (pct >= 70 ? 'warn' : 'ok'),
+          hint: `${pct >= 70 ? '快到免費上限了，到了會自動改走 Notion' : '額度還很夠'}。${reset}。這是各裝置回報的估算值，實際以 Firebase 後台為準`,
+        });
+      }
+    } catch (err) {
+      add({ group: 'Firebase 額度', label: '今日用量', value: '查不到', status: 'na', hint: (err && err.message) || '連不上 Firebase' });
+    }
+  }
 
   // ── 快取與儲存 ──
   let swValue = '這個瀏覽器不支援', swStatus = 'na', swHint = '離線快取功能無法使用';

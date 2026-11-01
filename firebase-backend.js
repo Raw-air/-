@@ -58,6 +58,47 @@
     unsubMeta: null,
   };
 
+  // 額度估算：每台裝置累計自己的讀寫次數，定期加進 usage/<太平洋時間日期> (Firebase 額度照這個時區歸零)
+  const USAGE_FLUSH_MS = 60000;
+  const pendingUsage = { reads: 0, writes: 0, deletes: 0 };
+  const countUsage = (kind, n = 1) => { pendingUsage[kind] += n; };
+  const countServerDocs = snap => {
+    countUsage('reads', snap.docChanges().filter(ch => !ch.doc.metadata.hasPendingWrites).length);
+  };
+  const pacificDay = (date = new Date()) => date.toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+  function nextResetLabel() {
+    // 找下一個太平洋時間 00:00 換成本機時間
+    const now = Date.now();
+    for (let t = now + 60000; t < now + 90000000; t += 60000) {
+      if (pacificDay(new Date(t)) !== pacificDay(new Date(now))) {
+        return new Date(t).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false });
+      }
+    }
+    return '';
+  }
+  async function flushUsage() {
+    const { reads, writes, deletes } = pendingUsage;
+    if (!reads && !writes && !deletes) return;
+    pendingUsage.reads = pendingUsage.writes = pendingUsage.deletes = 0;
+    try {
+      await withTimeout(db.collection('usage').doc(pacificDay()).set({
+        reads: FieldValue.increment(reads), writes: FieldValue.increment(writes + 1), deletes: FieldValue.increment(deletes),
+      }, { merge: true }), WRITE_TIMEOUT_MS, '用量');
+    } catch (_) {
+      pendingUsage.reads += reads; pendingUsage.writes += writes; pendingUsage.deletes += deletes;
+    }
+  }
+  setInterval(flushUsage, USAGE_FLUSH_MS);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushUsage(); });
+  async function getUsage() {
+    await ready;
+    await flushUsage();
+    const snap = await withTimeout(db.collection('usage').doc(pacificDay()).get(), WRITE_TIMEOUT_MS, '用量');
+    countUsage('reads');
+    const d = snap.data() || {};
+    return { reads: d.reads || 0, writes: d.writes || 0, deletes: d.deletes || 0, resetAt: nextResetLabel() };
+  }
+
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // 別台一改就叫 app.js 馬上更新，不用等下一輪輪詢 (閒置時輪詢要 30 秒)
   const notifyRemoteChange = () => window.dispatchEvent(new Event('biyuan-remote-change'));
@@ -106,10 +147,12 @@
     const semRef = db.collection('semesters').doc(name);
     live.unsubMeta = semRef.onSnapshot(snap => {
       if (!snap.exists) return;
+      countUsage('reads');
       live.semesterMeta = snap.data();
       live.dateColumns = (live.semesterMeta.dateColumns || []).slice().sort((a, b) => parseDateCol(a) - parseDateCol(b));
     }, err => failover('學期資料 ' + err.code));
     live.unsubBeds = semRef.collection('beds').onSnapshot({ includeMetadataChanges: false }, snap => {
+      countServerDocs(snap);
       for (const ch of snap.docChanges()) {
         const id = ch.doc.id;
         const before = live.beds.get(id);
@@ -133,21 +176,28 @@
 
   function attachListeners() {
     db.collection('config').onSnapshot(snap => {
+      countServerDocs(snap);
       const today = 'confirm_' + localToday();
+      const remoteChange = live.configReady && snap.docChanges().some(ch => !ch.doc.metadata.hasPendingWrites);
       const before = live.config[today];
       const merged = {};
       snap.forEach(doc => Object.assign(merged, doc.data().entries || {}));
       live.config = merged;
       if (live.configReady && before !== merged[today]) { live.confirmTs = Date.now(); notifyRemoteChange(); }
+      if (remoteChange) { live.attTs = Date.now(); notifyRemoteChange(); } // 別台改了晚歸等設定
       live.configReady = true;
     }, err => failover('設定 ' + err.code));
     db.collection('remarks').onSnapshot(snap => {
+      countServerDocs(snap);
+      const remoteChange = live.remarksReady && snap.docChanges().some(ch => !ch.doc.metadata.hasPendingWrites);
       const map = {};
       snap.forEach(doc => { if (doc.data().text) map[doc.id] = doc.data().text; });
       live.remarks = map;
       live.remarksReady = true;
+      if (remoteChange) { live.attTs = Date.now(); notifyRemoteChange(); }
     }, err => failover('備註 ' + err.code));
     db.collection('system').doc('semester').onSnapshot(snap => {
+      countUsage('reads');
       if (!snap.exists) { failover('沒有學期資料'); return; }
       const next = snap.data();
       const name = next.current && next.current.name;
@@ -197,6 +247,7 @@
     const meta = (await semRef.get()).data();
     if (!meta) throw new Error('找不到封存學期');
     const snap = await semRef.collection('beds').orderBy('order').get();
+    countUsage('reads', snap.size + 1);
     const dates = (meta.dateColumns || []).slice().sort((a, b) => parseDateCol(a) - parseDateCol(b));
     return {
       students: snap.docs.map(d => {
@@ -212,6 +263,7 @@
   }
   async function listRecords(coll, timeField) {
     const snap = await db.collection(coll).get();
+    countUsage('reads', snap.size);
     return snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a, b) => {
       const t = String(b[timeField] || '').localeCompare(String(a[timeField] || ''));
       return t || (a.order || 0) - (b.order || 0);
@@ -342,6 +394,8 @@
       batch.update(db.collection('system').doc('semester'), { dateColumns: FieldValue.arrayUnion(...addedColumns) });
     }
     await withTimeout(batch.commit(), WRITE_TIMEOUT_MS, '寫入');
+    countUsage('writes', updated + addedColumns.length * 2);
+    countUsage('reads', updated + addedColumns.length * 2);
     const result = { success: errors.length === 0, updated, errors, addedColumns };
     if (errors.length) result.error = `${errors.length} 筆更新失敗：${errors[0].error}`;
     return result;
@@ -355,6 +409,8 @@
       results[key] = key in live.config ? 'updated' : 'created';
     }
     await withTimeout(batch.commit(), WRITE_TIMEOUT_MS, '寫入');
+    countUsage('writes', Object.keys(data).length);
+    countUsage('reads', Object.keys(data).length);
     return { success: true, results };
   }
 
@@ -372,6 +428,7 @@
       tx.set(ref, { entries: { [key]: ordered.join(',') } }, { merge: true });
       return ordered;
     }), WRITE_TIMEOUT_MS, '寫入');
+    countUsage('writes'); countUsage('reads', 2);
     return { result: { success: true, confirms: list }, mirror: { path: '/api/config', body: { [key]: list.join(',') } } };
   }
 
@@ -386,17 +443,20 @@
       tx.update(beds.doc(pageIdA), pick(b.data()));
       tx.update(beds.doc(pageIdB), pick(a.data()));
     }), WRITE_TIMEOUT_MS, '換床');
+    countUsage('writes', 2); countUsage('reads', 4);
     return { success: true, message: '床位資料已完整交換' };
   }
 
   async function writeRemark({ pageId, remark }) {
     const ref = db.collection('remarks').doc(pageId);
     await withTimeout(remark ? ref.set({ text: remark }) : ref.delete(), WRITE_TIMEOUT_MS, '寫入');
+    countUsage(remark ? 'writes' : 'deletes'); countUsage('reads');
     return { success: true };
   }
 
   async function addRecord(coll, doc) {
     await withTimeout(db.collection(coll).add({ ...doc, createdAt: new Date().toISOString() }), WRITE_TIMEOUT_MS, '寫入');
+    countUsage('writes');
     return { success: true };
   }
 
@@ -406,6 +466,7 @@
     const snap = await ref.get();
     const data = snap.data() || {};
     await withTimeout(ref.delete(), WRITE_TIMEOUT_MS, '寫入');
+    countUsage('deletes'); countUsage('reads');
     // 搬過來的舊紀錄編號跟 Notion 一樣；之後新增的要用內容比對
     const match = data.order === undefined ? Object.fromEntries(matchFields.map(k => [k, data[k]])) : null;
     enqueueMirror({ path, method: 'DELETE', body: JSON.stringify({ id }), match });
@@ -442,6 +503,7 @@
       writes.slice(i, i + 400).forEach(w => w(batch));
       await batch.commit();
     }
+    countUsage('writes', writes.length);
     // 學期換了就等新的總表到齊
     const until = Date.now() + READY_TIMEOUT_MS;
     while (Date.now() < until && !(live.bedsReady && live.semester && live.semester.current.name === roster.semester.name)) await sleep(50);
@@ -501,6 +563,7 @@
       const d = await body();
       if (!d.content) throw new Error('缺少 content');
       const ref = await withTimeout(db.collection('changelog').add({ content: String(d.content), time: new Date().toISOString() }), WRITE_TIMEOUT_MS, '寫入');
+      countUsage('writes');
       return mirrored({ success: true, id: ref.id }, d);
     }
     if (path === '/api/leave-records' && method === 'POST') {
@@ -563,6 +626,6 @@
     }
   };
 
-  window._firebaseBackend = { live, ready, pumpMirror, flushMirror, mirrorQueue: () => readQueue().length + memoryOnly.length };
+  window._firebaseBackend = { live, ready, getUsage, pumpMirror, flushMirror, mirrorQueue: () => readQueue().length + memoryOnly.length };
   pumpMirror();
 })();
