@@ -284,8 +284,24 @@
     pumpMirror();
   }
 
+  // 每台裝置各自排隊寫回，到達順序不一定：A 先改、B 後改，A 卻晚送到，Notion 就會留下舊值。
+  // 所以點名送出前一律換成 Firebase 現在的值，不管誰先到，最後都會跟 Firebase 一樣。
+  function latestAttendanceBody(body) {
+    if (!live.bedsReady || live.failover) return body;
+    const data = JSON.parse(body);
+    const current = (pageId, date, queued) => {
+      const bed = live.beds.get(pageId);
+      return bed ? ((bed.attendance || {})[date] || '') : queued;
+    };
+    for (const u of data.updates || []) {
+      if (u.date) u.value = current(u.pageId, u.date, u.value);
+      if (u.dates) for (const d of Object.keys(u.dates)) u.dates[d] = current(u.pageId, d, u.dates[d]);
+    }
+    return JSON.stringify(data);
+  }
+
   async function sendMirror(item) {
-    let body = item.body;
+    let body = item.path === '/api/attendance' ? latestAttendanceBody(item.body) : item.body;
     if (item.match) {
       // 搬過來之後才新增的紀錄，Notion 的編號不一樣，用內容找到同一筆再刪
       const list = await (await realFetch(WORKER + item.path)).json();

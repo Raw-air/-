@@ -221,6 +221,24 @@ const mirrorDrained = dev => until(() => api(dev, () => window._firebaseBackend.
     await mirrorDrained(A);
     ok('Notion 掛掉不影響點名，恢復後自動補寫');
 
+    // 7-2. 兩台改同一格，先改的那台晚送到：Notion 最後要跟 Firebase 一樣，不能被舊值蓋掉
+    B.workerStatus = 503;
+    await api(B, b => window._api.updateAttendance(b), [{ pageId: bed.id, date, value: '◎' }]);
+    await until(() => B.writes.some(w => w.path === '/api/attendance' && w.body.updates[0].value === '◎'), 8000, 'B 第一次寫回失敗');
+    await until(() => api(A, ([id, d]) => (window._firebaseBackend.live.beds.get(id).attendance || {})[d] === '◎', [bed.id, date]), 5000, 'A 收到 B 的改動');
+    await api(A, b => window._api.updateAttendance(b), [{ pageId: bed.id, date, value: '✓' }]);
+    await mirrorDrained(A);
+    await until(() => api(B, ([id, d]) => (window._firebaseBackend.live.beds.get(id).attendance || {})[d] === '✓', [bed.id, date]), 5000, 'B 收到 A 的改動');
+    B.workerStatus = 200;
+    const beforeRetry = B.writes.length;
+    await api(B, () => window._firebaseBackend.pumpMirror());
+    await until(() => api(B, () => window._firebaseBackend.mirrorQueue() === 0), 70000, 'B 補寫完成');
+    const retried = B.writes.slice(beforeRetry).filter(w => w.path === '/api/attendance').at(-1);
+    assert.equal(retried.body.updates[0].value, '✓', '晚到的舊值要換成 Firebase 現在的值');
+    await api(A, b => window._api.updateAttendance(b), [{ pageId: bed.id, date, value: '' }]);
+    await mirrorDrained(A);
+    ok('兩台同時改，晚到的寫回不會蓋掉新值');
+
     // 8. Firebase 開機就連不上：自動改走原後端
     const C = await device(browser, { blockAuth: true });
     assert.equal(await api(C, () => window._firebaseBackend.live.failover), true);

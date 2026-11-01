@@ -1,6 +1,7 @@
 // 比對線上 Notion 和 Firestore 哪裡不一樣 (只讀)。加 --apply 才把 Notion 的值寫進 Firestore，
 // 用在切換當下還開著舊版的手機只寫到 Notion 的情況。寫回排隊中的資料 Firestore 會比較新，--apply 前先看清單。
-// 用法：node reconcile.cjs [--apply]
+// 加 --to-notion 則相反：把 Firebase 的點名寫回 Notion (Firebase 是系統實際在用的資料)。
+// 用法：node reconcile.cjs [--apply | --to-notion]
 const { accessToken, PROJECT } = require('./auth.cjs');
 const WORKER = 'https://biyuan-proxy.s010828.workers.dev';
 const ROOT = `projects/${PROJECT}/databases/(default)/documents`;
@@ -37,6 +38,8 @@ function configBucket(key) {
 
 (async () => {
   const apply = process.argv.includes('--apply');
+  const toNotion = process.argv.includes('--to-notion');
+  const notionUpdates = [];
   const roster = await notion('/api/roster');
   const name = encodeURIComponent(roster.semester.name);
   const beds = new Map((await list(`semesters/${name}/beds`)).map(b => [b.id, b]));
@@ -54,6 +57,7 @@ function configBucket(key) {
       fields.attendance = fields.attendance || { mapValue: { fields: {} } };
       if (a[d]) fields.attendance.mapValue.fields[d] = { stringValue: a[d] };
       paths.push(`attendance.\`${d}\``);
+      if (Date.now() - Date.parse(b._updateTime) >= 600000) notionUpdates.push({ pageId: s.id, date: d, value: c[d] || '' });
     }
     // 最近 10 分鐘改過的床位可能是 Firebase 比較新 (寫回還在排隊)，不准用 Notion 蓋掉
     if (paths.length && Date.now() - Date.parse(b._updateTime) < 600000) { skipped++; continue; }
@@ -78,6 +82,16 @@ function configBucket(key) {
   const failures = await fetch(`${API}${ROOT}/mirror_failures?pageSize=5`, { headers: headers() }).then(r => r.ok ? r.json() : {});
   console.log(`差異 ${diffs.length} 處；可自動套用 ${writes.length} 筆；太新不套用 ${skipped} 床；寫回放棄紀錄 ${(failures.documents || []).length} 筆`);
   for (const d of diffs.slice(0, 40)) console.log(' -', d);
+  if (toNotion && notionUpdates.length) {
+    let sent = 0;
+    for (let i = 0; i < notionUpdates.length; i += 20) {
+      const res = await fetch(WORKER + '/api/attendance', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ updates: notionUpdates.slice(i, i + 20) }) });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error('寫回 Notion 失敗：' + (data.error || res.status));
+      sent += data.updated;
+    }
+    console.log(`已把 Firebase 的點名寫回 Notion：${sent} 格`);
+  }
   if (apply && writes.length) {
     for (let i = 0; i < writes.length; i += 200) {
       const res = await fetch(`${API}${ROOT}:commit`, { method: 'POST', headers: headers(), body: JSON.stringify({ writes: writes.slice(i, i + 200) }) });
